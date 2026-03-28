@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Processador de Ocorrências v1.4
+Processador de Ocorrências v1.5
 ================================
 Aplicação desktop para extrair ocorrências de PDFs de jornada
 e preencher a coluna MOTIVO em planilhas Excel de pedido.
@@ -19,27 +19,27 @@ from processador import ProcessadorOcorrencias
 # Configurações visuais
 # ============================================================
 CORES = {
-    'bg':              '#0c0c1d',
-    'bg_card':         '#141428',
-    'bg_input':        '#1c1c38',
-    'fg':              '#d1d5f0',
-    'fg_dim':          '#4a5080',
-    'fg_bright':       '#eef0ff',
-    'accent':          '#7c6af7',
-    'accent_light':    '#a59bf8',
-    'accent_hover':    '#6558e8',
-    'success':         '#4ade80',
-    'error':           '#f87171',
-    'warning':         '#fbbf24',
-    'border':          '#1e1e3c',
-    'btn_bg':          '#7c6af7',
+    'bg':              '#1e1e1e',
+    'bg_card':         '#252526',
+    'bg_input':        '#2d2d2d',
+    'fg':              '#cccccc',
+    'fg_dim':          '#6b737f',
+    'fg_bright':       '#ffffff',
+    'accent':          '#007acc',
+    'accent_light':    '#4db8ff',
+    'accent_hover':    '#005f9e',
+    'success':         '#4ec994',
+    'error':           '#f14c4c',
+    'warning':         '#cca700',
+    'border':          '#3c3c3c',
+    'btn_bg':          '#007acc',
     'btn_fg':          '#ffffff',
-    'btn_hover':       '#6558e8',
-    'chip_on':         '#1c1c38',
-    'chip_off':        '#141428',
-    'chip_border_on':  '#7c6af7',
-    'chip_border_off': '#1e1e3c',
-    'table_header':    '#1c1c38',
+    'btn_hover':       '#005f9e',
+    'chip_on':         '#2d2d2d',
+    'chip_off':        '#252526',
+    'chip_border_on':  '#007acc',
+    'chip_border_off': '#3c3c3c',
+    'table_header':    '#2d2d2d',
 }
 
 
@@ -99,7 +99,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Label(topbar, text="v1.4",
+        tk.Label(topbar, text="v1.5",
                  font=("Segoe UI", 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
@@ -334,7 +334,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 20, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(pady=(4, 0))
 
-        tk.Label(frame, text="Versão 1.4",
+        tk.Label(frame, text="Versão 1.5",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(pady=(2, 0))
 
@@ -568,16 +568,10 @@ class App(tk.Tk):
 
     def _iniciar_animacao(self):
         frames = [
-            "⠋  Processando...",
-            "⠙  Processando...",
-            "⠹  Processando...",
-            "⠸  Processando...",
-            "⠼  Processando...",
-            "⠴  Processando...",
-            "⠦  Processando...",
-            "⠧  Processando...",
-            "⠇  Processando...",
-            "⠏  Processando...",
+            "◐  Processando...",
+            "◓  Processando...",
+            "◑  Processando...",
+            "◒  Processando...",
         ]
         self._anim_frames = frames
         self._anim_frame = 0
@@ -620,15 +614,15 @@ class App(tk.Tk):
         win = tk.Toplevel(self)
         win.title("Resumo do Processamento")
         win.configure(bg=CORES['bg'])
-        win.geometry("700x540")
-        win.minsize(600, 400)
+        win.geometry("820x580")
+        win.minsize(700, 450)
         win.grab_set()
 
         # Centralizar
         win.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() // 2) - 350
-        y = self.winfo_y() + (self.winfo_height() // 2) - 270
-        win.geometry(f"700x540+{x}+{y}")
+        x = self.winfo_x() + (self.winfo_width() // 2) - 410
+        y = self.winfo_y() + (self.winfo_height() // 2) - 290
+        win.geometry(f"820x580+{x}+{y}")
 
         main = tk.Frame(win, bg=CORES['bg'])
         main.pack(fill='both', expand=True, padx=24, pady=20)
@@ -690,9 +684,9 @@ class App(tk.Tk):
             tree.heading('re', text='RE', anchor='w')
             tree.heading('nome', text='Nome', anchor='w')
             tree.heading('ocorrencia', text='Ocorrência', anchor='w')
-            tree.column('re', width=80, minwidth=60)
-            tree.column('nome', width=320, minwidth=200)
-            tree.column('ocorrencia', width=160, minwidth=100)
+            tree.column('re', width=80, minwidth=60, stretch=False)
+            tree.column('nome', width=380, minwidth=200, stretch=True)
+            tree.column('ocorrencia', width=160, minwidth=100, stretch=False)
 
             sb = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
             tree.configure(yscrollcommand=sb.set)
