@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Processador de Ocorrências v1.5
+Processador de Ocorrências v1.6
 ================================
 Aplicação desktop para extrair ocorrências de PDFs de jornada
 e preencher a coluna MOTIVO em planilhas Excel de pedido.
@@ -60,6 +60,7 @@ class App(tk.Tk):
         self._anim_job = None
         self._anim_frame = 0
         self._historico = []
+        self._janela_progresso = None
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -99,7 +100,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Label(topbar, text="v1.5",
+        tk.Label(topbar, text="v1.6",
                  font=("Segoe UI", 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
@@ -205,17 +206,6 @@ class App(tk.Tk):
         )
         self.btn_processar.pack(fill='x', pady=(4, 0))
         self._bind_hover(self.btn_processar, CORES['btn_bg'], CORES['btn_hover'])
-
-        # Barra de progresso
-        style = ttk.Style()
-        style.theme_use('default')
-        style.configure("Accent.Horizontal.TProgressbar",
-                        troughcolor=CORES['bg_card'],
-                        background=CORES['accent'],
-                        borderwidth=0, lightcolor=CORES['accent'],
-                        darkcolor=CORES['accent'])
-        self.progress = ttk.Progressbar(parent, mode='indeterminate',
-                                        style="Accent.Horizontal.TProgressbar")
 
         # Área de Resultados
         self.resultado_frame = tk.Frame(parent, bg=CORES['bg'])
@@ -334,7 +324,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 20, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(pady=(4, 0))
 
-        tk.Label(frame, text="Versão 1.5",
+        tk.Label(frame, text="Versão 1.6",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(pady=(2, 0))
 
@@ -543,13 +533,13 @@ class App(tk.Tk):
             return
 
         self.processando = True
-        self.btn_processar.configure(state='disabled', bg=CORES['bg_input'])
-        self.progress.pack(fill='x', pady=(6, 0))
-        self.progress.start(15)
+        self.btn_processar.configure(state='disabled', bg=CORES['bg_input'],
+                                     text="◐  Processando...")
 
         for w in self.resultado_frame.winfo_children():
             w.destroy()
 
+        self._janela_progresso = self._abrir_janela_progresso()
         self._iniciar_animacao()
 
         thread = threading.Thread(target=self._processar,
@@ -557,9 +547,96 @@ class App(tk.Tk):
         thread.daemon = True
         thread.start()
 
+    def _abrir_janela_progresso(self):
+        win = tk.Toplevel(self)
+        win.title("Processando...")
+        win.configure(bg=CORES['bg'])
+        win.geometry("380x220")
+        win.resizable(False, False)
+        win.grab_set()
+        win.protocol("WM_DELETE_WINDOW", lambda: None)  # bloquear fechar
+
+        win.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - 190
+        y = self.winfo_y() + (self.winfo_height() // 2) - 110
+        win.geometry(f"380x220+{x}+{y}")
+
+        main = tk.Frame(win, bg=CORES['bg'])
+        main.pack(fill='both', expand=True, padx=30, pady=24)
+
+        # Canvas da animação estilo Win11 (arco girando)
+        RAIO = 28
+        SIZE = RAIO * 2 + 12
+        canvas = tk.Canvas(main, width=SIZE, height=SIZE,
+                           bg=CORES['bg'], highlightthickness=0)
+        canvas.pack(pady=(0, 16))
+
+        # Trilha do círculo
+        PAD = 6
+        canvas.create_oval(PAD, PAD, SIZE - PAD, SIZE - PAD,
+                           outline=CORES['border'], width=4)
+        # Arco animado
+        arc_id = canvas.create_arc(PAD, PAD, SIZE - PAD, SIZE - PAD,
+                                   start=90, extent=90,
+                                   outline=CORES['accent'], width=4,
+                                   style='arc')
+
+        win._arc_angle = 0
+
+        def _girar():
+            if not win.winfo_exists():
+                return
+            win._arc_angle = (win._arc_angle - 8) % 360
+            canvas.itemconfigure(arc_id, start=win._arc_angle)
+            win._spin_job = win.after(16, _girar)
+
+        win._spin_job = win.after(16, _girar)
+
+        # Label de status
+        lbl_status = tk.Label(main, text="Iniciando...",
+                              font=("Segoe UI", 10), fg=CORES['fg'],
+                              bg=CORES['bg'])
+        lbl_status.pack(pady=(0, 10))
+
+        # Barra de progresso
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure("Win.Horizontal.TProgressbar",
+                        troughcolor=CORES['border'],
+                        background=CORES['accent'],
+                        borderwidth=0,
+                        lightcolor=CORES['accent'],
+                        darkcolor=CORES['accent'])
+        pbar = ttk.Progressbar(main, orient='horizontal', length=320,
+                               mode='determinate', maximum=100,
+                               style="Win.Horizontal.TProgressbar")
+        pbar.pack(fill='x')
+
+        # Label de porcentagem
+        lbl_pct = tk.Label(main, text="0%",
+                           font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                           bg=CORES['bg'])
+        lbl_pct.pack(pady=(6, 0))
+
+        win._lbl_status = lbl_status
+        win._pbar = pbar
+        win._lbl_pct = lbl_pct
+        return win
+
+    def _atualizar_progresso(self, pct, msg):
+        """Chamado da thread de processamento via self.after."""
+        win = self._janela_progresso
+        if win and win.winfo_exists():
+            win._lbl_status.configure(text=msg)
+            win._pbar.configure(value=pct)
+            win._lbl_pct.configure(text=f"{pct}%")
+
     def _processar(self, pdf_path, xlsx_path, output_path, codigos):
+        def cb(pct, msg):
+            self.after(0, lambda p=pct, m=msg: self._atualizar_progresso(p, m))
+
         try:
-            resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos)
+            resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos, cb)
             self.after(0, lambda: self._mostrar_resultados(resultado, output_path))
         except Exception as e:
             self.after(0, lambda: self._mostrar_erro(str(e)))
@@ -582,7 +659,7 @@ class App(tk.Tk):
             return
         self.btn_processar.configure(text=self._anim_frames[self._anim_frame])
         self._anim_frame = (self._anim_frame + 1) % len(self._anim_frames)
-        self._anim_job = self.after(100, self._animar_btn)
+        self._anim_job = self.after(200, self._animar_btn)
 
     def _finalizar_processamento(self):
         self.processando = False
@@ -591,8 +668,14 @@ class App(tk.Tk):
             self._anim_job = None
         self.btn_processar.configure(text="▶  PROCESSAR ARQUIVOS", state='normal',
                                      bg=CORES['btn_bg'])
-        self.progress.stop()
-        self.progress.pack_forget()
+        if self._janela_progresso and self._janela_progresso.winfo_exists():
+            if hasattr(self._janela_progresso, '_spin_job'):
+                try:
+                    self._janela_progresso.after_cancel(self._janela_progresso._spin_job)
+                except Exception:
+                    pass
+            self._janela_progresso.destroy()
+        self._janela_progresso = None
 
     def _mostrar_erro(self, msg):
         messagebox.showerror("Erro no Processamento", msg)

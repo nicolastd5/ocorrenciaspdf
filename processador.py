@@ -98,7 +98,7 @@ class ProcessadorOcorrencias:
 
         return ', '.join(partes)
 
-    def processar(self, pdf_path, xlsx_path, output_path, codigos):
+    def processar(self, pdf_path, xlsx_path, output_path, codigos, progress_cb=None):
         """
         Processa os arquivos e retorna um dicionário com os resultados.
 
@@ -107,6 +107,7 @@ class ProcessadorOcorrencias:
             xlsx_path: Caminho da planilha Excel de pedido.
             output_path: Caminho para salvar a planilha atualizada.
             codigos: Lista de códigos a incluir.
+            progress_cb: Callable(pct: int, msg: str) para atualizar progresso.
 
         Returns:
             dict: {
@@ -116,13 +117,20 @@ class ProcessadorOcorrencias:
                 'nao_encontrados': [{'re': str, 'nome': str, 'motivo': str}]
             }
         """
+        def _prog(pct, msg):
+            if progress_cb:
+                progress_cb(pct, msg)
+
         # 1. Extrair ocorrências do PDF
+        _prog(5, "Lendo PDF...")
         resultados_pdf = self.extrair_ocorrencias(pdf_path, codigos)
+        _prog(50, "PDF lido. Abrindo planilha...")
 
         # 2. Copiar e abrir planilha
         shutil.copy(xlsx_path, output_path)
         wb = load_workbook(output_path)
         ws = wb.active
+        _prog(60, "Planilha aberta. Cruzando dados...")
 
         # 3. Encontrar colunas RE e MOTIVO
         re_col = None
@@ -148,7 +156,8 @@ class ProcessadorOcorrencias:
         matched = 0
         atualizados = []
 
-        for row in range(2, ws.max_row + 1):
+        total_rows = ws.max_row - 1
+        for i, row in enumerate(range(2, ws.max_row + 1)):
             re_val = ws.cell(row=row, column=re_col).value
             if re_val is not None:
                 re_str = str(int(re_val)) if isinstance(re_val, (float, int)) else str(re_val).strip()
@@ -166,8 +175,12 @@ class ProcessadorOcorrencias:
                             'nome': resultados_pdf[re_str]['nome'],
                             'motivo': motivo
                         })
+            if total_rows > 0:
+                pct = 60 + int((i / total_rows) * 30)
+                _prog(pct, f"Cruzando dados... ({i}/{total_rows})")
 
         # 5. Encontrar não correspondidos
+        _prog(90, "Finalizando...")
         nao_encontrados = []
         for codigo, dados in resultados_pdf.items():
             motivo = self.montar_motivo(dados['ocorrencias'], codigos)
@@ -181,7 +194,9 @@ class ProcessadorOcorrencias:
         nao_encontrados.sort(key=lambda x: x['nome'])
 
         # 6. Salvar
+        _prog(97, "Salvando planilha...")
         wb.save(output_path)
+        _prog(100, "Concluído!")
 
         return {
             'total_pdf': len(resultados_pdf),
