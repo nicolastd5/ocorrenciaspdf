@@ -59,6 +59,7 @@ class App(tk.Tk):
         self.processando = False
         self._anim_job = None
         self._anim_frame = 0
+        self._historico = []
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -108,7 +109,7 @@ class App(tk.Tk):
         tabs_container = tk.Frame(topbar, bg=CORES['bg'])
         tabs_container.pack(side='right')
 
-        for tab_id, label in [('processar', '⚙  Processar'), ('sobre', 'ℹ  Sobre')]:
+        for tab_id, label in [('processar', '⚙  Processar'), ('historico', '🕘  Histórico'), ('sobre', 'ℹ  Sobre')]:
             btn = tk.Button(tabs_container, text=label,
                             font=("Segoe UI", 10),
                             fg=CORES['fg_dim'], bg=CORES['bg'],
@@ -128,6 +129,10 @@ class App(tk.Tk):
         frame_processar = tk.Frame(content, bg=CORES['bg'])
         self._criar_aba_processar(frame_processar)
         self._tab_frames['processar'] = frame_processar
+
+        frame_historico = tk.Frame(content, bg=CORES['bg'])
+        self._criar_aba_historico(frame_historico)
+        self._tab_frames['historico'] = frame_historico
 
         frame_sobre = tk.Frame(content, bg=CORES['bg'])
         self._criar_aba_sobre(frame_sobre)
@@ -215,6 +220,108 @@ class App(tk.Tk):
         # Área de Resultados
         self.resultado_frame = tk.Frame(parent, bg=CORES['bg'])
         self.resultado_frame.pack(fill='both', expand=True, pady=(8, 0))
+
+    def _criar_aba_historico(self, parent):
+        self._historico_frame = parent
+
+        header = tk.Frame(parent, bg=CORES['bg'])
+        header.pack(fill='x', pady=(0, 12))
+
+        tk.Label(header, text="🕘  Histórico de Processamentos",
+                 font=("Segoe UI", 14, "bold"), fg=CORES['fg_bright'],
+                 bg=CORES['bg']).pack(side='left')
+
+        tk.Button(header, text="Limpar", font=("Segoe UI", 9),
+                  fg=CORES['fg_dim'], bg=CORES['bg_input'],
+                  activeforeground=CORES['fg'], activebackground=CORES['border'],
+                  relief='flat', cursor='hand2', padx=10, pady=3, borderwidth=0,
+                  command=self._limpar_historico).pack(side='right')
+
+        self._historico_lista = tk.Frame(parent, bg=CORES['bg'])
+        self._historico_lista.pack(fill='both', expand=True)
+
+        self._historico_vazio = tk.Label(
+            self._historico_lista,
+            text="Nenhum processamento realizado ainda.",
+            font=("Segoe UI", 11), fg=CORES['fg_dim'], bg=CORES['bg'])
+        self._historico_vazio.pack(pady=40)
+
+    def _limpar_historico(self):
+        self._historico.clear()
+        self._atualizar_historico()
+
+    def _atualizar_historico(self):
+        for w in self._historico_lista.winfo_children():
+            w.destroy()
+
+        if not self._historico:
+            tk.Label(self._historico_lista,
+                     text="Nenhum processamento realizado ainda.",
+                     font=("Segoe UI", 11), fg=CORES['fg_dim'],
+                     bg=CORES['bg']).pack(pady=40)
+            return
+
+        canvas = tk.Canvas(self._historico_lista, bg=CORES['bg'], highlightthickness=0)
+        sb = ttk.Scrollbar(self._historico_lista, orient='vertical', command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg=CORES['bg'])
+        scroll_frame.bind('<Configure>',
+                          lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.create_window((0, 0), window=scroll_frame, anchor='nw')
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side='left', fill='both', expand=True)
+        sb.pack(side='right', fill='y')
+        canvas.bind('<Enter>', lambda e: canvas.bind_all(
+            '<MouseWheel>', lambda ev: canvas.yview_scroll(-1*(ev.delta//120), 'units')))
+        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+
+        for i, entrada in enumerate(reversed(self._historico)):
+            card = tk.Frame(scroll_frame, bg=CORES['bg_card'],
+                            highlightbackground=CORES['border'], highlightthickness=1)
+            card.pack(fill='x', pady=(0, 8))
+
+            # Cabeçalho do card
+            top = tk.Frame(card, bg=CORES['bg_card'])
+            top.pack(fill='x', padx=14, pady=(10, 6))
+
+            tk.Label(top, text=f"#{len(self._historico) - i}  {entrada['arquivo']}",
+                     font=("Segoe UI", 10, "bold"), fg=CORES['fg_bright'],
+                     bg=CORES['bg_card']).pack(side='left')
+            tk.Label(top, text=entrada['data'],
+                     font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                     bg=CORES['bg_card']).pack(side='right')
+
+            # Stats inline
+            stats_row = tk.Frame(card, bg=CORES['bg_card'])
+            stats_row.pack(fill='x', padx=14, pady=(0, 8))
+
+            nao_enc = entrada['nao_encontrados']
+            for label, valor, cor in [
+                ("No PDF", str(entrada['total_pdf']), CORES['accent_light']),
+                ("Aplicados", str(entrada['matched']), CORES['success']),
+                ("Não localizados", str(nao_enc),
+                 CORES['error'] if nao_enc else CORES['success']),
+            ]:
+                bloco = tk.Frame(stats_row, bg=CORES['bg_input'])
+                bloco.pack(side='left', padx=(0, 6))
+                tk.Label(bloco, text=valor, font=("Segoe UI", 13, "bold"),
+                         fg=cor, bg=CORES['bg_input']).pack(side='left', padx=(8, 4), pady=4)
+                tk.Label(bloco, text=label, font=("Segoe UI", 8),
+                         fg=CORES['fg_dim'], bg=CORES['bg_input']).pack(side='left', padx=(0, 8))
+
+            # Não localizados
+            if entrada['lista_nao_encontrados']:
+                det = tk.Frame(card, bg=CORES['bg_card'])
+                det.pack(fill='x', padx=14, pady=(0, 10))
+
+                tk.Label(det, text="Não localizados:",
+                         font=("Segoe UI", 9, "bold"), fg=CORES['error'],
+                         bg=CORES['bg_card']).pack(anchor='w', pady=(0, 4))
+
+                for p in entrada['lista_nao_encontrados']:
+                    tk.Label(det,
+                             text=f"  RE {p['re']}  —  {p['nome']}  —  {p['motivo']}",
+                             font=("Consolas", 9), fg=CORES['fg_dim'],
+                             bg=CORES['bg_card'], anchor='w').pack(fill='x')
 
     def _criar_aba_sobre(self, parent):
         frame = tk.Frame(parent, bg=CORES['bg'])
@@ -497,6 +604,16 @@ class App(tk.Tk):
         messagebox.showerror("Erro no Processamento", msg)
 
     def _mostrar_resultados(self, resultado, output_path):
+        from datetime import datetime
+        self._historico.append({
+            'arquivo': os.path.basename(output_path),
+            'data': datetime.now().strftime('%d/%m/%Y %H:%M'),
+            'total_pdf': resultado['total_pdf'],
+            'matched': resultado['matched'],
+            'nao_encontrados': len(resultado['nao_encontrados']),
+            'lista_nao_encontrados': resultado['nao_encontrados'],
+        })
+        self._atualizar_historico()
         self._abrir_tela_resumo(resultado, output_path)
 
     def _abrir_tela_resumo(self, resultado, output_path):
