@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Processador de Ocorrências v1.3
+Processador de Ocorrências v1.4
 ================================
 Aplicação desktop para extrair ocorrências de PDFs de jornada
 e preencher a coluna MOTIVO em planilhas Excel de pedido.
@@ -98,7 +98,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Label(topbar, text="v1.3",
+        tk.Label(topbar, text="v1.4",
                  font=("Segoe UI", 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
@@ -227,7 +227,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 20, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(pady=(4, 0))
 
-        tk.Label(frame, text="Versão 1.3",
+        tk.Label(frame, text="Versão 1.4",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(pady=(2, 0))
 
@@ -497,75 +497,115 @@ class App(tk.Tk):
         messagebox.showerror("Erro no Processamento", msg)
 
     def _mostrar_resultados(self, resultado, output_path):
-        frame = self.resultado_frame
+        self._abrir_tela_resumo(resultado, output_path)
 
-        # Cards de estatísticas (compactos)
-        stats_frame = tk.Frame(frame, bg=CORES['bg'])
-        stats_frame.pack(fill='x', pady=(0, 6))
+    def _abrir_tela_resumo(self, resultado, output_path):
+        win = tk.Toplevel(self)
+        win.title("Resumo do Processamento")
+        win.configure(bg=CORES['bg'])
+        win.geometry("700x540")
+        win.minsize(600, 400)
+        win.grab_set()
 
+        # Centralizar
+        win.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - 350
+        y = self.winfo_y() + (self.winfo_height() // 2) - 270
+        win.geometry(f"700x540+{x}+{y}")
+
+        main = tk.Frame(win, bg=CORES['bg'])
+        main.pack(fill='both', expand=True, padx=24, pady=20)
+
+        # Título
+        tk.Label(main, text="Resumo do Processamento",
+                 font=("Segoe UI", 16, "bold"), fg=CORES['fg_bright'],
+                 bg=CORES['bg']).pack(anchor='w')
+        tk.Label(main, text=f"Arquivo: {os.path.basename(output_path)}",
+                 font=("Consolas", 9), fg=CORES['fg_dim'],
+                 bg=CORES['bg']).pack(anchor='w', pady=(2, 12))
+
+        # Cards de estatísticas
+        stats_frame = tk.Frame(main, bg=CORES['bg'])
+        stats_frame.pack(fill='x', pady=(0, 16))
+
+        nao_enc = len(resultado['nao_encontrados'])
         stats = [
-            ("No PDF", str(resultado['total_pdf']), CORES['accent_light']),
-            ("Atualizados", str(resultado['matched']), CORES['success']),
-            ("Sem match", str(len(resultado['nao_encontrados'])),
-             CORES['error'] if resultado['nao_encontrados'] else CORES['success']),
+            ("Encontrados no PDF", str(resultado['total_pdf']), CORES['accent_light']),
+            ("Aplicados na planilha", str(resultado['matched']), CORES['success']),
+            ("Não localizados", str(nao_enc),
+             CORES['error'] if nao_enc else CORES['success']),
         ]
 
         for i, (label, value, color) in enumerate(stats):
             card = tk.Frame(stats_frame, bg=CORES['bg_card'],
                             highlightbackground=color, highlightthickness=1)
-            card.pack(side='left', fill='x', expand=True, padx=(0 if i == 0 else 6, 0))
+            card.pack(side='left', fill='x', expand=True, padx=(0 if i == 0 else 8, 0))
+            tk.Label(card, text=value, font=("Segoe UI", 22, "bold"),
+                     fg=color, bg=CORES['bg_card']).pack(pady=(10, 0))
+            tk.Label(card, text=label, font=("Segoe UI", 9),
+                     fg=CORES['fg_dim'], bg=CORES['bg_card']).pack(pady=(0, 10))
 
-            inner = tk.Frame(card, bg=CORES['bg_card'])
-            inner.pack(fill='x', padx=12, pady=6)
-            tk.Label(inner, text=value, font=("Segoe UI", 18, "bold"),
-                     fg=color, bg=CORES['bg_card']).pack(side='left')
-            tk.Label(inner, text=f"  {label}", font=("Segoe UI", 9),
-                     fg=CORES['fg_dim'], bg=CORES['bg_card']).pack(side='left', pady=(4, 0))
+        # Tabela de não localizados
+        if resultado['nao_encontrados']:
+            tk.Frame(main, bg=CORES['border'], height=1).pack(fill='x', pady=(0, 10))
 
-        # Botão abrir pasta
-        btn_row = tk.Frame(frame, bg=CORES['bg'])
-        btn_row.pack(fill='x', pady=(0, 6))
+            tk.Label(main, text=f"⚠  Pessoas não localizadas na planilha ({nao_enc})",
+                     font=("Segoe UI", 11, "bold"), fg=CORES['error'],
+                     bg=CORES['bg'], anchor='w').pack(fill='x', pady=(0, 6))
 
-        open_btn = tk.Button(
-            btn_row, text="📂  Abrir pasta",
-            font=("Segoe UI", 9), fg=CORES['success'],
+            tree_frame = tk.Frame(main, bg=CORES['bg'])
+            tree_frame.pack(fill='both', expand=True)
+
+            style = ttk.Style()
+            style.configure("Resumo.Treeview",
+                            background=CORES['bg_card'], foreground=CORES['fg'],
+                            fieldbackground=CORES['bg_card'], borderwidth=0,
+                            font=("Consolas", 10), rowheight=26)
+            style.configure("Resumo.Treeview.Heading",
+                            background=CORES['table_header'], foreground=CORES['fg_dim'],
+                            font=("Segoe UI", 9, "bold"), borderwidth=0, relief='flat')
+            style.map("Resumo.Treeview",
+                      background=[('selected', CORES['bg_input'])],
+                      foreground=[('selected', CORES['accent_light'])])
+
+            tree = ttk.Treeview(tree_frame, columns=('re', 'nome', 'ocorrencia'),
+                                show='headings', style="Resumo.Treeview")
+            tree.heading('re', text='RE', anchor='w')
+            tree.heading('nome', text='Nome', anchor='w')
+            tree.heading('ocorrencia', text='Ocorrência', anchor='w')
+            tree.column('re', width=80, minwidth=60)
+            tree.column('nome', width=320, minwidth=200)
+            tree.column('ocorrencia', width=160, minwidth=100)
+
+            sb = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
+            tree.configure(yscrollcommand=sb.set)
+            tree.pack(side='left', fill='both', expand=True)
+            sb.pack(side='right', fill='y')
+
+            for item in resultado['nao_encontrados']:
+                tree.insert('', 'end', values=(item['re'], item['nome'], item['motivo']))
+
+        # Botões rodapé
+        btn_frame = tk.Frame(main, bg=CORES['bg'])
+        btn_frame.pack(fill='x', pady=(14, 0))
+
+        tk.Button(
+            btn_frame, text="📂  Abrir pasta",
+            font=("Segoe UI", 10), fg=CORES['success'],
             bg=CORES['bg_card'], activeforeground=CORES['success'],
             activebackground=CORES['bg_input'],
-            relief='flat', cursor='hand2', pady=5, borderwidth=0,
+            relief='flat', cursor='hand2', padx=14, pady=6, borderwidth=0,
             command=lambda: os.startfile(os.path.dirname(output_path))
-            if os.name == 'nt' else None
-        )
-        open_btn.pack(side='left')
-        self._bind_hover(open_btn, CORES['bg_card'], CORES['bg_input'])
+        ).pack(side='left')
 
-        tk.Label(btn_row, text=f"💾  {os.path.basename(output_path)}",
-                 font=("Consolas", 9), fg=CORES['fg_dim'],
-                 bg=CORES['bg']).pack(side='left', padx=(8, 0))
-
-        # Área com scroll para as tabelas
-        canvas = tk.Canvas(frame, bg=CORES['bg'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(frame, orient='vertical', command=canvas.yview)
-        scroll_frame = tk.Frame(canvas, bg=CORES['bg'])
-
-        scroll_frame.bind('<Configure>',
-                          lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
-        canvas.create_window((0, 0), window=scroll_frame, anchor='nw')
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.pack(side='left', fill='both', expand=True)
-        scrollbar.pack(side='right', fill='y')
-
-        canvas.bind('<Enter>', lambda e: canvas.bind_all(
-            '<MouseWheel>', lambda ev: canvas.yview_scroll(-1*(ev.delta//120), 'units')))
-        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
-
-        if resultado['atualizados']:
-            self._criar_tabela(scroll_frame, "✅  Registros Atualizados",
-                               resultado['atualizados'], CORES['success'])
-
-        if resultado['nao_encontrados']:
-            self._criar_tabela(scroll_frame, "⚠  Sem Correspondência na Planilha",
-                               resultado['nao_encontrados'], CORES['error'])
+        tk.Button(
+            btn_frame, text="Fechar",
+            font=("Segoe UI", 10), fg=CORES['fg_dim'],
+            bg=CORES['bg_card'], activeforeground=CORES['fg'],
+            activebackground=CORES['bg_input'],
+            relief='flat', cursor='hand2', padx=14, pady=6, borderwidth=0,
+            command=win.destroy
+        ).pack(side='right')
 
     def _criar_tabela(self, parent, titulo, dados, cor_titulo):
         wrapper = tk.Frame(parent, bg=CORES['bg_card'],
