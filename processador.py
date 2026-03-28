@@ -130,17 +130,17 @@ class ProcessadorOcorrencias:
         for col in range(1, ws.max_column + 1):
             val = ws.cell(row=1, column=col).value
             if val:
-                val_str = str(val)
-                if 'Folha Re' in val_str or 'Folha re' in val_str:
-                    re_col = col
-                if 'MOTIVO' in val_str.upper():
+                val_lower = str(val).lower().strip()
+                if motivo_col is None and val_lower == 'motivo':
                     motivo_col = col
+                if re_col is None and val_lower == 'folha re':
+                    re_col = col
 
         if not re_col or not motivo_col:
             raise ValueError(
                 f"Colunas não encontradas na planilha. "
                 f"RE col: {re_col}, MOTIVO col: {motivo_col}. "
-                f"Verifique se a planilha tem as colunas 'Folha Re' e 'MOTIVO'."
+                f"Verifique se a planilha tem colunas de matrícula/RE e MOTIVO."
             )
 
         # 4. Cruzar dados
