@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Processador de Ocorrências v1.9
-================================
+Processador de Ocorrências v1.10
+==================================
 Aplicação desktop para extrair ocorrências de PDFs de jornada
 e preencher a coluna MOTIVO em planilhas Excel de pedido.
 
@@ -13,7 +13,15 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 import os
+import urllib.request
+import urllib.error
+import json
+import webbrowser
 from processador import ProcessadorOcorrencias
+
+VERSION = "1.10"
+GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
+GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
 # ============================================================
 # Configurações visuais
@@ -70,6 +78,7 @@ class App(tk.Tk):
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
         self._centralizar_janela()
+        self.after(1500, self._verificar_atualizacao)
 
     def _centralizar_janela(self):
         self.update_idletasks()
@@ -78,6 +87,62 @@ class App(tk.Tk):
         x = (self.winfo_screenwidth() // 2) - (w // 2)
         y = (self.winfo_screenheight() // 2) - (h // 2)
         self.geometry(f'{w}x{h}+{x}+{y}')
+
+    # ------------------------------------------------------------------
+    # Auto-update
+    # ------------------------------------------------------------------
+
+    def _verificar_atualizacao(self):
+        """Verifica nova versão no GitHub em background."""
+        def _checar():
+            try:
+                req = urllib.request.Request(
+                    GITHUB_API_RELEASES,
+                    headers={"User-Agent": "ProcessadorOcorrencias/" + VERSION}
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode())
+                tag = data.get("tag_name", "").lstrip("v")
+                if tag and tag != VERSION:
+                    self.after(0, lambda: self._mostrar_banner_update(tag))
+            except Exception:
+                pass  # sem internet ou erro — silencioso
+
+        threading.Thread(target=_checar, daemon=True).start()
+
+    def _mostrar_banner_update(self, nova_versao):
+        """Exibe um banner discreto de atualização disponível."""
+        if hasattr(self, '_banner_update') and self._banner_update.winfo_exists():
+            return  # já está visível
+
+        banner = tk.Frame(self, bg='#1a3a1a',
+                          highlightbackground='#4ec994', highlightthickness=1)
+        banner.pack(fill='x', padx=20, pady=(4, 0))
+        self._banner_update = banner
+
+        inner = tk.Frame(banner, bg='#1a3a1a')
+        inner.pack(fill='x', padx=14, pady=8)
+
+        tk.Label(inner,
+                 text=f"Nova versão disponível: v{nova_versao}",
+                 font=("Segoe UI", 10, "bold"),
+                 fg='#4ec994', bg='#1a3a1a').pack(side='left')
+
+        tk.Button(inner, text="Baixar",
+                  font=("Segoe UI", 9, "bold"),
+                  fg='#1e1e1e', bg='#4ec994',
+                  activeforeground='#1e1e1e', activebackground='#3ab87a',
+                  relief='flat', cursor='hand2', padx=10, pady=2, borderwidth=0,
+                  command=lambda: webbrowser.open(GITHUB_RELEASES_PAGE)
+                  ).pack(side='right', padx=(8, 0))
+
+        tk.Button(inner, text="✕",
+                  font=("Segoe UI", 9),
+                  fg='#4ec994', bg='#1a3a1a',
+                  activeforeground='#ffffff', activebackground='#1a3a1a',
+                  relief='flat', cursor='hand2', padx=6, pady=2, borderwidth=0,
+                  command=banner.destroy
+                  ).pack(side='right')
 
     def _bind_hover(self, widget, bg_normal, bg_hover, fg_normal=None, fg_hover=None):
         def on_enter(e):
@@ -105,7 +170,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Label(topbar, text="v1.9",
+        tk.Label(topbar, text=f"v{VERSION}",
                  font=("Segoe UI", 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
@@ -378,7 +443,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 20, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(pady=(4, 0))
 
-        tk.Label(frame, text="Versão 1.9",
+        tk.Label(frame, text=f"Versão {VERSION}",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(pady=(2, 0))
 
