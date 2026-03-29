@@ -15,6 +15,8 @@ class ProcessadorOcorrencias:
     TODOS_CODIGOS = ['FA', 'AT', 'SD', 'LC', 'AA', 'AP', 'LM', 'FE']
     SEM_QUANTIDADE = ['AP', 'LM', 'FE']
     ORDEM = ['FA', 'AT', 'SD', 'LC', 'AA', 'AP', 'LM', 'FE']
+    CODIGOS_DEDUZIR = ['FA', 'AT', 'SD', 'LC']
+    COLUNAS_QT = ['qt va', 'qt vr', 'qt vt']
     DESCRICOES = {
         'FA': 'Faltas',
         'AT': 'Atestado',
@@ -98,7 +100,7 @@ class ProcessadorOcorrencias:
 
         return ', '.join(partes)
 
-    def processar(self, pdf_path, xlsx_path, output_path, codigos, progress_cb=None):
+    def processar(self, pdf_path, xlsx_path, output_path, codigos, progress_cb=None, deduzir_dias=False):
         """
         Processa os arquivos e retorna um dicionário com os resultados.
 
@@ -132,9 +134,10 @@ class ProcessadorOcorrencias:
         ws = wb.active
         _prog(60, "Planilha aberta. Cruzando dados...")
 
-        # 3. Encontrar colunas RE e MOTIVO
+        # 3. Encontrar colunas RE, MOTIVO e Qt VA/VR/VT
         re_col = None
         motivo_col = None
+        qt_cols = {}  # {'qt va': col_num, ...}
         for col in range(1, ws.max_column + 1):
             val = ws.cell(row=1, column=col).value
             if val:
@@ -143,6 +146,8 @@ class ProcessadorOcorrencias:
                     motivo_col = col
                 if re_col is None and val_lower == 'folha re':
                     re_col = col
+                if val_lower in self.COLUNAS_QT:
+                    qt_cols[val_lower] = col
 
         if not re_col or not motivo_col:
             raise ValueError(
@@ -164,9 +169,8 @@ class ProcessadorOcorrencias:
                 excel_res.add(re_str)
 
                 if re_str in resultados_pdf:
-                    motivo = self.montar_motivo(
-                        resultados_pdf[re_str]['ocorrencias'], codigos
-                    )
+                    ocorr = resultados_pdf[re_str]['ocorrencias']
+                    motivo = self.montar_motivo(ocorr, codigos)
                     if motivo:
                         ws.cell(row=row, column=motivo_col).value = motivo
                         matched += 1
@@ -175,6 +179,16 @@ class ProcessadorOcorrencias:
                             'nome': resultados_pdf[re_str]['nome'],
                             'motivo': motivo
                         })
+
+                    if deduzir_dias and qt_cols:
+                        dias = sum(
+                            ocorr.get(c, 0) for c in self.CODIGOS_DEDUZIR
+                        )
+                        if dias > 0:
+                            for qt_col in qt_cols.values():
+                                atual = ws.cell(row=row, column=qt_col).value
+                                if isinstance(atual, (int, float)):
+                                    ws.cell(row=row, column=qt_col).value = max(0, atual - dias)
             if total_rows > 0:
                 pct = 60 + int((i / total_rows) * 30)
                 _prog(pct, f"Cruzando dados... ({i}/{total_rows})")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Processador de Ocorrências v1.6
+Processador de Ocorrências v1.7
 ================================
 Aplicação desktop para extrair ocorrências de PDFs de jornada
 e preencher a coluna MOTIVO em planilhas Excel de pedido.
@@ -61,6 +61,7 @@ class App(tk.Tk):
         self._anim_frame = 0
         self._historico = []
         self._janela_progresso = None
+        self.deduzir_dias = tk.BooleanVar(value=False)
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -100,7 +101,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Label(topbar, text="v1.6",
+        tk.Label(topbar, text="v1.7",
                  font=("Segoe UI", 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
@@ -194,6 +195,15 @@ class App(tk.Tk):
 
         for col in range(4):
             codes_grid.columnconfigure(col, weight=1)
+
+        # Opções adicionais
+        opcoes_frame = self._criar_card(parent, "⚙  Opções")
+        self._criar_checkbox(
+            opcoes_frame,
+            "Deduzir dias das colunas Qt VA, Qt VR e Qt VT",
+            "Subtrai a quantidade de ocorrências FA, AT, SD e LC dos campos Qt VA, Qt VR e Qt VT na planilha.",
+            self.deduzir_dias,
+        )
 
         # Botão Processar
         self.btn_processar = tk.Button(
@@ -324,7 +334,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 20, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(pady=(4, 0))
 
-        tk.Label(frame, text="Versão 1.6",
+        tk.Label(frame, text="Versão 1.7",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(pady=(2, 0))
 
@@ -427,6 +437,40 @@ class App(tk.Tk):
         self._bind_hover(btn, CORES['bg_input'], CORES['border'],
                          CORES['fg_dim'], CORES['fg'])
         return btn
+
+    def _criar_checkbox(self, parent, label, descricao, var):
+        row = tk.Frame(parent, bg=CORES['bg_card'])
+        row.pack(fill='x', pady=4)
+
+        def toggle():
+            var.set(not var.get())
+            _atualizar()
+
+        def _atualizar():
+            on = var.get()
+            dot.configure(
+                text="☑" if on else "☐",
+                fg=CORES['accent_light'] if on else CORES['fg_dim'],
+            )
+            lbl.configure(fg=CORES['fg_bright'] if on else CORES['fg'])
+
+        dot = tk.Label(row, text="☐", font=("Segoe UI", 13),
+                       fg=CORES['fg_dim'], bg=CORES['bg_card'], cursor='hand2')
+        dot.pack(side='left', padx=(0, 8))
+
+        text_col = tk.Frame(row, bg=CORES['bg_card'])
+        text_col.pack(side='left', fill='x', expand=True)
+
+        lbl = tk.Label(text_col, text=label, font=("Segoe UI", 10),
+                       fg=CORES['fg'], bg=CORES['bg_card'], anchor='w', cursor='hand2')
+        lbl.pack(anchor='w')
+
+        tk.Label(text_col, text=descricao, font=("Segoe UI", 8),
+                 fg=CORES['fg_dim'], bg=CORES['bg_card'], anchor='w',
+                 wraplength=560, justify='left').pack(anchor='w')
+
+        for w in (dot, lbl, row, text_col):
+            w.bind('<Button-1>', lambda e: toggle())
 
     def _criar_chip(self, parent, codigo, desc, tem_qtd, var, row, col):
         frame = tk.Frame(parent, bg=CORES['bg_card'])
@@ -543,7 +587,7 @@ class App(tk.Tk):
         self._iniciar_animacao()
 
         thread = threading.Thread(target=self._processar,
-                                  args=(pdf, xlsx, output, codigos))
+                                  args=(pdf, xlsx, output, codigos, self.deduzir_dias.get()))
         thread.daemon = True
         thread.start()
 
@@ -631,12 +675,12 @@ class App(tk.Tk):
             win._pbar.configure(value=pct)
             win._lbl_pct.configure(text=f"{pct}%")
 
-    def _processar(self, pdf_path, xlsx_path, output_path, codigos):
+    def _processar(self, pdf_path, xlsx_path, output_path, codigos, deduzir_dias=False):
         def cb(pct, msg):
             self.after(0, lambda p=pct, m=msg: self._atualizar_progresso(p, m))
 
         try:
-            resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos, cb)
+            resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos, cb, deduzir_dias)
             self.after(0, lambda: self._mostrar_resultados(resultado, output_path))
         except Exception as e:
             self.after(0, lambda: self._mostrar_erro(str(e)))
