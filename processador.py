@@ -179,7 +179,10 @@ class ProcessadorOcorrencias:
                 }
 
                 if dias_mes is not None and qt_cols_ativas:
-                    for qt_col in qt_cols_ativas.values():
+                    for col_nome, qt_col in qt_cols_ativas.items():
+                        if col_nome == 'qt vt' and vu_vt_col is not None:
+                            if not ws.cell(row=row, column=vu_vt_col).value:
+                                continue
                         ws.cell(row=row, column=qt_col).value = dias_mes
 
                 if re_str in resultados_pdf:
