@@ -100,7 +100,7 @@ class ProcessadorOcorrencias:
 
         return ', '.join(partes)
 
-    def processar(self, pdf_path, xlsx_path, output_path, codigos, progress_cb=None, deduzir_dias=False):
+    def processar(self, pdf_path, xlsx_path, output_path, codigos, progress_cb=None, dias_mes=None):
         """
         Processa os arquivos e retorna um dicionário com os resultados.
 
@@ -168,6 +168,10 @@ class ProcessadorOcorrencias:
                 re_str = str(int(re_val)) if isinstance(re_val, (float, int)) else str(re_val).strip()
                 excel_res.add(re_str)
 
+                if dias_mes is not None and qt_cols:
+                    for qt_col in qt_cols.values():
+                        ws.cell(row=row, column=qt_col).value = dias_mes
+
                 if re_str in resultados_pdf:
                     ocorr = resultados_pdf[re_str]['ocorrencias']
                     motivo = self.montar_motivo(ocorr, codigos)
@@ -180,15 +184,11 @@ class ProcessadorOcorrencias:
                             'motivo': motivo
                         })
 
-                    if deduzir_dias and qt_cols:
-                        dias = sum(
-                            ocorr.get(c, 0) for c in self.CODIGOS_DEDUZIR
-                        )
-                        if dias > 0:
+                    if dias_mes is not None and qt_cols:
+                        dias_ded = sum(ocorr.get(c, 0) for c in self.CODIGOS_DEDUZIR)
+                        if dias_ded > 0:
                             for qt_col in qt_cols.values():
-                                atual = ws.cell(row=row, column=qt_col).value
-                                if isinstance(atual, (int, float)):
-                                    ws.cell(row=row, column=qt_col).value = max(0, atual - dias)
+                                ws.cell(row=row, column=qt_col).value = max(0, dias_mes - dias_ded)
             if total_rows > 0:
                 pct = 60 + int((i / total_rows) * 30)
                 _prog(pct, f"Cruzando dados... ({i}/{total_rows})")

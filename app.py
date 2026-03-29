@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Processador de Ocorrências v1.7
+Processador de Ocorrências v1.8
 ================================
 Aplicação desktop para extrair ocorrências de PDFs de jornada
 e preencher a coluna MOTIVO em planilhas Excel de pedido.
@@ -62,6 +62,7 @@ class App(tk.Tk):
         self._historico = []
         self._janela_progresso = None
         self.deduzir_dias = tk.BooleanVar(value=False)
+        self.dias_mes = tk.StringVar(value="")
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -101,7 +102,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Label(topbar, text="v1.7",
+        tk.Label(topbar, text="v1.8",
                  font=("Segoe UI", 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
@@ -198,12 +199,34 @@ class App(tk.Tk):
 
         # Opções adicionais
         opcoes_frame = self._criar_card(parent, "⚙  Opções")
+
         self._criar_checkbox(
             opcoes_frame,
-            "Deduzir dias das colunas Qt VA, Qt VR e Qt VT",
-            "Subtrai a quantidade de ocorrências FA, AT, SD e LC dos campos Qt VA, Qt VR e Qt VT na planilha.",
+            "Preencher e deduzir dias — Qt VA, Qt VR e Qt VT",
+            "Preenche as colunas Qt VA, Qt VR e Qt VT com a quantidade de dias do mês informada, "
+            "deduzindo os dias de ocorrências FA, AT, SD e LC para quem as tiver.",
             self.deduzir_dias,
+            on_toggle=self._toggle_dias_mes,
         )
+
+        # Campo de dias do mês (visível só quando checkbox ativo)
+        self._dias_mes_row = tk.Frame(opcoes_frame, bg=CORES['bg_card'])
+        tk.Label(self._dias_mes_row, text="Dias do mês:",
+                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 bg=CORES['bg_card']).pack(side='left', padx=(28, 8))
+        vcmd = (self.register(lambda s: s.isdigit() and int(s) <= 31 if s else True), '%P')
+        self._entry_dias = tk.Entry(
+            self._dias_mes_row, textvariable=self.dias_mes,
+            font=("Segoe UI", 11, "bold"), width=5,
+            fg=CORES['fg_bright'], bg=CORES['bg_input'],
+            insertbackground=CORES['fg'], relief='flat',
+            highlightbackground=CORES['accent'], highlightthickness=1,
+            justify='center', validate='key', validatecommand=vcmd,
+        )
+        self._entry_dias.pack(side='left')
+        tk.Label(self._dias_mes_row, text="dias",
+                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 bg=CORES['bg_card']).pack(side='left', padx=(6, 0))
 
         # Botão Processar
         self.btn_processar = tk.Button(
@@ -334,7 +357,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 20, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(pady=(4, 0))
 
-        tk.Label(frame, text="Versão 1.7",
+        tk.Label(frame, text="Versão 1.8",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(pady=(2, 0))
 
@@ -438,7 +461,15 @@ class App(tk.Tk):
                          CORES['fg_dim'], CORES['fg'])
         return btn
 
-    def _criar_checkbox(self, parent, label, descricao, var):
+    def _toggle_dias_mes(self, on):
+        if on:
+            self._dias_mes_row.pack(fill='x', pady=(4, 0))
+            self._entry_dias.focus_set()
+        else:
+            self._dias_mes_row.pack_forget()
+            self.dias_mes.set("")
+
+    def _criar_checkbox(self, parent, label, descricao, var, on_toggle=None):
         row = tk.Frame(parent, bg=CORES['bg_card'])
         row.pack(fill='x', pady=4)
 
@@ -453,6 +484,8 @@ class App(tk.Tk):
                 fg=CORES['accent_light'] if on else CORES['fg_dim'],
             )
             lbl.configure(fg=CORES['fg_bright'] if on else CORES['fg'])
+            if on_toggle:
+                on_toggle(on)
 
         dot = tk.Label(row, text="☐", font=("Segoe UI", 13),
                        fg=CORES['fg_dim'], bg=CORES['bg_card'], cursor='hand2')
@@ -564,6 +597,14 @@ class App(tk.Tk):
             messagebox.showerror("Erro", "Selecione pelo menos um código de ocorrência.")
             return
 
+        dias_mes = None
+        if self.deduzir_dias.get():
+            val = self.dias_mes.get().strip()
+            if not val or not val.isdigit() or int(val) < 1:
+                messagebox.showerror("Erro", "Informe a quantidade de dias do mês (1–31).")
+                return
+            dias_mes = int(val)
+
         base, ext = os.path.splitext(xlsx)
         sugestao = f"{base}_ATUALIZADO{ext}"
         output = filedialog.asksaveasfilename(
@@ -587,7 +628,7 @@ class App(tk.Tk):
         self._iniciar_animacao()
 
         thread = threading.Thread(target=self._processar,
-                                  args=(pdf, xlsx, output, codigos, self.deduzir_dias.get()))
+                                  args=(pdf, xlsx, output, codigos, dias_mes))
         thread.daemon = True
         thread.start()
 
@@ -675,12 +716,12 @@ class App(tk.Tk):
             win._pbar.configure(value=pct)
             win._lbl_pct.configure(text=f"{pct}%")
 
-    def _processar(self, pdf_path, xlsx_path, output_path, codigos, deduzir_dias=False):
+    def _processar(self, pdf_path, xlsx_path, output_path, codigos, dias_mes=None):
         def cb(pct, msg):
             self.after(0, lambda p=pct, m=msg: self._atualizar_progresso(p, m))
 
         try:
-            resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos, cb, deduzir_dias)
+            resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos, cb, dias_mes)
             self.after(0, lambda: self._mostrar_resultados(resultado, output_path))
         except Exception as e:
             self.after(0, lambda: self._mostrar_erro(str(e)))
