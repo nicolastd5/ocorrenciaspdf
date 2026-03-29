@@ -17,6 +17,7 @@ class ProcessadorOcorrencias:
     ORDEM = ['FA', 'AT', 'SD', 'LC', 'AA', 'AP', 'LM', 'FE']
     CODIGOS_DEDUZIR = ['FA', 'AT', 'SD', 'LC']
     COLUNAS_QT = ['qt va', 'qt vr', 'qt vt']
+    VU_VT_HEADER = 'vu vt'
     DESCRICOES = {
         'FA': 'Faltas',
         'AT': 'Atestado',
@@ -134,10 +135,11 @@ class ProcessadorOcorrencias:
         ws = wb.active
         _prog(60, "Planilha aberta. Cruzando dados...")
 
-        # 3. Encontrar colunas RE, MOTIVO e Qt VA/VR/VT
+        # 3. Encontrar colunas RE, MOTIVO, Qt VA/VR/VT e Vu VT
         re_col = None
         motivo_col = None
         qt_cols = {}  # {'qt va': col_num, ...}
+        vu_vt_col = None
         for col in range(1, ws.max_column + 1):
             val = ws.cell(row=1, column=col).value
             if val:
@@ -148,6 +150,8 @@ class ProcessadorOcorrencias:
                     re_col = col
                 if val_lower in self.COLUNAS_QT:
                     qt_cols[val_lower] = col
+                if val_lower == self.VU_VT_HEADER:
+                    vu_vt_col = col
 
         if not re_col or not motivo_col:
             raise ValueError(
@@ -193,7 +197,12 @@ class ProcessadorOcorrencias:
                     if dias_mes is not None and qt_cols_ativas:
                         dias_ded = sum(ocorr.get(c, 0) for c in self.CODIGOS_DEDUZIR)
                         if dias_ded > 0:
-                            for qt_col in qt_cols_ativas.values():
+                            for col_nome, qt_col in qt_cols_ativas.items():
+                                # Qt VT: só deduz se a célula Vu VT do RE tiver valor
+                                if col_nome == 'qt vt' and vu_vt_col is not None:
+                                    vu_vt_val = ws.cell(row=row, column=vu_vt_col).value
+                                    if not vu_vt_val:
+                                        continue
                                 ws.cell(row=row, column=qt_col).value = max(0, dias_mes - dias_ded)
             if total_rows > 0:
                 pct = 60 + int((i / total_rows) * 30)
