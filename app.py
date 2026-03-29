@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Processador de Ocorrências v1.8
+Processador de Ocorrências v1.9
 ================================
 Aplicação desktop para extrair ocorrências de PDFs de jornada
 e preencher a coluna MOTIVO em planilhas Excel de pedido.
@@ -63,6 +63,9 @@ class App(tk.Tk):
         self._janela_progresso = None
         self.deduzir_dias = tk.BooleanVar(value=False)
         self.dias_mes = tk.StringVar(value="")
+        self.qt_va_var = tk.BooleanVar(value=True)
+        self.qt_vr_var = tk.BooleanVar(value=True)
+        self.qt_vt_var = tk.BooleanVar(value=True)
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -102,7 +105,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Label(topbar, text="v1.8",
+        tk.Label(topbar, text="v1.9",
                  font=("Segoe UI", 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
@@ -202,21 +205,25 @@ class App(tk.Tk):
 
         self._criar_checkbox(
             opcoes_frame,
-            "Preencher e deduzir dias — Qt VA, Qt VR e Qt VT",
-            "Preenche as colunas Qt VA, Qt VR e Qt VT com a quantidade de dias do mês informada, "
+            "Preencher e deduzir dias nas colunas Qt",
+            "Preenche as colunas Qt selecionadas com a quantidade de dias do mês informada, "
             "deduzindo os dias de ocorrências FA, AT, SD e LC para quem as tiver.",
             self.deduzir_dias,
             on_toggle=self._toggle_dias_mes,
         )
 
-        # Campo de dias do mês (visível só quando checkbox ativo)
+        # Subpainel (visível só quando checkbox ativo)
         self._dias_mes_row = tk.Frame(opcoes_frame, bg=CORES['bg_card'])
-        tk.Label(self._dias_mes_row, text="Dias do mês:",
+
+        # Linha 1: campo de dias
+        linha_dias = tk.Frame(self._dias_mes_row, bg=CORES['bg_card'])
+        linha_dias.pack(fill='x', pady=(2, 6))
+        tk.Label(linha_dias, text="Dias do mês:",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='left', padx=(28, 8))
         vcmd = (self.register(lambda s: s.isdigit() and int(s) <= 31 if s else True), '%P')
         self._entry_dias = tk.Entry(
-            self._dias_mes_row, textvariable=self.dias_mes,
+            linha_dias, textvariable=self.dias_mes,
             font=("Segoe UI", 11, "bold"), width=5,
             fg=CORES['fg_bright'], bg=CORES['bg_input'],
             insertbackground=CORES['fg'], relief='flat',
@@ -224,9 +231,23 @@ class App(tk.Tk):
             justify='center', validate='key', validatecommand=vcmd,
         )
         self._entry_dias.pack(side='left')
-        tk.Label(self._dias_mes_row, text="dias",
+        tk.Label(linha_dias, text="dias",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='left', padx=(6, 0))
+
+        # Linha 2: seleção de colunas Qt
+        linha_qt = tk.Frame(self._dias_mes_row, bg=CORES['bg_card'])
+        linha_qt.pack(fill='x', pady=(0, 4))
+        tk.Label(linha_qt, text="Colunas:",
+                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 bg=CORES['bg_card']).pack(side='left', padx=(28, 12))
+
+        for sigla, label, var in [
+            ("VA", "Qt VA", self.qt_va_var),
+            ("VR", "Qt VR", self.qt_vr_var),
+            ("VT", "Qt VT", self.qt_vt_var),
+        ]:
+            self._criar_toggle_qt(linha_qt, sigla, label, var)
 
         # Botão Processar
         self.btn_processar = tk.Button(
@@ -357,7 +378,7 @@ class App(tk.Tk):
                  font=("Segoe UI", 20, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(pady=(4, 0))
 
-        tk.Label(frame, text="Versão 1.8",
+        tk.Label(frame, text="Versão 1.9",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(pady=(2, 0))
 
@@ -505,6 +526,32 @@ class App(tk.Tk):
         for w in (dot, lbl, row, text_col):
             w.bind('<Button-1>', lambda e: toggle())
 
+    def _criar_toggle_qt(self, parent, sigla, label, var):
+        """Botão toggle pequeno para selecionar coluna Qt VA/VR/VT."""
+        def _atualizar():
+            on = var.get()
+            btn.configure(
+                bg=CORES['accent'] if on else CORES['bg_input'],
+                fg=CORES['btn_fg'] if on else CORES['fg_dim'],
+                highlightbackground=CORES['accent'] if on else CORES['border'],
+            )
+
+        def toggle():
+            var.set(not var.get())
+            _atualizar()
+
+        btn = tk.Label(
+            parent,
+            text=f"{sigla}  {label}",
+            font=("Segoe UI", 9, "bold"),
+            fg=CORES['btn_fg'], bg=CORES['accent'],
+            padx=12, pady=5, cursor='hand2',
+            highlightbackground=CORES['accent'], highlightthickness=1,
+        )
+        btn.pack(side='left', padx=(0, 6))
+        btn.bind('<Button-1>', lambda e: toggle())
+        _atualizar()
+
     def _criar_chip(self, parent, codigo, desc, tem_qtd, var, row, col):
         frame = tk.Frame(parent, bg=CORES['bg_card'])
         frame.grid(row=row, column=col, padx=4, pady=4, sticky='ew')
@@ -598,12 +645,23 @@ class App(tk.Tk):
             return
 
         dias_mes = None
+        colunas_qt = []
         if self.deduzir_dias.get():
             val = self.dias_mes.get().strip()
             if not val or not val.isdigit() or int(val) < 1:
                 messagebox.showerror("Erro", "Informe a quantidade de dias do mês (1–31).")
                 return
             dias_mes = int(val)
+            colunas_qt = [
+                col for col, var in [
+                    ('qt va', self.qt_va_var),
+                    ('qt vr', self.qt_vr_var),
+                    ('qt vt', self.qt_vt_var),
+                ] if var.get()
+            ]
+            if not colunas_qt:
+                messagebox.showerror("Erro", "Selecione pelo menos uma coluna Qt (VA, VR ou VT).")
+                return
 
         base, ext = os.path.splitext(xlsx)
         sugestao = f"{base}_ATUALIZADO{ext}"
@@ -628,7 +686,7 @@ class App(tk.Tk):
         self._iniciar_animacao()
 
         thread = threading.Thread(target=self._processar,
-                                  args=(pdf, xlsx, output, codigos, dias_mes))
+                                  args=(pdf, xlsx, output, codigos, dias_mes, colunas_qt))
         thread.daemon = True
         thread.start()
 
@@ -716,12 +774,12 @@ class App(tk.Tk):
             win._pbar.configure(value=pct)
             win._lbl_pct.configure(text=f"{pct}%")
 
-    def _processar(self, pdf_path, xlsx_path, output_path, codigos, dias_mes=None):
+    def _processar(self, pdf_path, xlsx_path, output_path, codigos, dias_mes=None, colunas_qt=None):
         def cb(pct, msg):
             self.after(0, lambda p=pct, m=msg: self._atualizar_progresso(p, m))
 
         try:
-            resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos, cb, dias_mes)
+            resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos, cb, dias_mes, colunas_qt)
             self.after(0, lambda: self._mostrar_resultados(resultado, output_path))
         except Exception as e:
             self.after(0, lambda: self._mostrar_erro(str(e)))
