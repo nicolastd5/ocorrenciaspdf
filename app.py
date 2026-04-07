@@ -20,7 +20,7 @@ import webbrowser
 from processador import ProcessadorOcorrencias
 from vt_caixa_processador import ProcessadorVTCaixa
 
-VERSION = "1.12"
+VERSION = "1.13"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
