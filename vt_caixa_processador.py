@@ -659,7 +659,8 @@ Verifique:
 3. Período de Dias Trabalhados zerado (possível erro no período)
 4. CPF, RG ou CEP indicados como "vazio" (campos obrigatórios)
 5. Nome com caracteres estranhos ou aparentemente truncado
-6. Quantidade Diária numericamente maior que Período de Dias Trabalhados
+
+IMPORTANTE: NÃO reporte quando Quantidade Diária for maior que Período de Dias Trabalhados — isso é esperado (quantidade de passes/créditos diários, não número de dias).
 
 Registros ({len(amostra)} de {len(registros)} total):
 {chr(10).join(linhas_texto)}
