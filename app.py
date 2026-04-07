@@ -49,7 +49,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.18"
+VERSION = "1.19"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -111,7 +111,7 @@ class App(tk.Tk):
         self.vtc_xls_path    = tk.StringVar()
         self.vtc_output_path = tk.StringVar()
         self.vtc_usar_ia     = tk.BooleanVar(value=False)
-        self.vtc_api_key     = tk.StringVar(value=_cfg.get('vtc_api_key', ''))
+        self.vtc_api_key     = tk.StringVar(value='')
         self.vtc_model_id    = tk.StringVar(value=_cfg.get('vtc_model_id', 'gemini-2.5-flash'))
         self.vtc_models_map       = {}   # "display — id" → model_id puro
         self.vtc_processando      = False
@@ -767,9 +767,8 @@ class App(tk.Tk):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _vtc_mostrar_resultado(self, resultado, output_path):
-        # Persiste configurações localmente (fora do repositório)
+        # Persiste apenas o modelo selecionado (não a API key)
         err_cfg = _salvar_config({
-            'vtc_api_key':  self.vtc_api_key.get().strip(),
             'vtc_model_id': self.vtc_model_id.get().strip(),
         })
         if err_cfg:
