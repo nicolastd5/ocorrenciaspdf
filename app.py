@@ -18,8 +18,9 @@ import urllib.error
 import json
 import webbrowser
 from processador import ProcessadorOcorrencias
+from vt_caixa_processador import ProcessadorVTCaixa
 
-VERSION = "1.11"
+VERSION = "1.12"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -74,6 +75,14 @@ class App(tk.Tk):
         self.qt_va_var = tk.BooleanVar(value=True)
         self.qt_vr_var = tk.BooleanVar(value=True)
         self.qt_vt_var = tk.BooleanVar(value=True)
+
+        # VT Caixa
+        self.vtc_pdf_path    = tk.StringVar()
+        self.vtc_xls_path    = tk.StringVar()
+        self.vtc_output_path = tk.StringVar()
+        self.vtc_usar_ia     = tk.BooleanVar(value=False)
+        self.vtc_api_key     = tk.StringVar()
+        self.vtc_processando = False
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -187,7 +196,7 @@ class App(tk.Tk):
         tabs_container = tk.Frame(topbar, bg=CORES['bg'])
         tabs_container.pack(side='right')
 
-        for tab_id, label in [('processar', '⚙  Processar'), ('historico', '🕘  Histórico'), ('sobre', 'ℹ  Sobre')]:
+        for tab_id, label in [('processar', '⚙  Processar'), ('historico', '🕘  Histórico'), ('vtcaixa', '💳  VT Caixa'), ('sobre', 'ℹ  Sobre')]:
             btn = tk.Button(tabs_container, text=label,
                             font=("Segoe UI", 10),
                             fg=CORES['fg_dim'], bg=CORES['bg'],
@@ -211,6 +220,10 @@ class App(tk.Tk):
         frame_historico = tk.Frame(content, bg=CORES['bg'])
         self._criar_aba_historico(frame_historico)
         self._tab_frames['historico'] = frame_historico
+
+        frame_vtcaixa = tk.Frame(content, bg=CORES['bg'])
+        self._criar_aba_vtcaixa(frame_vtcaixa)
+        self._tab_frames['vtcaixa'] = frame_vtcaixa
 
         frame_sobre = tk.Frame(content, bg=CORES['bg'])
         self._criar_aba_sobre(frame_sobre)
@@ -438,6 +451,225 @@ class App(tk.Tk):
                              text=f"  RE {p['re']}  —  {p['nome']}  —  {p['motivo']}",
                              font=("Consolas", 9), fg=CORES['fg_dim'],
                              bg=CORES['bg_card'], anchor='w').pack(fill='x')
+
+    def _criar_aba_vtcaixa(self, parent):
+        # ── Card: Arquivos ──────────────────────────────────────────────
+        files_frame = self._criar_card(parent, "📁  Arquivos")
+        self._criar_file_picker(files_frame, "PDF Nautilus", self.vtc_pdf_path,
+                                [("PDF", "*.pdf")], "Selecionar")
+        self._criar_file_picker(files_frame, "Excel Cadastral", self.vtc_xls_path,
+                                [("Excel .xls", "*.xls")], "Selecionar")
+
+        # File picker de saída (salvar como)
+        out_row = tk.Frame(files_frame, bg=CORES['bg_card'])
+        out_row.pack(fill='x', pady=5)
+        tk.Label(out_row, text="CSV de Saída", font=("Segoe UI", 10),
+                 fg=CORES['fg_dim'], bg=CORES['bg_card'], width=14,
+                 anchor='w').pack(side='left')
+        out_entry = tk.Entry(out_row, textvariable=self.vtc_output_path,
+                             font=("Consolas", 9), fg=CORES['fg'],
+                             bg=CORES['bg_input'], insertbackground=CORES['fg'],
+                             relief='flat', highlightbackground=CORES['border'],
+                             highlightthickness=1)
+        out_entry.pack(side='left', fill='x', expand=True, padx=(0, 8), ipady=5)
+
+        def _on_out_change(*_):
+            color = CORES['accent'] if self.vtc_output_path.get().strip() else CORES['border']
+            out_entry.configure(highlightbackground=color)
+        self.vtc_output_path.trace_add('write', _on_out_change)
+
+        def _escolher_saida():
+            path = filedialog.asksaveasfilename(
+                defaultextension=".csv",
+                filetypes=[("CSV", "*.csv")],
+                title="Salvar CSV de importação VT Caixa como...")
+            if path:
+                self.vtc_output_path.set(path)
+
+        btn_out = tk.Button(out_row, text="Salvar como", font=("Segoe UI", 9),
+                            fg=CORES['accent_light'], bg=CORES['bg_input'],
+                            activeforeground=CORES['accent'],
+                            activebackground=CORES['bg_card'],
+                            relief='flat', cursor='hand2', padx=14, pady=5,
+                            borderwidth=0, command=_escolher_saida)
+        btn_out.pack(side='right')
+        self._bind_hover(btn_out, CORES['bg_input'], CORES['bg_card'],
+                         CORES['accent_light'], CORES['accent'])
+
+        # ── Card: Opções IA ─────────────────────────────────────────────
+        ia_card = self._criar_card(parent, "🤖  Verificação com IA (opcional)")
+
+        ia_chk_row = tk.Frame(ia_card, bg=CORES['bg_card'])
+        ia_chk_row.pack(fill='x', pady=(0, 4))
+
+        def _toggle_ia():
+            self.vtc_usar_ia.set(not self.vtc_usar_ia.get())
+            _atualizar_ia()
+
+        def _atualizar_ia(*_):
+            on = self.vtc_usar_ia.get()
+            ia_dot.configure(text="☑" if on else "☐",
+                             fg=CORES['accent_light'] if on else CORES['fg_dim'])
+            ia_lbl.configure(fg=CORES['fg_bright'] if on else CORES['fg'])
+            if on:
+                self._vtc_ia_key_frame.pack(fill='x', pady=(4, 0))
+            else:
+                self._vtc_ia_key_frame.pack_forget()
+
+        ia_dot = tk.Label(ia_chk_row, text="☐", font=("Segoe UI", 13),
+                          fg=CORES['fg_dim'], bg=CORES['bg_card'], cursor='hand2')
+        ia_dot.pack(side='left', padx=(0, 8))
+        ia_lbl = tk.Label(ia_chk_row,
+                          text="Verificar dados utilizando Google Gemma 4 IA",
+                          font=("Segoe UI", 10), fg=CORES['fg'],
+                          bg=CORES['bg_card'], cursor='hand2')
+        ia_lbl.pack(side='left')
+        for w in (ia_dot, ia_lbl, ia_chk_row):
+            w.bind('<Button-1>', lambda e: _toggle_ia())
+
+        self._vtc_ia_key_frame = tk.Frame(ia_card, bg=CORES['bg_card'])
+        # (não empacotado inicialmente)
+        tk.Label(self._vtc_ia_key_frame, text="API Key Google AI Studio:",
+                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 bg=CORES['bg_card']).pack(side='left', padx=(20, 8))
+        tk.Entry(self._vtc_ia_key_frame, textvariable=self.vtc_api_key,
+                 font=("Consolas", 9), fg=CORES['fg'], bg=CORES['bg_input'],
+                 insertbackground=CORES['fg'], relief='flat',
+                 highlightbackground=CORES['border'], highlightthickness=1,
+                 show='*', width=45).pack(side='left', ipady=5)
+
+        # ── Botão Gerar CSV ─────────────────────────────────────────────
+        self.vtc_btn_gerar = tk.Button(
+            parent, text="▶  GERAR CSV VT CAIXA",
+            font=("Segoe UI", 13, "bold"),
+            fg=CORES['btn_fg'], bg=CORES['btn_bg'],
+            activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
+            relief='flat', cursor='hand2', pady=14, borderwidth=0,
+            command=self._gerar_vtcaixa,
+        )
+        self.vtc_btn_gerar.pack(fill='x', pady=(4, 0))
+        self._bind_hover(self.vtc_btn_gerar, CORES['btn_bg'], CORES['btn_hover'])
+
+        # ── Card: Log ───────────────────────────────────────────────────
+        log_wrapper = tk.Frame(parent, bg=CORES['bg_card'],
+                               highlightbackground=CORES['border'],
+                               highlightthickness=1)
+        log_wrapper.pack(fill='both', expand=True, pady=(12, 0))
+        tk.Frame(log_wrapper, bg=CORES['accent'], width=3).pack(side='left', fill='y')
+        log_inner = tk.Frame(log_wrapper, bg=CORES['bg_card'])
+        log_inner.pack(side='left', fill='both', expand=True)
+        tk.Label(log_inner, text="Log", font=("Segoe UI", 11, "bold"),
+                 fg=CORES['fg_bright'], bg=CORES['bg_card']).pack(
+                     anchor='w', padx=16, pady=(12, 6))
+
+        log_text_frame = tk.Frame(log_inner, bg=CORES['bg_card'])
+        log_text_frame.pack(fill='both', expand=True, padx=16, pady=(0, 14))
+
+        self.vtc_log = tk.Text(log_text_frame, font=("Consolas", 9),
+                               fg=CORES['fg'], bg=CORES['bg_input'],
+                               insertbackground=CORES['fg'], relief='flat',
+                               highlightthickness=0, state='disabled',
+                               wrap='word', height=8)
+        sb_log = ttk.Scrollbar(log_text_frame, orient='vertical',
+                               command=self.vtc_log.yview)
+        self.vtc_log.configure(yscrollcommand=sb_log.set)
+        self.vtc_log.pack(side='left', fill='both', expand=True)
+        sb_log.pack(side='right', fill='y')
+
+        # Tags de cor
+        self.vtc_log.tag_configure('ok',   foreground=CORES['success'])
+        self.vtc_log.tag_configure('warn', foreground=CORES['warning'])
+        self.vtc_log.tag_configure('err',  foreground=CORES['error'])
+        self.vtc_log.tag_configure('info', foreground=CORES['accent_light'])
+
+    def _vtc_log_append(self, msg, tag=None):
+        """Adiciona linha ao log da aba VT Caixa (thread-safe via self.after)."""
+        self.vtc_log.configure(state='normal')
+        if tag:
+            self.vtc_log.insert(tk.END, msg + '\n', tag)
+        else:
+            self.vtc_log.insert(tk.END, msg + '\n')
+        self.vtc_log.see(tk.END)
+        self.vtc_log.configure(state='disabled')
+
+    def _gerar_vtcaixa(self):
+        pdf  = self.vtc_pdf_path.get().strip()
+        xls  = self.vtc_xls_path.get().strip()
+        out  = self.vtc_output_path.get().strip()
+
+        if not pdf or not os.path.exists(pdf):
+            messagebox.showerror("Erro", "Selecione um arquivo PDF válido.")
+            return
+        if not xls or not os.path.exists(xls):
+            messagebox.showerror("Erro", "Selecione um arquivo Excel cadastral (.xls) válido.")
+            return
+        if not out:
+            messagebox.showerror("Erro", "Informe o caminho de saída do CSV.")
+            return
+
+        usar_ia = self.vtc_usar_ia.get()
+        api_key = self.vtc_api_key.get().strip()
+        if usar_ia and not api_key:
+            messagebox.showerror("Erro", "Informe a API Key do Google AI Studio para usar a IA.")
+            return
+
+        # Limpa log e bloqueia botão
+        self.vtc_log.configure(state='normal')
+        self.vtc_log.delete('1.0', tk.END)
+        self.vtc_log.configure(state='disabled')
+        self.vtc_btn_gerar.configure(state='disabled', bg=CORES['bg_input'],
+                                     text="◐  Gerando...")
+        self.vtc_processando = True
+
+        def _cb(pct, msg):
+            self.after(0, lambda m=msg: self._vtc_log_append(f"[{pct:3d}%] {m}", 'info'))
+
+        def _worker():
+            try:
+                proc = ProcessadorVTCaixa()
+                resultado = proc.processar(pdf, xls, out,
+                                           progress_cb=_cb,
+                                           usar_ia=usar_ia,
+                                           api_key=api_key)
+                self.after(0, lambda r=resultado: self._vtc_mostrar_resultado(r, out))
+            except Exception as e:
+                self.after(0, lambda err=str(e): self._vtc_log_append(f"Erro: {err}", 'err'))
+                self.after(0, lambda: messagebox.showerror("Erro ao gerar CSV", str(e)))
+            finally:
+                self.after(0, self._vtc_finalizar)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _vtc_mostrar_resultado(self, resultado, output_path):
+        total  = resultado['total_pdf']
+        ok     = resultado['total_ok']
+        nao_enc = resultado['nao_encontrados']
+        alertas = resultado['alertas_ia']
+
+        self._vtc_log_append('─' * 50)
+        self._vtc_log_append(f"✔ {ok} registro(s) processado(s) com sucesso.", 'ok')
+        self._vtc_log_append(f"  Total no PDF: {total}")
+
+        if nao_enc:
+            self._vtc_log_append(
+                f"⚠ {len(nao_enc)} matrícula(s) sem correspondência no Excel:", 'warn')
+            for item in nao_enc:
+                self._vtc_log_append(f"   • {item}", 'warn')
+        else:
+            self._vtc_log_append("  Todas as matrículas foram encontradas no Excel.", 'ok')
+
+        self._vtc_log_append(f"\nCSV salvo em: {output_path}", 'info')
+
+        if alertas:
+            self._vtc_log_append('\n🤖 Relatório IA (Gemma 4):', 'info')
+            for linha in alertas:
+                tag = 'err' if any(k in linha.lower() for k in ('erro', 'inconsistência', 'alerta', 'vazio', 'zerado')) else None
+                self._vtc_log_append(f"   {linha}", tag)
+
+    def _vtc_finalizar(self):
+        self.vtc_processando = False
+        self.vtc_btn_gerar.configure(state='normal', bg=CORES['btn_bg'],
+                                     text="▶  GERAR CSV VT CAIXA")
 
     def _criar_aba_sobre(self, parent):
         frame = tk.Frame(parent, bg=CORES['bg'])
