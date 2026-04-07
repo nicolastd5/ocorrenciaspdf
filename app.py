@@ -81,7 +81,9 @@ class App(tk.Tk):
         self.vtc_xls_path    = tk.StringVar()
         self.vtc_output_path = tk.StringVar()
         self.vtc_usar_ia     = tk.BooleanVar(value=False)
-        self.vtc_api_key     = tk.StringVar()
+        self.vtc_api_key     = tk.StringVar(value='AIzaSyCQbO-ZUmOhuT4XAh529zmh2u5gwT9GGiE')
+        self.vtc_model_var   = tk.StringVar(value='gemini-2.5-flash')
+        self.vtc_models_map  = {}   # display_name → model_id
         self.vtc_processando = False
 
         self.processador = ProcessadorOcorrencias()
@@ -528,15 +530,48 @@ class App(tk.Tk):
             w.bind('<Button-1>', lambda e: _toggle_ia())
 
         self._vtc_ia_key_frame = tk.Frame(ia_card, bg=CORES['bg_card'])
-        # (não empacotado inicialmente)
-        tk.Label(self._vtc_ia_key_frame, text="API Key Google AI Studio:",
-                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
-                 bg=CORES['bg_card']).pack(side='left', padx=(20, 8))
-        tk.Entry(self._vtc_ia_key_frame, textvariable=self.vtc_api_key,
+        # (não empacotado inicialmente — aparece ao marcar o checkbox)
+
+        # Linha 1: API Key + botão Carregar Modelos
+        key_row = tk.Frame(self._vtc_ia_key_frame, bg=CORES['bg_card'])
+        key_row.pack(fill='x', pady=(2, 4))
+        tk.Label(key_row, text="API Key:", font=("Segoe UI", 10),
+                 fg=CORES['fg_dim'], bg=CORES['bg_card'],
+                 width=14, anchor='w').pack(side='left')
+        tk.Entry(key_row, textvariable=self.vtc_api_key,
                  font=("Consolas", 9), fg=CORES['fg'], bg=CORES['bg_input'],
                  insertbackground=CORES['fg'], relief='flat',
                  highlightbackground=CORES['border'], highlightthickness=1,
-                 show='*', width=45).pack(side='left', ipady=5)
+                 show='*').pack(side='left', fill='x', expand=True, padx=(0, 8), ipady=5)
+
+        self._vtc_btn_carregar = tk.Button(
+            key_row, text="↻  Carregar modelos",
+            font=("Segoe UI", 9), fg=CORES['accent_light'], bg=CORES['bg_input'],
+            activeforeground=CORES['accent'], activebackground=CORES['bg_card'],
+            relief='flat', cursor='hand2', padx=10, pady=5, borderwidth=0,
+            command=self._vtc_carregar_modelos,
+        )
+        self._vtc_btn_carregar.pack(side='right')
+        self._bind_hover(self._vtc_btn_carregar, CORES['bg_input'], CORES['bg_card'],
+                         CORES['accent_light'], CORES['accent'])
+
+        # Linha 2: Seleção de modelo
+        model_row = tk.Frame(self._vtc_ia_key_frame, bg=CORES['bg_card'])
+        model_row.pack(fill='x', pady=(0, 2))
+        tk.Label(model_row, text="Modelo:", font=("Segoe UI", 10),
+                 fg=CORES['fg_dim'], bg=CORES['bg_card'],
+                 width=14, anchor='w').pack(side='left')
+
+        self._vtc_model_combo = ttk.Combobox(
+            model_row, textvariable=self.vtc_model_var,
+            font=("Segoe UI", 9), state='readonly', width=40,
+        )
+        self._vtc_model_combo['values'] = ('gemini-2.5-flash — Gemini 2.5 Flash',)
+        self._vtc_model_combo.pack(side='left', ipady=4)
+        self._vtc_lbl_modelo_status = tk.Label(
+            model_row, text="(clique ↻ para carregar)",
+            font=("Segoe UI", 8), fg=CORES['fg_dim'], bg=CORES['bg_card'])
+        self._vtc_lbl_modelo_status.pack(side='left', padx=(8, 0))
 
         # ── Botão Gerar CSV ─────────────────────────────────────────────
         self.vtc_btn_gerar = tk.Button(
@@ -582,6 +617,62 @@ class App(tk.Tk):
         self.vtc_log.tag_configure('err',  foreground=CORES['error'])
         self.vtc_log.tag_configure('info', foreground=CORES['accent_light'])
 
+    def _vtc_carregar_modelos(self):
+        """Busca modelos disponíveis na API do Google AI e popula o combobox."""
+        api_key = self.vtc_api_key.get().strip()
+        if not api_key:
+            messagebox.showerror("Erro", "Informe a API Key antes de carregar os modelos.")
+            return
+
+        self._vtc_btn_carregar.configure(state='disabled', text="Carregando...")
+        self._vtc_lbl_modelo_status.configure(text="Buscando modelos...", fg=CORES['fg_dim'])
+
+        def _worker():
+            try:
+                from vt_caixa_processador import ProcessadorVTCaixa
+                modelos = ProcessadorVTCaixa.listar_modelos(api_key)
+                self.after(0, lambda m=modelos: self._vtc_popular_modelos(m))
+            except Exception as e:
+                self.after(0, lambda err=str(e): self._vtc_lbl_modelo_status.configure(
+                    text=f"Erro: {err[:60]}", fg=CORES['error']))
+                self.after(0, lambda: self._vtc_btn_carregar.configure(
+                    state='normal', text="↻  Carregar modelos"))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _vtc_popular_modelos(self, modelos):
+        """Popula o combobox com os modelos recebidos."""
+        self._vtc_btn_carregar.configure(state='normal', text="↻  Carregar modelos")
+        if not modelos:
+            self._vtc_lbl_modelo_status.configure(
+                text="Nenhum modelo encontrado.", fg=CORES['warning'])
+            return
+
+        # Monta dict display → model_id e lista para o combobox
+        self.vtc_models_map = {f"{mid} — {name}": mid for name, mid in modelos}
+        opcoes = list(self.vtc_models_map.keys())
+        self._vtc_model_combo['values'] = opcoes
+
+        # Mantém seleção atual se ainda válida, senão seleciona gemini-2.5-flash
+        atual = self.vtc_model_var.get()
+        match = next((op for op in opcoes if op.startswith(atual)), None)
+        if match:
+            self._vtc_model_combo.set(match)
+        else:
+            default = next((op for op in opcoes if 'gemini-2.5-flash' in op
+                            and 'lite' not in op and 'preview' not in op), opcoes[0])
+            self._vtc_model_combo.set(default)
+            self.vtc_model_var.set(self.vtc_models_map[default])
+
+        def _on_model_select(event):
+            sel = self._vtc_model_combo.get()
+            self.vtc_model_var.set(self.vtc_models_map.get(sel, sel))
+
+        self._vtc_model_combo.bind('<<ComboboxSelected>>', _on_model_select)
+
+        self._vtc_lbl_modelo_status.configure(
+            text=f"{len(modelos)} modelo(s) disponível(is)", fg=CORES['success'])
+
     def _vtc_log_append(self, msg, tag=None):
         """Adiciona linha ao log da aba VT Caixa (thread-safe via self.after)."""
         self.vtc_log.configure(state='normal')
@@ -607,8 +698,9 @@ class App(tk.Tk):
             messagebox.showerror("Erro", "Informe o caminho de saída do CSV.")
             return
 
-        usar_ia = self.vtc_usar_ia.get()
-        api_key = self.vtc_api_key.get().strip()
+        usar_ia  = self.vtc_usar_ia.get()
+        api_key  = self.vtc_api_key.get().strip()
+        model_id = self.vtc_model_var.get().strip()
         if usar_ia and not api_key:
             messagebox.showerror("Erro", "Informe a API Key do Google AI Studio para usar a IA.")
             return
@@ -630,7 +722,8 @@ class App(tk.Tk):
                 resultado = proc.processar(pdf, xls, out,
                                            progress_cb=_cb,
                                            usar_ia=usar_ia,
-                                           api_key=api_key)
+                                           api_key=api_key,
+                                           model_id=model_id)
                 self.after(0, lambda r=resultado: self._vtc_mostrar_resultado(r, out))
             except Exception as e:
                 self.after(0, lambda err=str(e): self._vtc_log_append(f"Erro: {err}", 'err'))

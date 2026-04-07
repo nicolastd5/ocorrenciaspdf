@@ -266,7 +266,32 @@ class ProcessadorVTCaixa:
             writer.writeheader()
             writer.writerows(registros)
 
-    def verificar_com_ia(self, registros, nao_encontrados, api_key):
+    @staticmethod
+    def listar_modelos(api_key):
+        """Retorna lista de (display_name, model_id) dos modelos de texto disponíveis.
+        Filtra apenas modelos adequados para geração de texto (exclui TTS, embedding,
+        imagem, vídeo, áudio, etc.).
+        """
+        from google import genai
+
+        # Termos que identificam modelos NÃO-texto
+        _EXCLUIR = ('tts', 'embedding', 'imagen', 'veo', 'audio', 'lyria',
+                    'robotics', 'computer-use', 'deep-research', 'aqa',
+                    'clip', 'image', 'live')
+
+        client = genai.Client(api_key=api_key.strip())
+        resultado = []
+        for m in client.models.list():
+            nome = m.name.lower()  # ex: "models/gemini-2.5-flash"
+            if any(ex in nome for ex in _EXCLUIR):
+                continue
+            # Extrai só o ID curto (sem o prefixo "models/")
+            model_id = m.name.split('/')[-1]
+            display  = m.display_name or model_id
+            resultado.append((display, model_id))
+        return resultado
+
+    def verificar_com_ia(self, registros, nao_encontrados, api_key, model_id='gemini-2.5-flash'):
         """Verifica consistência dos dados com Google Gemma 4 via AI Studio.
         Retorna lista de strings com alertas.
         """
@@ -316,7 +341,7 @@ Responda em português com lista numerada de problemas encontrados. Se tudo esti
         try:
             client = genai.Client(api_key=api_key.strip())
             response = client.models.generate_content(
-                model='gemma-4-31b-it',
+                model=model_id,
                 contents=prompt,
             )
             texto = response.text.strip()
@@ -325,7 +350,7 @@ Responda em português com lista numerada de problemas encontrados. Se tudo esti
             return [f'Erro ao chamar IA: {e}']
 
     def processar(self, pdf_path, xls_path, output_path,
-                  progress_cb=None, usar_ia=False, api_key=''):
+                  progress_cb=None, usar_ia=False, api_key='', model_id='gemini-2.5-flash'):
         """Orquestra extração, cruzamento, geração de CSV e verificação IA.
 
         Returns:
@@ -349,8 +374,8 @@ Responda em português com lista numerada de problemas encontrados. Se tudo esti
 
         alertas_ia = []
         if usar_ia:
-            _prog(90, 'CSV salvo. Verificando com IA (Gemma 4)...')
-            alertas_ia = self.verificar_com_ia(registros, nao_encontrados, api_key)
+            _prog(90, f'CSV salvo. Verificando com IA ({model_id})...')
+            alertas_ia = self.verificar_com_ia(registros, nao_encontrados, api_key, model_id)
         else:
             _prog(90, 'CSV salvo.')
 
