@@ -110,8 +110,13 @@ def _normalizar_data_espacada(texto):
 
 def _limpar_nome_extraido(texto):
     texto = re.sub(r'\s+', ' ', texto).strip()
-    # Alguns PDFs colam a matrícula no final do nome; removemos só a cauda numérica.
-    texto = re.sub(r'[0-9\s]{4,}$', '', texto).strip()
+    # Remove dígitos misturados no meio do nome (artefato de pdfplumber em PDFs com
+    # colunas adjacentes — ex: "SANTO1S" → "SANTOS", "OLIV9E1IR97A483" → "OLIVEIRA").
+    # Só aplica se o texto contém letras (evita apagar matrículas puras).
+    if re.search(r'[A-Za-zÀ-ÿ]', texto):
+        texto = re.sub(r'\d', '', texto)
+    # Normaliza espaços residuais e remove cauda vazia.
+    texto = re.sub(r'\s+', ' ', texto).strip()
     return texto
 
 
@@ -158,7 +163,7 @@ class ProcessadorVTCaixa:
 
                         rows.append({
                             'codigo':         codigo,
-                            'colaborador':    _cel(1),
+                            'colaborador':    _limpar_nome_extraido(_cel(1)),
                             'periodo':        _cel(3),
                             'quantidade':     re.sub(r'\.0+$', '', _cel(5)),
                             'valor_unitario': _cel(6),
@@ -242,23 +247,22 @@ class ProcessadorVTCaixa:
             return 0
 
         partes = None
+        s = periodo_str.strip()
 
-        # Padrão 1: 'dd/mm/yyyy a dd/mm/yyyy'  ou  'dd/mm/yyyy - dd/mm/yyyy'
-        m = re.match(
-            r'(\d{2}/\d{2}/\d{4})\s+(?:[aA]|-)\s+(\d{2}/\d{2}/\d{4})',
-            periodo_str.strip()
-        )
-        if m:
-            partes = [m.group(1), m.group(2)]
+        # Extrai as duas datas (dd/mm/yyyy) de qualquer forma que apareçam.
+        # Aceita: 'a', 'A', '-', 'até', espaço duplo, ou qualquer separador entre elas.
+        datas = re.findall(r'\d{2}/\d{2}/\d{4}', s)
+        if len(datas) >= 2:
+            partes = [datas[0], datas[1]]
 
-        # Padrão 2: 'dd/mm/yyyy-dd/mm/yyyy'  (sem espaços ao redor do hífen)
+        # Fallback: dd-mm-yyyy ou dd.mm.yyyy
         if not partes:
-            m = re.match(
-                r'(\d{2}/\d{2}/\d{4})-(\d{2}/\d{2}/\d{4})',
-                periodo_str.strip()
-            )
-            if m:
-                partes = [m.group(1), m.group(2)]
+            datas_alt = re.findall(r'\d{2}[-\.]\d{2}[-\.]\d{4}', s)
+            if len(datas_alt) >= 2:
+                partes = [
+                    re.sub(r'[-\.]', '/', datas_alt[0]),
+                    re.sub(r'[-\.]', '/', datas_alt[1]),
+                ]
 
         if not partes:
             return 0

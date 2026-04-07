@@ -49,7 +49,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.19"
+VERSION = "1.20"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
