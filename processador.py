@@ -54,16 +54,17 @@ class ProcessadorOcorrencias:
                         if not linha or len(linha) < 2 or not linha[0] or not linha[1]:
                             continue
 
-                        nome = linha[0].strip() if linha[0] else ''
-                        codigo = linha[1].strip() if linha[1] else ''
+                        nome = str(linha[0]).strip() if linha[0] is not None else ''
+                        codigo = str(linha[1]).strip() if linha[1] is not None else ''
 
                         if codigo == 'Código' or not codigo.isdigit():
                             continue
 
                         ocorrencias = {}
                         for celula in linha[6:34]:
-                            if celula and celula.strip() in codigos_set:
+                            if celula is not None and str(celula).strip() in codigos_set:
                                 cod = celula.strip()
+                                cod = str(celula).strip()
                                 ocorrencias[cod] = ocorrencias.get(cod, 0) + 1
 
                         if ocorrencias:

@@ -25,23 +25,31 @@ _CONFIG_PATH = os.path.join(os.path.expanduser('~'), '.ocorrencias_config.json')
 
 
 def _carregar_config():
+    """Carrega config local. Retorna {} se o arquivo não existe (primeira execução)."""
     try:
         with open(_CONFIG_PATH, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        # JSON corrompido ou permissão negada — avisa mas não quebra a UI
+        import sys
+        print(f'[config] Falha ao carregar {_CONFIG_PATH}: {e}', file=sys.stderr)
         return {}
 
 
 def _salvar_config(dados):
+    """Salva config local. Retorna mensagem de erro se falhar, ou None se OK."""
     try:
         cfg = _carregar_config()
         cfg.update(dados)
         with open(_CONFIG_PATH, 'w', encoding='utf-8') as f:
             json.dump(cfg, f, indent=2)
-    except Exception:
-        pass
+        return None
+    except Exception as e:
+        return str(e)
 
-VERSION = "1.15"
+VERSION = "1.16"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -593,6 +601,13 @@ class App(tk.Tk):
         self._vtc_model_combo['values'] = ('gemini-2.5-flash — Gemini 2.5 Flash',)
         self._vtc_model_combo.set(f"{self.vtc_model_id.get()} — Gemini 2.5 Flash")
         self._vtc_model_combo.pack(side='left', ipady=4)
+
+        def _on_model_select(event):
+            sel = self._vtc_model_combo.get()
+            mid = self.vtc_models_map.get(sel, sel.split(' — ')[0])
+            self.vtc_model_id.set(mid)
+
+        self._vtc_model_combo.bind('<<ComboboxSelected>>', _on_model_select)
         self._vtc_lbl_modelo_status = tk.Label(
             model_row, text="(clique ↻ para carregar)",
             font=("Segoe UI", 8), fg=CORES['fg_dim'], bg=CORES['bg_card'])
@@ -687,13 +702,6 @@ class App(tk.Tk):
         self._vtc_model_combo.set(match)
         self.vtc_model_id.set(self.vtc_models_map[match])
 
-        def _on_model_select(event):
-            sel = self._vtc_model_combo.get()
-            mid = self.vtc_models_map.get(sel, sel.split(' — ')[0])
-            self.vtc_model_id.set(mid)
-
-        self._vtc_model_combo.bind('<<ComboboxSelected>>', _on_model_select)
-
         self._vtc_lbl_modelo_status.configure(
             text=f"{len(modelos)} modelo(s) disponível(is)", fg=CORES['success'])
 
@@ -760,10 +768,12 @@ class App(tk.Tk):
 
     def _vtc_mostrar_resultado(self, resultado, output_path):
         # Persiste configurações localmente (fora do repositório)
-        _salvar_config({
+        err_cfg = _salvar_config({
             'vtc_api_key':  self.vtc_api_key.get().strip(),
             'vtc_model_id': self.vtc_model_id.get().strip(),
         })
+        if err_cfg:
+            self._vtc_log_append(f'Aviso: não foi possível salvar configuração: {err_cfg}', 'warn')
 
         total   = resultado['total_pdf']
         ok      = resultado['total_ok']
