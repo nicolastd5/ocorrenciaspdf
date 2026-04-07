@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Processador de Ocorrências v1.11
+Processador de Ocorrências v1.16
 ==================================
 Aplicação desktop para extrair ocorrências de PDFs de jornada
 e preencher a coluna MOTIVO em planilhas Excel de pedido.
@@ -600,6 +600,8 @@ class App(tk.Tk):
         )
         self._vtc_model_combo['values'] = ('gemini-2.5-flash — Gemini 2.5 Flash',)
         self._vtc_model_combo.set(f"{self.vtc_model_id.get()} — Gemini 2.5 Flash")
+        if self.vtc_model_id.get().strip() != 'gemini-2.5-flash':
+            self._vtc_model_combo.set(self.vtc_model_id.get().strip())
         self._vtc_model_combo.pack(side='left', ipady=4)
 
         def _on_model_select(event):

@@ -62,9 +62,10 @@ class ProcessadorOcorrencias:
 
                         ocorrencias = {}
                         for celula in linha[6:34]:
-                            if celula is not None and str(celula).strip() in codigos_set:
-                                cod = celula.strip()
-                                cod = str(celula).strip()
+                            if celula is None:
+                                continue
+                            cod = str(celula).strip()
+                            if cod in codigos_set:
                                 ocorrencias[cod] = ocorrencias.get(cod, 0) + 1
 
                         if ocorrencias:
