@@ -17,24 +17,35 @@ COLUNAS_CSV = [
     'ÓRGÃO EXPEDIDOR', 'ESTADO EMISSÃO RG',
 ]
 
+# Endereço fixo da empresa (primeira parte do CSV — linhas antes da MATRÍCULA)
+EMPRESA_CNPJ         = ''
+EMPRESA_CEP          = '06455000'
+EMPRESA_LOGRADOURO   = 'ALAMEDA ARAGUAIA'
+EMPRESA_NUMERO       = '3354'
+EMPRESA_COMPLEMENTO  = 'ALPHAVILLE INDUSTRIAL'
+EMPRESA_UF           = 'SP'
+EMPRESA_ESTADO       = 'BARUERI'
+
+# Para cada campo canônico usado no cruzamento, os nomes normalizados (sem
+# acentos, minúsculo) que podem aparecer como cabeçalho no Excel cadastral.
+# A ordem da lista é a ordem de preferência (primeiro = mais específico).
 _COL_ALIASES = {
-    'cod epr':            'Cód Epr',
-    'cpf':                'CPF',
-    'rg':                 'RG',
-    'uf rg':              'UF RG',
-    'orgao rg':           'Orgão RG',
-    'data nascimento':    'Data nascimento',
-    'data de nascimento': 'Data nascimento',
-    'descricao cargo':    'Descrição cargo',
-    'cod ccusto':         'Descrição Ccusto',
-    'descricao ccusto':   'Descrição Ccusto',
-    'endereco':           'Endereço',
-    'numero':             'Numero',
-    'complemento':        'Complemento',
-    'cep':                'Cep',
-    'cidade':             'Cidade',
-    'uf end':             'UF End',
-    'estado civil':       'Estado Civil',
+    'Cód Epr':          ['cod epr', 'codigo epr', 'codigo empresa', 'matricula'],
+    'CPF':              ['cpf'],
+    'RG':               ['rg', 'numero rg', 'no rg'],
+    'UF RG':            ['uf rg', 'uf do rg', 'estado rg'],
+    'Orgão RG':         ['orgao rg', 'orgao expedidor', 'orgao emissor', 'orgao exp'],
+    'Data nascimento':  ['data nascimento', 'data de nascimento', 'dt nascimento', 'dt nasc', 'nascimento'],
+    'Descrição cargo':  ['descricao cargo', 'desc cargo', 'cargo'],
+    'Descrição Ccusto': ['descricao ccusto', 'desc ccusto', 'descricao centro de custo',
+                         'centro de custo', 'ccusto'],
+    'Endereço':         ['endereco', 'logradouro', 'end'],
+    'Numero':           ['numero', 'num', 'numero end', 'numero endereco', 'nro'],
+    'Complemento':      ['complemento', 'compl'],
+    'Cep':              ['cep'],
+    'Cidade':           ['cidade', 'municipio'],
+    'UF End':           ['uf end', 'uf endereco', 'uf', 'estado end'],
+    'Estado Civil':     ['estado civil'],
 }
 
 
@@ -93,6 +104,17 @@ def _mascarar_pii(registros):
     return mascarados
 
 
+def _normalizar_data_espacada(texto):
+    return re.sub(r'\s+', '', texto)
+
+
+def _limpar_nome_extraido(texto):
+    texto = re.sub(r'\s+', ' ', texto).strip()
+    # Alguns PDFs colam a matrícula no final do nome; removemos só a cauda numérica.
+    texto = re.sub(r'[0-9\s]{4,}$', '', texto).strip()
+    return texto
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Classe principal
 # ──────────────────────────────────────────────────────────────────────────────
@@ -107,41 +129,111 @@ class ProcessadorVTCaixa:
 
         with pdfplumber.open(pdf_path) as pdf:
             for pagina in pdf.pages:
-                tabela = pagina.extract_table()
-                if not tabela:
-                    tabelas = pagina.extract_tables()
-                    tabela = tabelas[0] if tabelas else None
-                if not tabela:
+                tabelas = pagina.extract_tables() or []
+                if not tabelas:
+                    tabela = pagina.extract_table()
+                    if tabela:
+                        tabelas = [tabela]
+                if not tabelas:
                     continue
 
-                for linha in tabela:
-                    if not linha or all(c is None for c in linha):
+                for tabela in tabelas:
+                    if not tabela:
                         continue
 
-                    codigo = _extrair_codigo(linha[0])
-                    if not codigo:
+                    for linha in tabela:
+                        if not linha or all(c is None for c in linha):
+                            continue
+
+                        codigo = _extrair_codigo(linha[0])
+                        if not codigo:
+                            continue
+
+                        while len(linha) < 9:
+                            linha.append(None)
+
+                        def _cel(idx, ln=linha):
+                            v = ln[idx]
+                            return str(v).strip().replace('\n', ' ').replace('\r', '') if v is not None else ''
+
+                        rows.append({
+                            'codigo':         codigo,
+                            'colaborador':    _cel(1),
+                            'periodo':        _cel(3),
+                            'quantidade':     re.sub(r'\.0+$', '', _cel(5)),
+                            'valor_unitario': _cel(6),
+                            'administradora': _cel(8),
+                        })
+
+        if not rows:
+            avisos.append('AVISO: Nenhuma linha tabular extraída do PDF; tentando leitura por texto.')
+            rows = self._extrair_pdf_por_texto(pdf_path)
+
+        if not rows:
+            avisos.append(
+                'AVISO: Nenhuma linha de dados extraída do PDF. '
+                'Verifique se o PDF é o relatório correto e se o layout continua compatível com a extração.'
+            )
+
+        return rows, avisos
+
+    def _extrair_pdf_por_texto(self, pdf_path):
+        rows = []
+        date_re = re.compile(r'(\d\s*\d\s*/\s*\d\s*\d\s*/\s*\d\s*\d\s*\d\s*\d)')
+
+        with pdfplumber.open(pdf_path) as pdf:
+            for pagina in pdf.pages:
+                texto = pagina.extract_text() or ''
+                if not texto:
+                    continue
+
+                iniciou_dados = False
+                for linha in texto.splitlines():
+                    linha = linha.strip()
+                    if not linha:
                         continue
 
-                    while len(linha) < 9:
-                        linha.append(None)
+                    if 'Tipo Benefício:' in linha:
+                        iniciou_dados = True
+                        continue
 
-                    def _cel(idx, ln=linha):
-                        v = ln[idx]
-                        return str(v).strip().replace('\n', ' ').replace('\r', '') if v is not None else ''
+                    if not iniciou_dados:
+                        continue
+
+                    if linha.isdigit():
+                        continue
+
+                    m_cod = re.match(r'^(\d+)\s+', linha)
+                    if not m_cod:
+                        continue
+
+                    datas = list(date_re.finditer(linha))
+                    if len(datas) < 3:
+                        continue
+
+                    codigo = m_cod.group(1)
+                    prefixo = linha[m_cod.end():datas[0].start()].strip()
+                    colaborador = _limpar_nome_extraido(prefixo)
+
+                    periodo_inicio = _normalizar_data_espacada(datas[0].group(1))
+                    periodo_fim = _normalizar_data_espacada(datas[1].group(1))
+                    periodo = f'{periodo_inicio} a {periodo_fim}'
+
+                    cauda = linha[datas[2].end():].strip()
+                    m_tail = re.match(r'^(\d+)\s+(\d+,\d{2})\s+(\d+,\d{2})\s+(.+)$', cauda)
+                    if not m_tail:
+                        continue
 
                     rows.append({
                         'codigo':         codigo,
-                        'colaborador':    _cel(1),
-                        'periodo':        _cel(3),
-                        'quantidade':     _cel(5),
-                        'valor_unitario': _cel(6),
-                        'administradora': _cel(8),
+                        'colaborador':    colaborador,
+                        'periodo':        periodo,
+                        'quantidade':     m_tail.group(1),
+                        'valor_unitario': m_tail.group(2),
+                        'administradora': m_tail.group(4).strip(),
                     })
 
-        if not rows:
-            avisos.append('AVISO: Nenhuma linha de dados extraída do PDF.')
-
-        return rows, avisos
+        return rows
 
     # ── Dias úteis ─────────────────────────────────────────────────────
 
@@ -188,19 +280,25 @@ class ProcessadorVTCaixa:
     # ── Formatadores ───────────────────────────────────────────────────
 
     def _formatar_cpf(self, valor):
-        if valor is None:
+        if valor is None or valor == '':
             return ''
         if isinstance(valor, float):
-            valor = int(valor)
-        digits = re.sub(r'\D', '', str(valor).split('.')[0])
-        return digits.zfill(11) if digits else ''
+            valor = str(int(valor))
+        # Extrai apenas dígitos (remove pontuação '123.456.789-00', espaços, etc.)
+        digits = re.sub(r'\D', '', str(valor))
+        if not digits:
+            return ''
+        # CPF tem 11 dígitos; zeros à esquerda são preservados.
+        return digits.zfill(11)
 
     def _formatar_rg(self, valor):
-        if valor is None:
+        if valor is None or valor == '':
             return ''
         if isinstance(valor, float):
-            valor = int(valor)
-        return str(valor).strip().split('.')[0]
+            return str(int(valor))
+        s = str(valor).strip()
+        # Remove apenas '.0' final (artefato de float→str), preserva pontuação interna.
+        return re.sub(r'\.0+$', '', s)
 
     def _formatar_data(self, valor, wb):
         if valor is None or valor == '':
@@ -210,30 +308,61 @@ class ProcessadorVTCaixa:
                 dt = xlrd.xldate_as_datetime(valor, wb.datemode)
                 return dt.strftime('%d/%m/%Y')
             except Exception:
-                return str(valor)
-        return str(valor).strip()
+                return ''
+        s = str(valor).strip()
+        # Já no formato dd/mm/yyyy → devolve direto
+        if re.match(r'^\d{2}/\d{2}/\d{4}$', s):
+            return s
+        # ISO yyyy-mm-dd ou yyyy-mm-dd hh:mm:ss
+        m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', s)
+        if m:
+            return f'{m.group(3)}/{m.group(2)}/{m.group(1)}'
+        return s
 
     def _formatar_cep(self, valor):
-        if valor is None:
+        if valor is None or valor == '':
             return ''
         if isinstance(valor, float):
-            valor = int(valor)
-        digits = re.sub(r'\D', '', str(valor).split('.')[0])
-        return digits.zfill(8) if digits else ''
+            valor = str(int(valor))
+        digits = re.sub(r'\D', '', str(valor))
+        if not digits:
+            return ''
+        # CEP tem 8 dígitos; zeros à esquerda são preservados.
+        return digits.zfill(8)[:8]
 
     def _formatar_numero(self, valor):
-        if valor is None:
+        if valor is None or valor == '':
             return ''
         if isinstance(valor, float):
-            valor = int(valor)
-        return str(valor).strip().split('.')[0]
+            return str(int(valor))
+        s = str(valor).strip()
+        # Remove '.0' final se veio de float→str, mas preserva '123-A', '123/B'.
+        return re.sub(r'\.0+$', '', s)
 
     # ── Carregar Excel ─────────────────────────────────────────────────
 
     def _carregar_excel(self, xls_path):
         wb = xlrd.open_workbook(xls_path)
-        ws = wb.sheet_by_index(0)
         avisos = []
+
+        ws = None
+        for idx in range(wb.nsheets):
+            candidato = wb.sheet_by_index(idx)
+            cabecalhos = {
+                _norm(candidato.cell_value(0, col))
+                for col in range(candidato.ncols)
+                if candidato.cell_value(0, col)
+            }
+            if 'cod epr' in cabecalhos:
+                ws = candidato
+                avisos.append(f'Aba selecionada no Excel: {candidato.name}')
+                break
+
+        if ws is None:
+            ws = wb.sheet_by_index(0)
+            avisos.append(
+                f"Aviso: aba com 'Cód Epr' não encontrada; usando a primeira aba: {ws.name}"
+            )
 
         cabecalhos_norm = {}
         cabecalhos_orig = {}
@@ -246,33 +375,50 @@ class ProcessadorVTCaixa:
 
         avisos.append(f'Colunas no Excel: {list(cabecalhos_orig.values())}')
 
-        def _idx(nome_interno):
-            alvo = _norm(nome_interno)
+        def _idx(nome_canonico):
+            """Localiza coluna no Excel: exato → aliases conhecidos. Sem fuzzy."""
+            alvo = _norm(nome_canonico)
+            # 1) Match exato pelo nome canônico
             if alvo in cabecalhos_norm:
                 return cabecalhos_norm[alvo]
-            for alias, chave in _COL_ALIASES.items():
-                if _norm(chave) == alvo and _norm(alias) in cabecalhos_norm:
-                    return cabecalhos_norm[_norm(alias)]
-            for n, idx in cabecalhos_norm.items():
-                if alvo in n or n in alvo:
-                    return idx
+            # 2) Tabela de aliases: testa cada variante conhecida, em ordem.
+            for alias in _COL_ALIASES.get(nome_canonico, []):
+                if alias in cabecalhos_norm:
+                    return cabecalhos_norm[alias]
             return None
 
-        idx_cod     = _idx('Cód Epr')
-        idx_cpf     = _idx('CPF')
-        idx_rg      = _idx('RG')
-        idx_uf_rg   = _idx('UF RG')
-        idx_org_rg  = _idx('Orgão RG')
-        idx_dt_nasc = _idx('Data nascimento')
-        idx_cargo   = _idx('Descrição cargo')
-        idx_ccusto  = _idx('Descrição Ccusto')
-        idx_end     = _idx('Endereço')
-        idx_num     = _idx('Numero')
-        idx_comp    = _idx('Complemento')
-        idx_cep     = _idx('Cep')
-        idx_cidade  = _idx('Cidade')
-        idx_uf_end  = _idx('UF End')
-        idx_est_civ = _idx('Estado Civil')
+        mapa_colunas = {
+            'Cód Epr':          _idx('Cód Epr'),
+            'CPF':              _idx('CPF'),
+            'RG':               _idx('RG'),
+            'UF RG':            _idx('UF RG'),
+            'Orgão RG':         _idx('Orgão RG'),
+            'Data nascimento':  _idx('Data nascimento'),
+            'Descrição cargo':  _idx('Descrição cargo'),
+            'Descrição Ccusto': _idx('Descrição Ccusto'),
+            'Endereço':         _idx('Endereço'),
+            'Numero':           _idx('Numero'),
+            'Complemento':      _idx('Complemento'),
+            'Cep':              _idx('Cep'),
+            'Cidade':           _idx('Cidade'),
+            'UF End':           _idx('UF End'),
+            'Estado Civil':     _idx('Estado Civil'),
+        }
+        idx_cod     = mapa_colunas['Cód Epr']
+        idx_cpf     = mapa_colunas['CPF']
+        idx_rg      = mapa_colunas['RG']
+        idx_uf_rg   = mapa_colunas['UF RG']
+        idx_org_rg  = mapa_colunas['Orgão RG']
+        idx_dt_nasc = mapa_colunas['Data nascimento']
+        idx_cargo   = mapa_colunas['Descrição cargo']
+        idx_ccusto  = mapa_colunas['Descrição Ccusto']
+        idx_end     = mapa_colunas['Endereço']
+        idx_num     = mapa_colunas['Numero']
+        idx_comp    = mapa_colunas['Complemento']
+        idx_cep     = mapa_colunas['Cep']
+        idx_cidade  = mapa_colunas['Cidade']
+        idx_uf_end  = mapa_colunas['UF End']
+        idx_est_civ = mapa_colunas['Estado Civil']
 
         if idx_cod is None:
             raise ValueError(
@@ -280,9 +426,16 @@ class ProcessadorVTCaixa:
                 f"Disponíveis: {list(cabecalhos_orig.values())}"
             )
 
+        faltantes = [nome for nome, idx in mapa_colunas.items() if idx is None]
+        if faltantes:
+            avisos.append(
+                f'AVISO: colunas não encontradas no Excel (campos ficarão vazios): {faltantes}'
+            )
+
         avisos.append(
             f'Mapeamento: cod={idx_cod}, cpf={idx_cpf}, rg={idx_rg}, '
-            f'nascimento={idx_dt_nasc}, cargo={idx_cargo}, ccusto={idx_ccusto}'
+            f'nascimento={idx_dt_nasc}, cargo={idx_cargo}, ccusto={idx_ccusto}, '
+            f'endereço={idx_end}, numero={idx_num}, cep={idx_cep}'
         )
 
         dados = {}
@@ -301,7 +454,10 @@ class ProcessadorVTCaixa:
                 if v is None or v == '':
                     return ''
                 if isinstance(v, float):
-                    return str(int(v))
+                    # Inteiros guardados como float no xlrd (ex: 1234.0) → "1234"
+                    if v.is_integer():
+                        return str(int(v))
+                    return str(v)
                 return str(v).strip()
 
             dados[chave] = {
@@ -321,13 +477,38 @@ class ProcessadorVTCaixa:
                 'Estado Civil':     _val(idx_est_civ),
             }
 
+        if not dados:
+            avisos.append(
+                'AVISO: Nenhum funcionário carregado do Excel cadastral. '
+                'Verifique se a aba selecionada contém cabeçalho e dados abaixo da coluna Cód Epr.'
+            )
+
         return dados, avisos
 
     # ── Cruzamento ─────────────────────────────────────────────────────
 
     def _limpar_valor_unitario(self, valor_str):
-        v = valor_str.replace('R$', '').strip()
-        return v.replace('.', '').replace(',', '.')
+        """Converte 'R$ 1.234,56' → '1234.56'. Aceita string vazia."""
+        if valor_str is None:
+            return ''
+        v = str(valor_str).replace('R$', '').replace('\xa0', ' ').strip()
+        if not v:
+            return ''
+        # Formato pt-BR: "1.234,56" → remove separador de milhar, troca decimal.
+        if ',' in v:
+            v = v.replace('.', '').replace(',', '.')
+        # Sem vírgula: pode já estar em US ("1234.56") — preservar.
+        try:
+            return f'{float(v):.2f}'
+        except ValueError:
+            return ''
+
+    def _sanitizar(self, texto):
+        """Remove quebras de linha, tabs e normaliza espaços. Nunca retorna None."""
+        if texto is None:
+            return ''
+        s = str(texto).replace('\r', ' ').replace('\n', ' ').replace('\t', ' ')
+        return re.sub(r'\s+', ' ', s).strip()
 
     def _cruzar_dados(self, pdf_rows, excel_data):
         registros = []
@@ -341,37 +522,40 @@ class ProcessadorVTCaixa:
                 nao_encontrados.append(f"{codigo} - {linha['colaborador']}")
                 continue
 
+            qtd_str = re.sub(r'\D', '', linha['quantidade'])  # só dígitos
+            dias_trab = self._calcular_dias_uteis(linha['periodo'])
+
             registros.append({
-                'CNPJ':                        '',
-                'CEP':                         ex['Cep'],
-                'LOGRADOURO':                  ex['Endereço'],
-                'NÚMERO':                      ex['Numero'],
-                'COMPLEMENTO':                 ex['Complemento'],
+                'CNPJ':                        EMPRESA_CNPJ,
+                'CEP':                         EMPRESA_CEP,
+                'LOGRADOURO':                  EMPRESA_LOGRADOURO,
+                'NÚMERO':                      EMPRESA_NUMERO,
+                'COMPLEMENTO':                 EMPRESA_COMPLEMENTO,
                 'PONTO REFERENCIA':            '',
-                'UF':                          ex['UF End'],
-                'ESTADO':                      ex['Cidade'],
+                'UF':                          EMPRESA_UF,
+                'ESTADO':                      EMPRESA_ESTADO,
                 'MATRÍCULA':                   codigo,
-                'NOME DO FUNCIONÁRIO':         linha['colaborador'],
+                'NOME DO FUNCIONÁRIO':         self._sanitizar(linha['colaborador']),
                 'CPF':                         ex['CPF'],
                 'RG':                          ex['RG'],
                 'DATA DE NASCIMENTO':          ex['Data nascimento'],
-                'CARGO':                       ex['Descrição cargo'],
-                'DEPARTAMENTO':                ex['Descrição Ccusto'],
+                'CARGO':                       self._sanitizar(ex['Descrição cargo']),
+                'DEPARTAMENTO':                self._sanitizar(ex['Descrição Ccusto']),
                 'NOME DA MÃE':                 '',
-                'BENEFÍCIO DO FUNCIONÁRIO':    linha['administradora'],
+                'BENEFÍCIO DO FUNCIONÁRIO':    self._sanitizar(linha['administradora']),
                 'VALOR UNITÁRIO':              self._limpar_valor_unitario(linha['valor_unitario']),
-                'QUANTIDADE DIÁRIA':           linha['quantidade'],
-                'PERÍODO DE DIAS TRABALHADOS': str(self._calcular_dias_uteis(linha['periodo'])),
+                'QUANTIDADE DIÁRIA':           qtd_str,
+                'PERÍODO DE DIAS TRABALHADOS': str(dias_trab),
                 'TIPO VALOR':                  '',
-                'REDE RECARGA':                linha['administradora'],
+                'REDE RECARGA':                self._sanitizar(linha['administradora']),
                 'CEP RESIDENCIAL':             ex['Cep'],
-                'LOGRADOURO RESIDENCIAL':      ex['Endereço'],
+                'LOGRADOURO RESIDENCIAL':      self._sanitizar(ex['Endereço']),
                 'NÚMERO RESIDENCIAL':          ex['Numero'],
-                'COMPLEMENTO RESIDENCIAL':     ex['Complemento'],
-                'ESTADO CIVIL':                ex['Estado Civil'],
+                'COMPLEMENTO RESIDENCIAL':     self._sanitizar(ex['Complemento']),
+                'ESTADO CIVIL':                self._sanitizar(ex['Estado Civil']),
                 'DATA DE EMISSÃO DO RG':       '',
-                'ÓRGÃO EXPEDIDOR':             ex['Orgão RG'],
-                'ESTADO EMISSÃO RG':           ex['UF RG'],
+                'ÓRGÃO EXPEDIDOR':             self._sanitizar(ex['Orgão RG']),
+                'ESTADO EMISSÃO RG':           self._sanitizar(ex['UF RG']),
             })
 
         return registros, nao_encontrados
@@ -379,25 +563,42 @@ class ProcessadorVTCaixa:
     # ── Geração CSV ────────────────────────────────────────────────────
 
     def _gerar_csv(self, registros, output_path):
-        """Grava CSV em latin-1. Retorna lista de avisos sobre caracteres substituídos."""
+        """Grava CSV em latin-1 (;), CRLF. Retorna avisos sobre chars substituídos."""
         avisos = []
         codec = 'latin-1'
 
+        # 1) Sanity check dos nomes de campo — todos presentes e strings?
         for reg in registros:
             mat = reg.get('MATRÍCULA', '?')
-            for col, val in reg.items():
-                if not isinstance(val, str):
+            for col in COLUNAS_CSV:
+                if col not in reg:
+                    reg[col] = ''
                     continue
-                problemas = [c for c in val if not _pode_latin1(c)]
+                if reg[col] is None:
+                    reg[col] = ''
+                elif not isinstance(reg[col], str):
+                    reg[col] = str(reg[col])
+
+            # 2) Detecta caracteres não-latin1 antes de gravar (ficariam '?').
+            for col in COLUNAS_CSV:
+                val = reg[col]
+                problemas = sorted({c for c in val if not _pode_latin1(c)})
                 if problemas:
                     avisos.append(
                         f"Matrícula {mat} / {col}: "
-                        f"char(s) fora do latin-1 substituído(s): {list(set(problemas))}"
+                        f"char(s) fora do latin-1 substituído(s) por '?': {problemas}"
                     )
 
         with open(output_path, 'w', newline='', encoding=codec, errors='replace') as f:
-            writer = csv.DictWriter(f, fieldnames=COLUNAS_CSV, delimiter=';',
-                                    extrasaction='ignore')
+            writer = csv.DictWriter(
+                f,
+                fieldnames=COLUNAS_CSV,
+                delimiter=';',
+                quotechar='"',
+                quoting=csv.QUOTE_MINIMAL,
+                lineterminator='\r\n',
+                extrasaction='ignore',
+            )
             writer.writeheader()
             writer.writerows(registros)
 
@@ -495,9 +696,27 @@ Responda em português com lista numerada. Se tudo OK: "Nenhuma inconsistência 
         if excel_data:
             _prog(60, f'Primeiros códigos Excel: {list(excel_data.keys())[:3]}')
 
+        if not pdf_rows:
+            raise ValueError(
+                'Nenhuma linha válida foi extraída do PDF VT Caixa. '
+                'Verifique se o PDF informado é o relatório correto e se o layout continua compatível com a extração.'
+            )
+
+        if not excel_data:
+            raise ValueError(
+                'Nenhum cadastro válido foi carregado do Excel. '
+                'Verifique a aba usada e se a coluna Cód Epr possui dados.'
+            )
+
         _prog(65, 'Cruzando dados...')
         registros, nao_encontrados = self._cruzar_dados(pdf_rows, excel_data)
         _prog(80, f'{len(registros)} correspondência(s) | {len(nao_encontrados)} sem correspondência.')
+
+        if pdf_rows and not registros:
+            raise ValueError(
+                'Nenhuma correspondência encontrada entre o PDF e o Excel cadastral. '
+                'Verifique se o cadastro está na aba correta e se a coluna Cód Epr corresponde aos códigos do PDF.'
+            )
 
         _prog(85, 'Gerando CSV...')
         avisos_csv = self._gerar_csv(registros, output_path)
