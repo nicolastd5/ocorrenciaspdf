@@ -20,7 +20,7 @@ import webbrowser
 from processador import ProcessadorOcorrencias
 from vt_caixa_processador import ProcessadorVTCaixa
 
-VERSION = "1.13"
+VERSION = "1.14"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -83,8 +83,9 @@ class App(tk.Tk):
         self.vtc_usar_ia     = tk.BooleanVar(value=False)
         self.vtc_api_key     = tk.StringVar(value='AIzaSyCQbO-ZUmOhuT4XAh529zmh2u5gwT9GGiE')
         self.vtc_model_var   = tk.StringVar(value='gemini-2.5-flash')
-        self.vtc_models_map  = {}   # display_name → model_id
-        self.vtc_processando = False
+        self.vtc_models_map       = {}   # display_name → model_id
+        self.vtc_processando      = False
+        self._vtc_janela_progresso = None
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -712,9 +713,10 @@ class App(tk.Tk):
         self.vtc_btn_gerar.configure(state='disabled', bg=CORES['bg_input'],
                                      text="◐  Gerando...")
         self.vtc_processando = True
+        self._vtc_janela_progresso = self._abrir_janela_progresso()
 
         def _cb(pct, msg):
-            self.after(0, lambda m=msg: self._vtc_log_append(f"[{pct:3d}%] {m}", 'info'))
+            self.after(0, lambda p=pct, m=msg: self._vtc_atualizar_progresso(p, m))
 
         def _worker():
             try:
@@ -759,10 +761,28 @@ class App(tk.Tk):
                 tag = 'err' if any(k in linha.lower() for k in ('erro', 'inconsistência', 'alerta', 'vazio', 'zerado')) else None
                 self._vtc_log_append(f"   {linha}", tag)
 
+    def _vtc_atualizar_progresso(self, pct, msg):
+        """Atualiza a janela de progresso do VT Caixa e appenda no log."""
+        win = self._vtc_janela_progresso
+        if win and win.winfo_exists():
+            win._lbl_status.configure(text=msg[:60])
+            win._pbar.configure(value=pct)
+            win._lbl_pct.configure(text=f"{pct}%")
+        self._vtc_log_append(f"[{pct:3d}%] {msg}", 'info')
+
     def _vtc_finalizar(self):
         self.vtc_processando = False
         self.vtc_btn_gerar.configure(state='normal', bg=CORES['btn_bg'],
                                      text="▶  GERAR CSV VT CAIXA")
+        if self._vtc_janela_progresso and self._vtc_janela_progresso.winfo_exists():
+            if hasattr(self._vtc_janela_progresso, '_spin_job'):
+                try:
+                    self._vtc_janela_progresso.after_cancel(
+                        self._vtc_janela_progresso._spin_job)
+                except Exception:
+                    pass
+            self._vtc_janela_progresso.destroy()
+        self._vtc_janela_progresso = None
 
     def _criar_aba_sobre(self, parent):
         frame = tk.Frame(parent, bg=CORES['bg'])

@@ -1,5 +1,6 @@
 import csv
 import re
+import unicodedata
 from datetime import date, datetime
 
 import pdfplumber
@@ -16,6 +17,53 @@ COLUNAS_CSV = [
     'ÓRGÃO EXPEDIDOR', 'ESTADO EMISSÃO RG',
 ]
 
+# Mapeamento de nomes de coluna do Excel (normalizado sem acento) → chave interna
+_COL_ALIASES = {
+    'cod epr':            'cod_epr',
+    'cpf':                'CPF',
+    'rg':                 'RG',
+    'uf rg':              'UF RG',
+    'orgao rg':           'Orgão RG',
+    'orgão rg':           'Orgão RG',
+    'data nascimento':    'Data nascimento',
+    'data de nascimento': 'Data nascimento',
+    'descricao cargo':    'Descrição cargo',
+    'descrição cargo':    'Descrição cargo',
+    'cod ccusto':         'Descrição Ccusto',
+    'descricao ccusto':   'Descrição Ccusto',
+    'descrição ccusto':   'Descrição Ccusto',
+    'endereco':           'Endereço',
+    'endereço':           'Endereço',
+    'numero':             'Numero',
+    'número':             'Numero',
+    'complemento':        'Complemento',
+    'cep':                'Cep',
+    'cidade':             'Cidade',
+    'uf end':             'UF End',
+    'estado civil':       'Estado Civil',
+}
+
+
+def _normalizar(texto):
+    """Remove acentos e converte para minúsculas para comparação robusta."""
+    return unicodedata.normalize('NFKD', str(texto)).encode('ascii', 'ignore').decode().lower().strip()
+
+
+def _extrair_codigo(valor):
+    """Extrai o código numérico de uma célula, lidando com '123.0', '  123  ', etc.
+    Retorna string de dígitos ou '' se não for um código válido.
+    """
+    if valor is None:
+        return ''
+    s = str(valor).strip().replace('\n', '').replace('\r', '')
+    # Remove sufixo decimal (ex: '123.0' → '123')
+    s = re.sub(r'\.0+$', '', s)
+    # Extrai apenas dígitos iniciais
+    m = re.match(r'^(\d+)', s)
+    if m:
+        return m.group(1)
+    return ''
+
 
 class ProcessadorVTCaixa:
 
@@ -23,49 +71,63 @@ class ProcessadorVTCaixa:
         """Extrai linhas de dados do PDF Nautilus.
         Retorna lista de dicts com: codigo, colaborador, periodo,
         quantidade, valor_unitario, administradora.
+        Também retorna lista de avisos de diagnóstico.
         """
         rows = []
+        avisos = []
+
         with pdfplumber.open(pdf_path) as pdf:
-            for pagina in pdf.pages:
+            for num_pag, pagina in enumerate(pdf.pages, 1):
                 tabela = pagina.extract_table()
                 if not tabela:
-                    continue
-                for linha in tabela:
-                    if not linha:
-                        continue
-                    # Primeira célula deve ser numérica (Código/matrícula)
-                    primeira = linha[0]
-                    if primeira is None:
-                        continue
-                    codigo = str(primeira).strip().replace('\n', '')
-                    if not codigo.isdigit():
-                        continue
-                    # Garante que há colunas suficientes
-                    if len(linha) < 9:
+                    # Tenta extract_tables como fallback
+                    tabelas = pagina.extract_tables()
+                    if tabelas:
+                        tabela = tabelas[0]
+                    else:
                         continue
 
-                    def _cel(idx):
-                        v = linha[idx]
-                        return str(v).strip().replace('\n', ' ') if v is not None else ''
+                for idx_linha, linha in enumerate(tabela):
+                    if not linha or all(c is None for c in linha):
+                        continue
+
+                    codigo = _extrair_codigo(linha[0])
+                    if not codigo:
+                        continue
+
+                    # Garante que há colunas suficientes
+                    while len(linha) < 9:
+                        linha.append(None)
+
+                    def _cel(idx, ln=linha):
+                        v = ln[idx]
+                        return str(v).strip().replace('\n', ' ').replace('\r', '') if v is not None else ''
 
                     rows.append({
-                        'codigo':        codigo,
-                        'colaborador':   _cel(1),
-                        'periodo':       _cel(3),
-                        'quantidade':    _cel(5),
+                        'codigo':         codigo,
+                        'colaborador':    _cel(1),
+                        'periodo':        _cel(3),
+                        'quantidade':     _cel(5),
                         'valor_unitario': _cel(6),
                         'administradora': _cel(8),
                     })
-        return rows
+
+        if not rows:
+            avisos.append('AVISO: Nenhuma linha de dados extraída do PDF. '
+                          'Verifique se o PDF é o Relatório Compra Benefícios correto.')
+
+        return rows, avisos
 
     def _calcular_dias_uteis(self, periodo_str):
         """Conta dias úteis (seg–sex) no período 'dd/mm/yyyy a dd/mm/yyyy'."""
         if not periodo_str:
             return 0
-        # Aceita separador ' a ' ou ' - '
-        partes = re.split(r'\s+[aA\-]\s+', periodo_str.strip())
+        partes = re.split(r'\s+[aA\-/]\s+', periodo_str.strip())
         if len(partes) != 2:
-            return 0
+            # Tenta formato com hífen sem espaço
+            partes = re.split(r'[-/]', periodo_str.strip())
+            if len(partes) != 2:
+                return 0
         try:
             inicio = datetime.strptime(partes[0].strip(), '%d/%m/%Y').date()
             fim    = datetime.strptime(partes[1].strip(), '%d/%m/%Y').date()
@@ -80,17 +142,14 @@ class ProcessadorVTCaixa:
         return dias
 
     def _formatar_cpf(self, valor):
-        """Garante string com zeros à esquerda para CPF (11 dígitos)."""
         if valor is None:
             return ''
         if isinstance(valor, float):
             valor = int(valor)
-        s = str(valor).strip().split('.')[0]  # remove .0 de float
-        digits = re.sub(r'\D', '', s)
-        return digits.zfill(11) if digits else s
+        digits = re.sub(r'\D', '', str(valor).split('.')[0])
+        return digits.zfill(11) if digits else ''
 
     def _formatar_rg(self, valor):
-        """Preserva RG como string."""
         if valor is None:
             return ''
         if isinstance(valor, float):
@@ -98,7 +157,6 @@ class ProcessadorVTCaixa:
         return str(valor).strip().split('.')[0]
 
     def _formatar_data(self, valor, wb):
-        """Converte valor de data do xlrd para dd/mm/yyyy."""
         if valor is None or valor == '':
             return ''
         if isinstance(valor, float):
@@ -110,17 +168,14 @@ class ProcessadorVTCaixa:
         return str(valor).strip()
 
     def _formatar_cep(self, valor):
-        """Formata CEP como string com 8 dígitos."""
         if valor is None:
             return ''
         if isinstance(valor, float):
             valor = int(valor)
-        s = str(valor).strip().split('.')[0]
-        digits = re.sub(r'\D', '', s)
-        return digits.zfill(8) if digits else s
+        digits = re.sub(r'\D', '', str(valor).split('.')[0])
+        return digits.zfill(8) if digits else ''
 
     def _formatar_numero(self, valor):
-        """Formata número de endereço como string."""
         if valor is None:
             return ''
         if isinstance(valor, float):
@@ -129,20 +184,40 @@ class ProcessadorVTCaixa:
 
     def _carregar_excel(self, xls_path):
         """Carrega o Excel cadastral .xls.
-        Retorna dict: {str(Cód Epr): {coluna: valor}}
+        Retorna (dict {str(Cód Epr): {...}}, lista de avisos de diagnóstico).
         """
         wb = xlrd.open_workbook(xls_path)
         ws = wb.sheet_by_index(0)
+        avisos = []
 
-        # Mapeia nome de coluna → índice (case-insensitive)
-        cabecalhos = {}
+        # Mapeia nome normalizado → índice de coluna
+        cabecalhos_norm = {}   # normalizado → índice
+        cabecalhos_orig = {}   # normalizado → nome original
         for col in range(ws.ncols):
             val = ws.cell_value(0, col)
             if val:
-                cabecalhos[str(val).strip().lower()] = col
+                norm = _normalizar(val)
+                cabecalhos_norm[norm] = col
+                cabecalhos_orig[norm] = str(val).strip()
 
-        def _idx(nome):
-            return cabecalhos.get(nome.lower())
+        avisos.append(f'Colunas encontradas no Excel: {list(cabecalhos_orig.values())}')
+
+        def _idx(nome_interno):
+            """Busca índice da coluna pelo alias normalizado."""
+            norm_alvo = _normalizar(nome_interno)
+            # Busca direta
+            if norm_alvo in cabecalhos_norm:
+                return cabecalhos_norm[norm_alvo]
+            # Busca via aliases
+            for alias, chave in _COL_ALIASES.items():
+                if chave == nome_interno or _normalizar(chave) == norm_alvo:
+                    if _normalizar(alias) in cabecalhos_norm:
+                        return cabecalhos_norm[_normalizar(alias)]
+            # Busca parcial (substring)
+            for norm_col, idx in cabecalhos_norm.items():
+                if norm_alvo in norm_col or norm_col in norm_alvo:
+                    return idx
+            return None
 
         idx_cod     = _idx('Cód Epr')
         idx_cpf     = _idx('CPF')
@@ -161,22 +236,33 @@ class ProcessadorVTCaixa:
         idx_est_civ = _idx('Estado Civil')
 
         if idx_cod is None:
-            raise ValueError("Coluna 'Cód Epr' não encontrada no Excel.")
+            cols_disp = list(cabecalhos_orig.values())
+            raise ValueError(
+                f"Coluna 'Cód Epr' não encontrada no Excel.\n"
+                f"Colunas disponíveis: {cols_disp}"
+            )
+
+        avisos.append(
+            f'Mapeamento de colunas: cod_epr={idx_cod}, cpf={idx_cpf}, '
+            f'rg={idx_rg}, nascimento={idx_dt_nasc}, cargo={idx_cargo}'
+        )
 
         dados = {}
         for row in range(1, ws.nrows):
             cod_raw = ws.cell_value(row, idx_cod)
             if cod_raw is None or cod_raw == '':
                 continue
-            if isinstance(cod_raw, float):
-                cod_raw = int(cod_raw)
-            chave = str(cod_raw).strip()
 
-            def _val(idx):
+            # Normaliza chave: remove decimal, strip
+            chave = _extrair_codigo(cod_raw) or str(cod_raw).strip()
+            if not chave:
+                continue
+
+            def _val(idx, r=row):
                 if idx is None:
                     return ''
-                v = ws.cell_value(row, idx)
-                if v is None:
+                v = ws.cell_value(r, idx)
+                if v is None or v == '':
                     return ''
                 if isinstance(v, float):
                     return str(int(v))
@@ -198,18 +284,15 @@ class ProcessadorVTCaixa:
                 'UF End':           _val(idx_uf_end),
                 'Estado Civil':     _val(idx_est_civ),
             }
-        return dados
+
+        return dados, avisos
 
     def _limpar_valor_unitario(self, valor_str):
-        """Remove 'R$', espaços e converte vírgula para ponto."""
         v = valor_str.replace('R$', '').strip()
-        v = v.replace('.', '').replace(',', '.')  # 1.234,56 → 1234.56
+        v = v.replace('.', '').replace(',', '.')
         return v
 
     def _cruzar_dados(self, pdf_rows, excel_data):
-        """Cruza linhas do PDF com cadastro Excel.
-        Retorna (registros: list[dict], nao_encontrados: list[str])
-        """
         registros = []
         nao_encontrados = []
 
@@ -259,7 +342,6 @@ class ProcessadorVTCaixa:
         return registros, nao_encontrados
 
     def _gerar_csv(self, registros, output_path):
-        """Grava o CSV em latin-1 com separador ';'."""
         with open(output_path, 'w', newline='', encoding='latin-1', errors='replace') as f:
             writer = csv.DictWriter(f, fieldnames=COLUNAS_CSV, delimiter=';',
                                     extrasaction='ignore')
@@ -268,43 +350,30 @@ class ProcessadorVTCaixa:
 
     @staticmethod
     def listar_modelos(api_key):
-        """Retorna lista de (display_name, model_id) dos modelos de texto disponíveis.
-        Filtra apenas modelos adequados para geração de texto (exclui TTS, embedding,
-        imagem, vídeo, áudio, etc.).
-        """
         from google import genai
-
-        # Termos que identificam modelos NÃO-texto
         _EXCLUIR = ('tts', 'embedding', 'imagen', 'veo', 'audio', 'lyria',
                     'robotics', 'computer-use', 'deep-research', 'aqa',
                     'clip', 'image', 'live')
-
         client = genai.Client(api_key=api_key.strip())
         resultado = []
         for m in client.models.list():
-            nome = m.name.lower()  # ex: "models/gemini-2.5-flash"
+            nome = m.name.lower()
             if any(ex in nome for ex in _EXCLUIR):
                 continue
-            # Extrai só o ID curto (sem o prefixo "models/")
             model_id = m.name.split('/')[-1]
             display  = m.display_name or model_id
             resultado.append((display, model_id))
         return resultado
 
     def verificar_com_ia(self, registros, nao_encontrados, api_key, model_id='gemini-2.5-flash'):
-        """Verifica consistência dos dados com Google Gemma 4 via AI Studio.
-        Retorna lista de strings com alertas.
-        """
         try:
             from google import genai
         except ImportError:
-            return ['Erro: biblioteca google-genai não instalada. '
-                    'Execute: pip install google-genai']
+            return ['Erro: biblioteca google-genai não instalada. Execute: pip install google-genai']
 
         if not api_key.strip():
             return ['Erro: API Key não informada.']
 
-        # Monta amostra (máx 50 registros para não exceder tokens)
         amostra = registros[:50]
         linhas_texto = []
         for r in amostra:
@@ -315,7 +384,6 @@ class ProcessadorVTCaixa:
                 f"QtdDiaria={r['QUANTIDADE DIÁRIA']} | PeriodoDias={r['PERÍODO DE DIAS TRABALHADOS']} | "
                 f"Beneficio={r['BENEFÍCIO DO FUNCIONÁRIO']}"
             )
-
         sem_corresp = '\n'.join(nao_encontrados) if nao_encontrados else 'Nenhuma'
 
         prompt = f"""Você é um assistente de RH verificando dados de Vale-Transporte para importação.
@@ -337,47 +405,55 @@ Matrículas sem correspondência no cadastro:
 
 Responda em português com lista numerada de problemas encontrados. Se tudo estiver OK, diga apenas "Nenhuma inconsistência encontrada."
 """
-
         try:
             client = genai.Client(api_key=api_key.strip())
-            response = client.models.generate_content(
-                model=model_id,
-                contents=prompt,
-            )
-            texto = response.text.strip()
-            return texto.splitlines()
+            response = client.models.generate_content(model=model_id, contents=prompt)
+            return response.text.strip().splitlines()
         except Exception as e:
             return [f'Erro ao chamar IA: {e}']
 
     def processar(self, pdf_path, xls_path, output_path,
                   progress_cb=None, usar_ia=False, api_key='', model_id='gemini-2.5-flash'):
-        """Orquestra extração, cruzamento, geração de CSV e verificação IA.
-
-        Returns:
-            dict com total_pdf, total_ok, nao_encontrados, alertas_ia
-        """
         def _prog(pct, msg):
             if progress_cb:
                 progress_cb(pct, msg)
 
         _prog(5, 'Lendo PDF...')
-        pdf_rows = self._extrair_pdf(pdf_path)
+        pdf_rows, avisos_pdf = self._extrair_pdf(pdf_path)
+        _prog(35, f'PDF lido: {len(pdf_rows)} linha(s) de dados encontrada(s).')
 
-        _prog(40, f'PDF lido ({len(pdf_rows)} registros). Carregando Excel...')
-        excel_data = self._carregar_excel(xls_path)
+        for av in avisos_pdf:
+            _prog(35, av)
 
-        _prog(65, f'Excel carregado ({len(excel_data)} funcionários). Cruzando dados...')
+        if pdf_rows:
+            # Diagnóstico: mostra primeiro e último código extraído
+            _prog(35, f'Primeiro código PDF: {pdf_rows[0]["codigo"]} '
+                      f'— Último: {pdf_rows[-1]["codigo"]}')
+
+        _prog(40, 'Carregando Excel cadastral...')
+        excel_data, avisos_xls = self._carregar_excel(xls_path)
+        _prog(60, f'Excel carregado: {len(excel_data)} funcionário(s).')
+
+        for av in avisos_xls:
+            _prog(60, av)
+
+        if excel_data:
+            primeiros = list(excel_data.keys())[:3]
+            _prog(60, f'Primeiros códigos Excel: {primeiros}')
+
+        _prog(65, 'Cruzando dados...')
         registros, nao_encontrados = self._cruzar_dados(pdf_rows, excel_data)
+        _prog(80, f'Cruzamento concluído: {len(registros)} correspondência(s), '
+                  f'{len(nao_encontrados)} sem correspondência.')
 
-        _prog(85, f'Cruzamento concluído. Gerando CSV...')
+        _prog(85, 'Gerando CSV...')
         self._gerar_csv(registros, output_path)
+        _prog(90, 'CSV salvo.')
 
         alertas_ia = []
-        if usar_ia:
-            _prog(90, f'CSV salvo. Verificando com IA ({model_id})...')
+        if usar_ia and registros:
+            _prog(92, f'Verificando com IA ({model_id})...')
             alertas_ia = self.verificar_com_ia(registros, nao_encontrados, api_key, model_id)
-        else:
-            _prog(90, 'CSV salvo.')
 
         _prog(100, 'Concluído!')
 
