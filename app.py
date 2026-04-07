@@ -49,7 +49,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.21"
+VERSION = "1.22"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -552,7 +552,7 @@ class App(tk.Tk):
                           fg=CORES['fg_dim'], bg=CORES['bg_card'], cursor='hand2')
         ia_dot.pack(side='left', padx=(0, 8))
         ia_lbl = tk.Label(ia_chk_row,
-                          text="Verificar dados utilizando Google Gemma 4 IA",
+                          text="Verificar dados utilizando IA da Google Gemini ou Gemma 4",
                           font=("Segoe UI", 10), fg=CORES['fg'],
                           bg=CORES['bg_card'], cursor='hand2')
         ia_lbl.pack(side='left')
@@ -804,6 +804,83 @@ class App(tk.Tk):
             for linha in alertas:
                 tag = 'err' if any(k in linha.lower() for k in ('erro', 'inconsistência', 'alerta', 'vazio', 'zerado')) else None
                 self._vtc_log_append(f"   {linha}", tag)
+            self.after(100, lambda: self._vtc_mostrar_janela_ia(alertas, self.vtc_model_id.get()))
+
+    def _vtc_mostrar_janela_ia(self, alertas, model_id):
+        win = tk.Toplevel(self)
+        win.title("Relatório de Verificação IA")
+        win.configure(bg=CORES['bg'])
+        win.geometry("620x500")
+        win.resizable(True, True)
+        win.grab_set()
+
+        win.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - 310
+        y = self.winfo_y() + (self.winfo_height() // 2) - 250
+        win.geometry(f"620x500+{x}+{y}")
+
+        # Cabeçalho
+        header = tk.Frame(win, bg=CORES['accent'], height=4)
+        header.pack(fill='x')
+
+        inner = tk.Frame(win, bg=CORES['bg'])
+        inner.pack(fill='both', expand=True, padx=24, pady=20)
+
+        # Título
+        tk.Label(inner, text="🤖  Relatório IA", font=("Segoe UI", 14, "bold"),
+                 fg=CORES['fg_bright'], bg=CORES['bg']).pack(anchor='w')
+        tk.Label(inner, text=f"Modelo: {model_id}", font=("Segoe UI", 9),
+                 fg=CORES['fg_dim'], bg=CORES['bg']).pack(anchor='w', pady=(2, 12))
+
+        # Área de texto com scroll
+        txt_frame = tk.Frame(inner, bg=CORES['border'], bd=1, relief='flat')
+        txt_frame.pack(fill='both', expand=True)
+
+        sb = tk.Scrollbar(txt_frame, bg=CORES['bg_card'])
+        txt = tk.Text(txt_frame, font=("Consolas", 10), bg=CORES['bg_card'],
+                      fg=CORES['fg'], relief='flat', bd=0, wrap='word',
+                      state='normal', yscrollcommand=sb.set, padx=12, pady=10)
+        sb.configure(command=txt.yview)
+        sb.pack(side='right', fill='y')
+        txt.pack(side='left', fill='both', expand=True)
+
+        txt.tag_configure('warn',    foreground=CORES['warning'])
+        txt.tag_configure('err',     foreground=CORES['error'])
+        txt.tag_configure('ok',      foreground=CORES['success'])
+        txt.tag_configure('dim',     foreground=CORES['fg_dim'])
+        txt.tag_configure('bold',    font=("Consolas", 10, "bold"))
+
+        tem_problema = False
+        for linha in alertas:
+            linha_lower = linha.lower()
+            if any(k in linha_lower for k in ('inconsistência', 'erro', 'alerta', 'vazio', 'zerado', 'truncado', 'estranho')):
+                txt.insert(tk.END, linha + '\n', 'err')
+                tem_problema = True
+            elif any(k in linha_lower for k in ('aviso', 'atenção', 'verificar')):
+                txt.insert(tk.END, linha + '\n', 'warn')
+                tem_problema = True
+            elif linha.strip() == '':
+                txt.insert(tk.END, '\n')
+            else:
+                txt.insert(tk.END, linha + '\n')
+
+        txt.configure(state='disabled')
+
+        # Rodapé
+        footer = tk.Frame(inner, bg=CORES['bg'])
+        footer.pack(fill='x', pady=(14, 0))
+
+        resumo_txt = f"{'⚠  Inconsistências encontradas' if tem_problema else '✔  Nenhuma inconsistência encontrada'}"
+        resumo_cor = CORES['warning'] if tem_problema else CORES['success']
+        tk.Label(footer, text=resumo_txt, font=("Segoe UI", 10, "bold"),
+                 fg=resumo_cor, bg=CORES['bg']).pack(side='left')
+
+        btn_fechar = tk.Button(footer, text="Fechar", font=("Segoe UI", 10),
+                               bg=CORES['btn_bg'], fg=CORES['btn_fg'],
+                               relief='flat', bd=0, padx=20, pady=6,
+                               cursor='hand2', command=win.destroy)
+        btn_fechar.pack(side='right')
+        self._bind_hover(btn_fechar, CORES['btn_bg'], CORES['btn_hover'])
 
     def _vtc_finalizar(self):
         self.vtc_processando = False

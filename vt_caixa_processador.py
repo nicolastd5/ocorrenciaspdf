@@ -18,7 +18,7 @@ COLUNAS_CSV = [
 ]
 
 # Endereço fixo da empresa (primeira parte do CSV — linhas antes da MATRÍCULA)
-EMPRESA_CNPJ         = ''
+EMPRESA_CNPJ         = '02.738.552/0001-27'
 EMPRESA_CEP          = '06455000'
 EMPRESA_LOGRADOURO   = 'ALAMEDA ARAGUAIA'
 EMPRESA_NUMERO       = '3354'
@@ -35,6 +35,7 @@ _COL_ALIASES = {
     'RG':               ['rg', 'numero rg', 'no rg'],
     'UF RG':            ['uf rg', 'uf do rg', 'estado rg'],
     'Orgão RG':         ['orgao rg', 'orgao expedidor', 'orgao emissor', 'orgao exp'],
+    'Data EX':          ['data ex', 'data emissao rg', 'data emissao', 'dt emissao', 'emissao rg'],
     'Data nascimento':  ['data nascimento', 'data de nascimento', 'dt nascimento', 'dt nasc', 'nascimento'],
     'Descrição cargo':  ['descricao cargo', 'desc cargo', 'cargo'],
     'Descrição Ccusto': ['descricao ccusto', 'desc ccusto', 'descricao centro de custo',
@@ -407,6 +408,7 @@ class ProcessadorVTCaixa:
             'Cidade':           _idx('Cidade'),
             'UF End':           _idx('UF End'),
             'Estado Civil':     _idx('Estado Civil'),
+            'Data EX':          _idx('Data EX'),
         }
         idx_cod     = mapa_colunas['Cód Epr']
         idx_cpf     = mapa_colunas['CPF']
@@ -423,6 +425,7 @@ class ProcessadorVTCaixa:
         idx_cidade  = mapa_colunas['Cidade']
         idx_uf_end  = mapa_colunas['UF End']
         idx_est_civ = mapa_colunas['Estado Civil']
+        idx_dt_ex   = mapa_colunas['Data EX']
 
         if idx_cod is None:
             raise ValueError(
@@ -479,6 +482,7 @@ class ProcessadorVTCaixa:
                 'Cidade':           _val(idx_cidade),
                 'UF End':           _val(idx_uf_end),
                 'Estado Civil':     _val(idx_est_civ),
+                'Data EX':          self._formatar_data(ws.cell_value(row, idx_dt_ex) if idx_dt_ex is not None else None, wb),
             }
 
         if not dados:
@@ -557,7 +561,7 @@ class ProcessadorVTCaixa:
                 'NÚMERO RESIDENCIAL':          ex['Numero'],
                 'COMPLEMENTO RESIDENCIAL':     self._sanitizar(ex['Complemento']),
                 'ESTADO CIVIL':                self._sanitizar(ex['Estado Civil']),
-                'DATA DE EMISSÃO DO RG':       '',
+                'DATA DE EMISSÃO DO RG':       ex['Data EX'],
                 'ÓRGÃO EXPEDIDOR':             self._sanitizar(ex['Orgão RG']),
                 'ESTADO EMISSÃO RG':           self._sanitizar(ex['UF RG']),
             })
@@ -638,29 +642,23 @@ class ProcessadorVTCaixa:
         if not api_key.strip():
             return ['Erro: API Key não informada.']
 
-        amostra = _mascarar_pii(registros[:50])
+        # Envia apenas matrícula e nome — sem PII
+        amostra = registros[:200]
         linhas_texto = [
-            f"Matrícula={r['MATRÍCULA']} | Nome={r['NOME DO FUNCIONÁRIO']} | "
-            f"CPF={r['CPF']} | RG={r['RG']} | AnoNasc={r['DATA DE NASCIMENTO']} | "
-            f"CEP={r['CEP']} | ValorUnit={r['VALOR UNITÁRIO']} | "
-            f"QtdDiaria={r['QUANTIDADE DIÁRIA']} | PeriodoDias={r['PERÍODO DE DIAS TRABALHADOS']} | "
-            f"Beneficio={r['BENEFÍCIO DO FUNCIONÁRIO']} | Cargo={r['CARGO']}"
+            f"Matrícula={r['MATRÍCULA']} | Nome={r['NOME DO FUNCIONÁRIO']}"
             for r in amostra
         ]
         sem_corresp = '\n'.join(nao_encontrados) if nao_encontrados else 'Nenhuma'
 
-        prompt = f"""Você é um assistente de RH verificando dados de Vale-Transporte para importação.
-CPF e RG foram substituídos por "preenchido"/"vazio" por privacidade.
-Analise os registros e reporte APENAS inconsistências reais. Seja objetivo e conciso.
+        prompt = f"""Você é um assistente de RH verificando nomes de funcionários para importação de Vale-Transporte.
+Analise os registros e reporte APENAS nomes com problemas evidentes. Seja objetivo e conciso.
 
 Verifique:
-1. Valor Unitário zerado ou vazio
-2. Quantidade Diária zerada ou vazia
-3. Período de Dias Trabalhados zerado (possível erro no período)
-4. CPF, RG ou CEP indicados como "vazio" (campos obrigatórios)
-5. Nome com caracteres estranhos ou aparentemente truncado
+1. Nome aparentemente truncado (muito curto, menos de 3 caracteres)
+2. Nome com caracteres estranhos, dígitos ou símbolos misturados
+3. Nome claramente vazio ou inválido
 
-IMPORTANTE: NÃO reporte quando Quantidade Diária for maior que Período de Dias Trabalhados — isso é esperado (quantidade de passes/créditos diários, não número de dias).
+NÃO reporte nomes normais, abreviações comuns ou nomes curtos válidos.
 
 Registros ({len(amostra)} de {len(registros)} total):
 {chr(10).join(linhas_texto)}
