@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Processador de Ocorrências v1.16
+Processador de Ocorrências v1.17
 ==================================
 Aplicação desktop para extrair ocorrências de PDFs de jornada
 e preencher a coluna MOTIVO em planilhas Excel de pedido.
@@ -49,7 +49,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.16"
+VERSION = "1.17"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 

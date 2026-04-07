@@ -68,4 +68,4 @@ Na aba **Histórico** você pode consultar os resultados dos processamentos ante
 
 **Nicolas Almeida Hader Dias**
 
-Versão atual: **1.16**
+Versão atual: **1.17**

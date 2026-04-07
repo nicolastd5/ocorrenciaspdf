@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='ProcessadorOcorrencias-v1.16',
+    name='ProcessadorOcorrencias-v1.17',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
