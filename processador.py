@@ -51,7 +51,7 @@ class ProcessadorOcorrencias:
 
                 for tabela in tabelas:
                     for linha in tabela:
-                        if not linha or not linha[0] or not linha[1]:
+                        if not linha or len(linha) < 2 or not linha[0] or not linha[1]:
                             continue
 
                         nome = linha[0].strip() if linha[0] else ''

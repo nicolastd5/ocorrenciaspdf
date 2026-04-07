@@ -20,7 +20,28 @@ import webbrowser
 from processador import ProcessadorOcorrencias
 from vt_caixa_processador import ProcessadorVTCaixa
 
-VERSION = "1.14"
+# ── Config local (API keys e preferências — não versionado) ─────────────────
+_CONFIG_PATH = os.path.join(os.path.expanduser('~'), '.ocorrencias_config.json')
+
+
+def _carregar_config():
+    try:
+        with open(_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _salvar_config(dados):
+    try:
+        cfg = _carregar_config()
+        cfg.update(dados)
+        with open(_CONFIG_PATH, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
+
+VERSION = "1.15"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -77,13 +98,14 @@ class App(tk.Tk):
         self.qt_vt_var = tk.BooleanVar(value=True)
 
         # VT Caixa
+        _cfg = _carregar_config()
         self.vtc_pdf_path    = tk.StringVar()
         self.vtc_xls_path    = tk.StringVar()
         self.vtc_output_path = tk.StringVar()
         self.vtc_usar_ia     = tk.BooleanVar(value=False)
-        self.vtc_api_key     = tk.StringVar(value='AIzaSyCQbO-ZUmOhuT4XAh529zmh2u5gwT9GGiE')
-        self.vtc_model_var   = tk.StringVar(value='gemini-2.5-flash')
-        self.vtc_models_map       = {}   # display_name → model_id
+        self.vtc_api_key     = tk.StringVar(value=_cfg.get('vtc_api_key', ''))
+        self.vtc_model_id    = tk.StringVar(value=_cfg.get('vtc_model_id', 'gemini-2.5-flash'))
+        self.vtc_models_map       = {}   # "display — id" → model_id puro
         self.vtc_processando      = False
         self._vtc_janela_progresso = None
 
@@ -563,11 +585,13 @@ class App(tk.Tk):
                  fg=CORES['fg_dim'], bg=CORES['bg_card'],
                  width=14, anchor='w').pack(side='left')
 
+        # Sem textvariable — vtc_model_id é gerenciado manualmente para
+        # garantir que contenha sempre o model_id puro, nunca o texto do display.
         self._vtc_model_combo = ttk.Combobox(
-            model_row, textvariable=self.vtc_model_var,
-            font=("Segoe UI", 9), state='readonly', width=40,
+            model_row, font=("Segoe UI", 9), state='readonly', width=40,
         )
         self._vtc_model_combo['values'] = ('gemini-2.5-flash — Gemini 2.5 Flash',)
+        self._vtc_model_combo.set(f"{self.vtc_model_id.get()} — Gemini 2.5 Flash")
         self._vtc_model_combo.pack(side='left', ipady=4)
         self._vtc_lbl_modelo_status = tk.Label(
             model_row, text="(clique ↻ para carregar)",
@@ -649,25 +673,24 @@ class App(tk.Tk):
                 text="Nenhum modelo encontrado.", fg=CORES['warning'])
             return
 
-        # Monta dict display → model_id e lista para o combobox
+        # vtc_models_map: "display — id" → model_id puro
         self.vtc_models_map = {f"{mid} — {name}": mid for name, mid in modelos}
         opcoes = list(self.vtc_models_map.keys())
         self._vtc_model_combo['values'] = opcoes
 
-        # Mantém seleção atual se ainda válida, senão seleciona gemini-2.5-flash
-        atual = self.vtc_model_var.get()
-        match = next((op for op in opcoes if op.startswith(atual)), None)
-        if match:
-            self._vtc_model_combo.set(match)
-        else:
-            default = next((op for op in opcoes if 'gemini-2.5-flash' in op
-                            and 'lite' not in op and 'preview' not in op), opcoes[0])
-            self._vtc_model_combo.set(default)
-            self.vtc_model_var.set(self.vtc_models_map[default])
+        # Mantém seleção atual (por model_id puro) se ainda disponível
+        atual_id = self.vtc_model_id.get()
+        match = next((op for op in opcoes if op.split(' — ')[0] == atual_id), None)
+        if not match:
+            match = next((op for op in opcoes if 'gemini-2.5-flash' in op
+                          and 'lite' not in op and 'preview' not in op), opcoes[0])
+        self._vtc_model_combo.set(match)
+        self.vtc_model_id.set(self.vtc_models_map[match])
 
         def _on_model_select(event):
             sel = self._vtc_model_combo.get()
-            self.vtc_model_var.set(self.vtc_models_map.get(sel, sel))
+            mid = self.vtc_models_map.get(sel, sel.split(' — ')[0])
+            self.vtc_model_id.set(mid)
 
         self._vtc_model_combo.bind('<<ComboboxSelected>>', _on_model_select)
 
@@ -701,7 +724,7 @@ class App(tk.Tk):
 
         usar_ia  = self.vtc_usar_ia.get()
         api_key  = self.vtc_api_key.get().strip()
-        model_id = self.vtc_model_var.get().strip()
+        model_id = self.vtc_model_id.get().strip() or 'gemini-2.5-flash'
         if usar_ia and not api_key:
             messagebox.showerror("Erro", "Informe a API Key do Google AI Studio para usar a IA.")
             return
@@ -736,10 +759,17 @@ class App(tk.Tk):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _vtc_mostrar_resultado(self, resultado, output_path):
-        total  = resultado['total_pdf']
-        ok     = resultado['total_ok']
+        # Persiste configurações localmente (fora do repositório)
+        _salvar_config({
+            'vtc_api_key':  self.vtc_api_key.get().strip(),
+            'vtc_model_id': self.vtc_model_id.get().strip(),
+        })
+
+        total   = resultado['total_pdf']
+        ok      = resultado['total_ok']
         nao_enc = resultado['nao_encontrados']
         alertas = resultado['alertas_ia']
+        avisos_csv = resultado.get('avisos_csv', [])
 
         self._vtc_log_append('─' * 50)
         self._vtc_log_append(f"✔ {ok} registro(s) processado(s) com sucesso.", 'ok')
@@ -755,8 +785,13 @@ class App(tk.Tk):
 
         self._vtc_log_append(f"\nCSV salvo em: {output_path}", 'info')
 
+        if avisos_csv:
+            self._vtc_log_append(f'\n⚠ {len(avisos_csv)} campo(s) com caracteres fora do latin-1 (substituídos por ?):', 'warn')
+            for av in avisos_csv:
+                self._vtc_log_append(f"   • {av}", 'warn')
+
         if alertas:
-            self._vtc_log_append('\n🤖 Relatório IA (Gemma 4):', 'info')
+            self._vtc_log_append(f'\n🤖 Relatório IA ({self.vtc_model_id.get()}):', 'info')
             for linha in alertas:
                 tag = 'err' if any(k in linha.lower() for k in ('erro', 'inconsistência', 'alerta', 'vazio', 'zerado')) else None
                 self._vtc_log_append(f"   {linha}", tag)
