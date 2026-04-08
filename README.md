@@ -57,10 +57,10 @@ Na aba **Histórico** você pode consultar os resultados dos processamentos ante
 ### Processador VT Caixa
 
 1. Abra o programa e vá para a aba **VT Caixa**
-2. Configure sua **API Key** (Claude) — será armazenada localmente e usada para análise com IA
+2. Configure sua **API Key do Google Gemini** — será armazenada localmente e usada para análise com IA
 3. Selecione o **arquivo CSV cadastral** (com dados dos funcionários)
 4. Selecione o **PDF de jornada** (com datas e ocorrências)
-5. Escolha o **modelo de IA** (recomendado: Claude Haiku para melhor custo-benefício)
+5. Escolha o **modelo de IA** (padrão: Gemini 2.5 Flash — otimizado para custo-benefício)
 6. Marque os campos desejados (CNPJ, Data de Emissão do RG, Data de Nascimento, etc.)
 7. Clique em **PROCESSAR ARQUIVOS**
 8. A IA analisará os dados e gerará um novo CSV com os campos preenchidos
@@ -76,7 +76,7 @@ A IA verifica automaticamente:
 ## Configuração
 
 ### Variáveis de Ambiente (opcional)
-- `CLAUDE_API_KEY`: Define a API key padrão do Claude para VT Caixa (evita precisar digitar toda vez)
+- `GOOGLE_API_KEY`: Define a API key padrão do Google Gemini para VT Caixa (evita precisar digitar toda vez)
 
 ### Arquivo de Configuração Local
 A aplicação salva preferências em `~/.ocorrencias_config.json`:
@@ -91,7 +91,7 @@ A aplicação salva preferências em `~/.ocorrencias_config.json`:
 - pdfplumber (leitura de PDF)
 - openpyxl (leitura e escrita de Excel)
 - xlrd (leitura de arquivos cadastrais)
-- Anthropic API / Claude (análise com IA no processador VT Caixa)
+- Google Gemini API (análise com IA no processador VT Caixa)
 - PyInstaller (geração do executável)
 
 ---
