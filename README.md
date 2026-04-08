@@ -1,10 +1,12 @@
 # Processador de Ocorrências
 
-Aplicação desktop para Windows que extrai ocorrências de PDFs de jornada de trabalho e preenche automaticamente a coluna **MOTIVO** em planilhas Excel de pedido.
+Aplicação desktop para Windows que extrai ocorrências de PDFs de jornada de trabalho e preenche automaticamente planilhas Excel com dados processados. Inclui processador padrão para preenchimento de **MOTIVO** e processador especializado para **VT Caixa** com assistência de IA.
 
 ---
 
 ## O que o programa faz
+
+### Processador Padrão (Ocorrências)
 
 1. **Lê um PDF de jornada de trabalho** e identifica as ocorrências de cada funcionário (faltas, atestados, afastamentos, etc.)
 2. **Cruza os dados com uma planilha Excel** usando o número de matrícula (RE) como chave
@@ -31,6 +33,13 @@ Códigos marcados como **Sem quantidade** aparecem apenas com o código (ex: `AP
 
 ---
 
+## Requisitos da planilha Excel (Processador Padrão)
+
+- Deve conter uma coluna chamada exatamente **`Folha Re`** com os números de matrícula
+- Deve conter uma coluna chamada exatamente **`MOTIVO`** onde o programa irá escrever
+
+---
+
 ## Como usar
 
 1. Abra o programa `ProcessadorOcorrencias.exe`
@@ -45,21 +54,44 @@ Códigos marcados como **Sem quantidade** aparecem apenas com o código (ex: `AP
 
 Na aba **Histórico** você pode consultar os resultados dos processamentos anteriores da sessão.
 
+### Processador VT Caixa
+
+1. Abra o programa e vá para a aba **VT Caixa**
+2. Configure sua **API Key** (Claude) — será armazenada localmente e usada para análise com IA
+3. Selecione o **arquivo CSV cadastral** (com dados dos funcionários)
+4. Selecione o **PDF de jornada** (com datas e ocorrências)
+5. Escolha o **modelo de IA** (recomendado: Claude Haiku para melhor custo-benefício)
+6. Marque os campos desejados (CNPJ, Data de Emissão do RG, Data de Nascimento, etc.)
+7. Clique em **PROCESSAR ARQUIVOS**
+8. A IA analisará os dados e gerará um novo CSV com os campos preenchidos
+
+A IA verifica automaticamente:
+- Consistência de dados entre PDF e cadastro
+- Quantidade diária vs. período trabalhado
+- Extração correta de nomes e datas
+- Preenchimento de campos adicionais do cadastro (CNPJ, CPF, RG, datas, endereço, etc.)
+
 ---
 
-## Requisitos da planilha Excel
+## Configuração
 
-- Deve conter uma coluna chamada exatamente **`Folha Re`** com os números de matrícula
-- Deve conter uma coluna chamada exatamente **`MOTIVO`** onde o programa irá escrever
+### Variáveis de Ambiente (opcional)
+- `CLAUDE_API_KEY`: Define a API key padrão do Claude para VT Caixa (evita precisar digitar toda vez)
 
----
+### Arquivo de Configuração Local
+A aplicação salva preferências em `~/.ocorrencias_config.json`:
+- API key usada (local e não versionado — não é sincronizado no git)
+- Últimos diretórios acessados
+- Preferências de UI
 
 ## Tecnologias
 
-- Python 3
+- Python 3.10+
 - tkinter (interface gráfica)
 - pdfplumber (leitura de PDF)
 - openpyxl (leitura e escrita de Excel)
+- xlrd (leitura de arquivos cadastrais)
+- Anthropic API / Claude (análise com IA no processador VT Caixa)
 - PyInstaller (geração do executável)
 
 ---
@@ -68,4 +100,4 @@ Na aba **Histórico** você pode consultar os resultados dos processamentos ante
 
 **Nicolas Almeida Hader Dias**
 
-Versão atual: **1.17**
+Versão atual: **1.22**
