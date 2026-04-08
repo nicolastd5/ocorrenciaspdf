@@ -49,7 +49,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.22"
+VERSION = "1.23"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -115,6 +115,10 @@ class App(tk.Tk):
         self.vtc_model_id    = tk.StringVar(value=_cfg.get('vtc_model_id', 'gemini-2.5-flash'))
         self.vtc_models_map       = {}   # "display — id" → model_id puro
         self.vtc_processando      = False
+        self._vtc_anim_frames     = []
+        self._vtc_anim_job        = None
+        self._vtc_anim_frame      = 0
+        self._vtc_janela_progresso = None
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -743,10 +747,13 @@ class App(tk.Tk):
         self.vtc_log.delete('1.0', tk.END)
         self.vtc_log.configure(state='disabled')
         self.vtc_btn_gerar.configure(state='disabled', bg=CORES['bg_input'],
-                                     text="◐  Gerando...")
+                                     text="Gerando...")
         self.vtc_processando = True
+        self._vtc_janela_progresso = self._vtc_abrir_janela_progresso(usar_ia)
+        self._vtc_iniciar_animacao()
 
         def _cb(pct, msg):
+            self.after(0, lambda p=pct, m=msg: self._vtc_atualizar_progresso(p, m))
             self.after(0, lambda p=pct, m=msg: self._vtc_log_append(f"[{p:3d}%] {m}", 'info'))
 
         def _worker():
@@ -757,14 +764,282 @@ class App(tk.Tk):
                                            usar_ia=usar_ia,
                                            api_key=api_key,
                                            model_id=model_id)
-                self.after(0, lambda r=resultado: self._vtc_mostrar_resultado(r, out))
+                self.after(0, self._vtc_marcar_sucesso_progresso)
+                self.after(750, lambda r=resultado: self._vtc_mostrar_resultado(r, out))
             except Exception as e:
                 self.after(0, lambda err=str(e): self._vtc_log_append(f"Erro: {err}", 'err'))
                 self.after(0, lambda: messagebox.showerror("Erro ao gerar CSV", str(e)))
-            finally:
                 self.after(0, self._vtc_finalizar)
 
         threading.Thread(target=_worker, daemon=True).start()
+
+    def _vtc_abrir_janela_progresso(self, usar_ia):
+        win = tk.Toplevel(self)
+        win.title("Gerando CSV VT Caixa...")
+        win.configure(bg=CORES['bg'])
+        win.geometry("450x350")
+        win.resizable(False, False)
+        win.grab_set()
+        win.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        win.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - 225
+        y = self.winfo_y() + (self.winfo_height() // 2) - 175
+        win.geometry(f"450x350+{x}+{y}")
+
+        main = tk.Frame(win, bg=CORES['bg'])
+        main.pack(fill='both', expand=True, padx=28, pady=24)
+
+        top_row = tk.Frame(main, bg=CORES['bg'])
+        top_row.pack(fill='x')
+
+        txt_col = tk.Frame(top_row, bg=CORES['bg'])
+        txt_col.pack(side='left', fill='x', expand=True)
+
+        tk.Label(txt_col, text="Gerando CSV VT Caixa",
+                 font=("Segoe UI", 15, "bold"), fg=CORES['fg_bright'],
+                 bg=CORES['bg']).pack(anchor='w')
+
+        lbl_sub = tk.Label(txt_col, text="Preparando fluxo...",
+                           font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                           bg=CORES['bg'])
+        lbl_sub.pack(anchor='w', pady=(4, 0))
+
+        raio = 28
+        size = raio * 2 + 12
+        canvas = tk.Canvas(top_row, width=size, height=size,
+                           bg=CORES['bg'], highlightthickness=0)
+        canvas.pack(side='right', padx=(12, 0))
+
+        pad = 6
+        canvas.create_oval(pad, pad, size - pad, size - pad,
+                           outline=CORES['border'], width=4)
+        arc_id = canvas.create_arc(pad, pad, size - pad, size - pad,
+                                   start=90, extent=90,
+                                   outline=CORES['accent'], width=4,
+                                   style='arc')
+
+        win._arc_angle = 0
+
+        def _girar():
+            if not win.winfo_exists():
+                return
+            win._arc_angle = (win._arc_angle - 8) % 360
+            canvas.itemconfigure(arc_id, start=win._arc_angle)
+            win._spin_job = win.after(16, _girar)
+
+        win._spin_job = win.after(16, _girar)
+
+        progress_card = tk.Frame(main, bg=CORES['bg_card'],
+                                 highlightbackground=CORES['border'],
+                                 highlightthickness=1)
+        progress_card.pack(fill='x', pady=(18, 14))
+
+        progress_inner = tk.Frame(progress_card, bg=CORES['bg_card'])
+        progress_inner.pack(fill='x', padx=16, pady=14)
+
+        lbl_stage = tk.Label(progress_inner, text="Preparando",
+                             font=("Segoe UI", 10, "bold"), fg=CORES['accent_light'],
+                             bg=CORES['bg_card'])
+        lbl_stage.pack(anchor='w')
+
+        lbl_status = tk.Label(progress_inner, text="Iniciando...",
+                              font=("Segoe UI", 10), fg=CORES['fg'],
+                              bg=CORES['bg_card'])
+        lbl_status.pack(anchor='w', pady=(6, 12))
+
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure("VTC.Horizontal.TProgressbar",
+                        troughcolor=CORES['border'],
+                        background=CORES['accent'],
+                        borderwidth=0,
+                        lightcolor=CORES['accent'],
+                        darkcolor=CORES['accent'],
+                        thickness=10)
+        pbar = ttk.Progressbar(progress_inner, orient='horizontal',
+                               mode='determinate', maximum=100,
+                               style="VTC.Horizontal.TProgressbar")
+        pbar.pack(fill='x')
+
+        meta_row = tk.Frame(progress_inner, bg=CORES['bg_card'])
+        meta_row.pack(fill='x', pady=(8, 0))
+
+        lbl_pct = tk.Label(meta_row, text="0%",
+                           font=("Segoe UI", 9, "bold"), fg=CORES['fg'],
+                           bg=CORES['bg_card'])
+        lbl_pct.pack(side='left')
+
+        hint = "Com IA habilitada, a validacao final pode levar um pouco mais." if usar_ia \
+            else "Sem IA, a geracao costuma terminar mais rapido."
+        tk.Label(meta_row, text=hint,
+                 font=("Segoe UI", 8), fg=CORES['fg_dim'],
+                 bg=CORES['bg_card']).pack(side='right')
+
+        steps_frame = tk.Frame(main, bg=CORES['bg'])
+        steps_frame.pack(fill='x')
+
+        steps = [
+            ("prepare", "Preparar"),
+            ("pdf", "Ler PDF"),
+            ("excel", "Carregar Excel"),
+            ("match", "Cruzar dados"),
+            ("csv", "Gerar CSV"),
+        ]
+        if usar_ia:
+            steps.append(("ia", "Verificar IA"))
+        steps.append(("done", "Concluir"))
+
+        step_widgets = []
+        for idx, (step_id, label) in enumerate(steps):
+            item = tk.Frame(steps_frame, bg=CORES['bg_card'],
+                            highlightbackground=CORES['border'], highlightthickness=1)
+            item.pack(fill='x', pady=(0 if idx == 0 else 4, 0))
+
+            inner = tk.Frame(item, bg=CORES['bg_card'])
+            inner.pack(fill='x', padx=12, pady=7)
+
+            dot = tk.Frame(inner, width=4, height=14, bg=CORES['border'])
+            dot.pack(side='left', padx=(0, 8), pady=1)
+            dot.pack_propagate(False)
+
+            lbl = tk.Label(inner, text=label, font=("Segoe UI", 9),
+                           fg=CORES['fg_dim'], bg=CORES['bg_card'])
+            lbl.pack(side='left')
+
+            step_widgets.append({
+                'id': step_id,
+                'frame': item,
+                'dot': dot,
+                'label': lbl,
+                'base_label': label,
+            })
+
+        win._dots = 0
+        win._current_step = "prepare"
+        win._stage_pulse = False
+        win._order = [step_id for step_id, _ in steps]
+        win._lbl_sub = lbl_sub
+        win._lbl_stage = lbl_stage
+        win._lbl_status = lbl_status
+        win._pbar = pbar
+        win._lbl_pct = lbl_pct
+        win._step_widgets = step_widgets
+
+        self._vtc_atualizar_etapas_progresso("prepare")
+
+        def _animar_texto():
+            if not win.winfo_exists():
+                return
+            dots = '.' * ((win._dots % 3) + 1)
+            stage = win._lbl_stage.cget('text').rstrip('.')
+            win._lbl_sub.configure(text=f"{stage}{dots}")
+            win._dots += 1
+            win._dots_job = win.after(320, _animar_texto)
+
+        def _piscar_etapa():
+            if not win.winfo_exists():
+                return
+            current = getattr(win, '_current_step', None)
+            pulse_on = getattr(win, '_stage_pulse', False)
+            for step in win._step_widgets:
+                if step['id'] == current:
+                    step['dot'].configure(bg=CORES['accent_light'] if pulse_on else CORES['accent'])
+            win._stage_pulse = not pulse_on
+            win._pulse_job = win.after(380, _piscar_etapa)
+
+        win._dots_job = win.after(320, _animar_texto)
+        win._pulse_job = win.after(380, _piscar_etapa)
+        return win
+
+    def _vtc_inferir_etapa_progresso(self, pct, msg):
+        texto = (msg or "").lower()
+        if pct >= 100 or "conclu" in texto:
+            return "done", "Concluindo"
+        if "ia" in texto or "verificando com ia" in texto:
+            return "ia", "Verificando com IA"
+        if "csv" in texto or "encoding" in texto:
+            return "csv", "Gerando CSV"
+        if "cruz" in texto or "correspond" in texto:
+            return "match", "Cruzando dados"
+        if "excel" in texto:
+            return "excel", "Carregando Excel"
+        if "pdf" in texto or "lendo" in texto:
+            return "pdf", "Lendo PDF"
+        return "prepare", "Preparando"
+
+    def _vtc_atualizar_etapas_progresso(self, etapa_atual):
+        win = self._vtc_janela_progresso
+        if not win or not win.winfo_exists():
+            return
+
+        order = getattr(win, '_order', ["prepare", "pdf", "excel", "match", "csv", "ia", "done"])
+        idx_atual = order.index(etapa_atual) if etapa_atual in order else 0
+        win._current_step = etapa_atual
+
+        for step in win._step_widgets:
+            idx = order.index(step['id'])
+            if idx < idx_atual:
+                step['frame'].configure(highlightbackground=CORES['success'])
+                step['dot'].configure(bg=CORES['success'])
+                step['label'].configure(text=f"OK  {step['base_label']}", fg=CORES['fg_bright'])
+            elif idx == idx_atual:
+                step['frame'].configure(highlightbackground=CORES['accent'])
+                step['dot'].configure(bg=CORES['accent'])
+                step['label'].configure(text=step['base_label'], fg=CORES['accent_light'])
+            else:
+                step['frame'].configure(highlightbackground=CORES['border'])
+                step['dot'].configure(bg=CORES['border'])
+                step['label'].configure(text=step['base_label'], fg=CORES['fg_dim'])
+
+    def _vtc_atualizar_progresso(self, pct, msg):
+        win = self._vtc_janela_progresso
+        if win and win.winfo_exists():
+            etapa_id, etapa_label = self._vtc_inferir_etapa_progresso(pct, msg)
+            if etapa_id not in getattr(win, '_order', []):
+                etapa_id = 'csv' if 'csv' in getattr(win, '_order', []) else 'done'
+            self._vtc_atualizar_etapas_progresso(etapa_id)
+            win._lbl_stage.configure(text=etapa_label)
+            win._lbl_status.configure(text=msg)
+            win._pbar.configure(value=pct)
+            win._lbl_pct.configure(text=f"{pct}%")
+
+    def _vtc_marcar_sucesso_progresso(self):
+        win = self._vtc_janela_progresso
+        if not win or not win.winfo_exists():
+            self._vtc_finalizar()
+            return
+
+        self._vtc_atualizar_etapas_progresso("done")
+        win._lbl_stage.configure(text="Concluido")
+        win._lbl_sub.configure(text="Tudo pronto.")
+        win._lbl_status.configure(text="CSV gerado com sucesso.")
+        win._pbar.configure(value=100)
+        win._lbl_pct.configure(text="100%")
+
+        for step in win._step_widgets:
+            step['frame'].configure(highlightbackground=CORES['success'])
+            step['dot'].configure(bg=CORES['success'])
+            step['label'].configure(text=f"OK  {step['base_label']}", fg=CORES['fg_bright'])
+
+        self.after(700, self._vtc_finalizar)
+
+    def _vtc_animar_btn(self):
+        if not self.vtc_processando:
+            return
+        self.vtc_btn_gerar.configure(text=self._vtc_anim_frames[self._vtc_anim_frame])
+        self._vtc_anim_frame = (self._vtc_anim_frame + 1) % len(self._vtc_anim_frames)
+        self._vtc_anim_job = self.after(200, self._vtc_animar_btn)
+
+    def _vtc_iniciar_animacao(self):
+        self._vtc_anim_frames = [
+            "Gerando.",
+            "Gerando..",
+            "Gerando...",
+            "Gerando....",
+        ]
+        self._vtc_anim_frame = 0
+        self._vtc_animar_btn()
 
     def _vtc_mostrar_resultado(self, resultado, output_path):
         # Persiste apenas o modelo selecionado (não a API key)
@@ -884,8 +1159,20 @@ class App(tk.Tk):
 
     def _vtc_finalizar(self):
         self.vtc_processando = False
+        if self._vtc_anim_job:
+            self.after_cancel(self._vtc_anim_job)
+            self._vtc_anim_job = None
         self.vtc_btn_gerar.configure(state='normal', bg=CORES['btn_bg'],
                                      text="▶  GERAR CSV VT CAIXA")
+        if self._vtc_janela_progresso and self._vtc_janela_progresso.winfo_exists():
+            for job_attr in ('_spin_job', '_dots_job', '_pulse_job'):
+                if hasattr(self._vtc_janela_progresso, job_attr):
+                    try:
+                        self._vtc_janela_progresso.after_cancel(getattr(self._vtc_janela_progresso, job_attr))
+                    except Exception:
+                        pass
+            self._vtc_janela_progresso.destroy()
+        self._vtc_janela_progresso = None
 
     def _criar_aba_sobre(self, parent):
         frame = tk.Frame(parent, bg=CORES['bg'])
@@ -1256,7 +1543,7 @@ class App(tk.Tk):
 
         self.processando = True
         self.btn_processar.configure(state='disabled', bg=CORES['bg_input'],
-                                     text="◐  Processando...")
+                                     text="Processando...")
 
         for w in self.resultado_frame.winfo_children():
             w.destroy()
@@ -1273,25 +1560,40 @@ class App(tk.Tk):
         win = tk.Toplevel(self)
         win.title("Processando...")
         win.configure(bg=CORES['bg'])
-        win.geometry("380x220")
+        win.geometry("450x320")
         win.resizable(False, False)
         win.grab_set()
         win.protocol("WM_DELETE_WINDOW", lambda: None)  # bloquear fechar
 
         win.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() // 2) - 190
-        y = self.winfo_y() + (self.winfo_height() // 2) - 110
-        win.geometry(f"380x220+{x}+{y}")
+        x = self.winfo_x() + (self.winfo_width() // 2) - 225
+        y = self.winfo_y() + (self.winfo_height() // 2) - 160
+        win.geometry(f"450x320+{x}+{y}")
 
         main = tk.Frame(win, bg=CORES['bg'])
-        main.pack(fill='both', expand=True, padx=30, pady=24)
+        main.pack(fill='both', expand=True, padx=28, pady=24)
+
+        top_row = tk.Frame(main, bg=CORES['bg'])
+        top_row.pack(fill='x')
+
+        txt_col = tk.Frame(top_row, bg=CORES['bg'])
+        txt_col.pack(side='left', fill='x', expand=True)
+
+        tk.Label(txt_col, text="Processando arquivos",
+                 font=("Segoe UI", 15, "bold"), fg=CORES['fg_bright'],
+                 bg=CORES['bg']).pack(anchor='w')
+
+        lbl_sub = tk.Label(txt_col, text="Preparando fluxo...",
+                           font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                           bg=CORES['bg'])
+        lbl_sub.pack(anchor='w', pady=(4, 0))
 
         # Canvas da animação estilo Win11 (arco girando)
         RAIO = 28
         SIZE = RAIO * 2 + 12
-        canvas = tk.Canvas(main, width=SIZE, height=SIZE,
+        canvas = tk.Canvas(top_row, width=SIZE, height=SIZE,
                            bg=CORES['bg'], highlightthickness=0)
-        canvas.pack(pady=(0, 16))
+        canvas.pack(side='right', padx=(12, 0))
 
         # Trilha do círculo
         PAD = 6
@@ -1314,13 +1616,24 @@ class App(tk.Tk):
 
         win._spin_job = win.after(16, _girar)
 
-        # Label de status
-        lbl_status = tk.Label(main, text="Iniciando...",
-                              font=("Segoe UI", 10), fg=CORES['fg'],
-                              bg=CORES['bg'])
-        lbl_status.pack(pady=(0, 10))
+        progress_card = tk.Frame(main, bg=CORES['bg_card'],
+                                 highlightbackground=CORES['border'],
+                                 highlightthickness=1)
+        progress_card.pack(fill='x', pady=(18, 14))
 
-        # Barra de progresso
+        progress_inner = tk.Frame(progress_card, bg=CORES['bg_card'])
+        progress_inner.pack(fill='x', padx=16, pady=14)
+
+        lbl_stage = tk.Label(progress_inner, text="Preparando",
+                             font=("Segoe UI", 10, "bold"), fg=CORES['accent_light'],
+                             bg=CORES['bg_card'])
+        lbl_stage.pack(anchor='w')
+
+        lbl_status = tk.Label(progress_inner, text="Iniciando...",
+                              font=("Segoe UI", 10), fg=CORES['fg'],
+                              bg=CORES['bg_card'])
+        lbl_status.pack(anchor='w', pady=(6, 12))
+
         style = ttk.Style()
         style.theme_use('default')
         style.configure("Win.Horizontal.TProgressbar",
@@ -1328,30 +1641,167 @@ class App(tk.Tk):
                         background=CORES['accent'],
                         borderwidth=0,
                         lightcolor=CORES['accent'],
-                        darkcolor=CORES['accent'])
-        pbar = ttk.Progressbar(main, orient='horizontal', length=320,
+                        darkcolor=CORES['accent'],
+                        thickness=10)
+        pbar = ttk.Progressbar(progress_inner, orient='horizontal',
                                mode='determinate', maximum=100,
                                style="Win.Horizontal.TProgressbar")
         pbar.pack(fill='x')
 
-        # Label de porcentagem
-        lbl_pct = tk.Label(main, text="0%",
-                           font=("Segoe UI", 9), fg=CORES['fg_dim'],
-                           bg=CORES['bg'])
-        lbl_pct.pack(pady=(6, 0))
+        meta_row = tk.Frame(progress_inner, bg=CORES['bg_card'])
+        meta_row.pack(fill='x', pady=(8, 0))
 
+        lbl_pct = tk.Label(meta_row, text="0%",
+                           font=("Segoe UI", 9, "bold"), fg=CORES['fg'],
+                           bg=CORES['bg_card'])
+        lbl_pct.pack(side='left')
+
+        tk.Label(meta_row, text="Aguarde enquanto os dados sao processados.",
+                 font=("Segoe UI", 8), fg=CORES['fg_dim'],
+                 bg=CORES['bg_card']).pack(side='right')
+
+        steps_frame = tk.Frame(main, bg=CORES['bg'])
+        steps_frame.pack(fill='x')
+
+        steps = [
+            ("prepare", "Preparar"),
+            ("pdf", "Ler PDF"),
+            ("sheet", "Abrir planilha"),
+            ("match", "Cruzar dados"),
+            ("save", "Salvar"),
+            ("done", "Concluir"),
+        ]
+        step_widgets = []
+        for idx, (step_id, label) in enumerate(steps):
+            item = tk.Frame(steps_frame, bg=CORES['bg_card'],
+                            highlightbackground=CORES['border'], highlightthickness=1)
+            item.pack(fill='x', pady=(0 if idx == 0 else 4, 0))
+
+            inner = tk.Frame(item, bg=CORES['bg_card'])
+            inner.pack(fill='x', padx=12, pady=7)
+
+            dot = tk.Frame(inner, width=4, height=14, bg=CORES['border'])
+            dot.pack(side='left', padx=(0, 8), pady=1)
+            dot.pack_propagate(False)
+
+            lbl = tk.Label(inner, text=label, font=("Segoe UI", 9),
+                           fg=CORES['fg_dim'], bg=CORES['bg_card'])
+            lbl.pack(side='left')
+
+            step_widgets.append({
+                'id': step_id,
+                'frame': item,
+                'dot': dot,
+                'label': lbl,
+                'base_label': label,
+            })
+
+        win._dots = 0
+        win._current_step = "prepare"
+        win._stage_pulse = False
+        win._lbl_sub = lbl_sub
+        win._lbl_stage = lbl_stage
         win._lbl_status = lbl_status
         win._pbar = pbar
         win._lbl_pct = lbl_pct
+        win._step_widgets = step_widgets
+
+        self._atualizar_etapas_progresso("prepare")
+
+        def _animar_texto():
+            if not win.winfo_exists():
+                return
+            dots = '.' * ((win._dots % 3) + 1)
+            stage = win._lbl_stage.cget('text').rstrip('.')
+            win._lbl_sub.configure(text=f"{stage}{dots}")
+            win._dots += 1
+            win._dots_job = win.after(320, _animar_texto)
+
+        def _piscar_etapa():
+            if not win.winfo_exists():
+                return
+            current = getattr(win, '_current_step', None)
+            pulse_on = getattr(win, '_stage_pulse', False)
+            for step in win._step_widgets:
+                if step['id'] == current:
+                    step['dot'].configure(bg=CORES['accent_light'] if pulse_on else CORES['accent'])
+            win._stage_pulse = not pulse_on
+            win._pulse_job = win.after(380, _piscar_etapa)
+
+        win._dots_job = win.after(320, _animar_texto)
+        win._pulse_job = win.after(380, _piscar_etapa)
         return win
+
+    def _inferir_etapa_progresso(self, pct, msg):
+        texto = (msg or "").lower()
+        if pct >= 100 or "conclu" in texto:
+            return "done", "Concluindo"
+        if "salvand" in texto:
+            return "save", "Salvando arquivo"
+        if "finaliz" in texto:
+            return "save", "Finalizando"
+        if "cruz" in texto:
+            return "match", "Cruzando dados"
+        if "planilha" in texto:
+            return "sheet", "Abrindo planilha"
+        if "pdf" in texto or "lendo" in texto:
+            return "pdf", "Lendo PDF"
+        return "prepare", "Preparando"
+
+    def _atualizar_etapas_progresso(self, etapa_atual):
+        win = self._janela_progresso
+        if not win or not win.winfo_exists():
+            return
+
+        order = ["prepare", "pdf", "sheet", "match", "save", "done"]
+        idx_atual = order.index(etapa_atual) if etapa_atual in order else 0
+        win._current_step = etapa_atual
+
+        for step in win._step_widgets:
+            idx = order.index(step['id'])
+            if idx < idx_atual:
+                step['frame'].configure(highlightbackground=CORES['success'])
+                step['dot'].configure(bg=CORES['success'])
+                step['label'].configure(text=f"OK  {step['base_label']}", fg=CORES['fg_bright'])
+            elif idx == idx_atual:
+                step['frame'].configure(highlightbackground=CORES['accent'])
+                step['dot'].configure(bg=CORES['accent'])
+                step['label'].configure(text=step['base_label'], fg=CORES['accent_light'])
+            else:
+                step['frame'].configure(highlightbackground=CORES['border'])
+                step['dot'].configure(bg=CORES['border'])
+                step['label'].configure(text=step['base_label'], fg=CORES['fg_dim'])
 
     def _atualizar_progresso(self, pct, msg):
         """Chamado da thread de processamento via self.after."""
         win = self._janela_progresso
         if win and win.winfo_exists():
+            etapa_id, etapa_label = self._inferir_etapa_progresso(pct, msg)
+            self._atualizar_etapas_progresso(etapa_id)
+            win._lbl_stage.configure(text=etapa_label)
             win._lbl_status.configure(text=msg)
             win._pbar.configure(value=pct)
             win._lbl_pct.configure(text=f"{pct}%")
+
+    def _marcar_sucesso_progresso(self):
+        win = self._janela_progresso
+        if not win or not win.winfo_exists():
+            self._finalizar_processamento()
+            return
+
+        self._atualizar_etapas_progresso("done")
+        win._lbl_stage.configure(text="Concluido")
+        win._lbl_sub.configure(text="Tudo pronto.")
+        win._lbl_status.configure(text="Arquivo gerado com sucesso.")
+        win._pbar.configure(value=100)
+        win._lbl_pct.configure(text="100%")
+
+        for step in win._step_widgets:
+            step['frame'].configure(highlightbackground=CORES['success'])
+            step['dot'].configure(bg=CORES['success'])
+            step['label'].configure(text=f"OK  {step['base_label']}", fg=CORES['fg_bright'])
+
+        self.after(700, self._finalizar_processamento)
 
     def _processar(self, pdf_path, xlsx_path, output_path, codigos, dias_mes=None, colunas_qt=None):
         def cb(pct, msg):
@@ -1359,18 +1809,18 @@ class App(tk.Tk):
 
         try:
             resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos, cb, dias_mes, colunas_qt)
-            self.after(0, lambda: self._mostrar_resultados(resultado, output_path))
+            self.after(0, self._marcar_sucesso_progresso)
+            self.after(750, lambda: self._mostrar_resultados(resultado, output_path))
         except Exception as e:
             self.after(0, lambda: self._mostrar_erro(str(e)))
-        finally:
             self.after(0, self._finalizar_processamento)
 
     def _iniciar_animacao(self):
         frames = [
-            "◐  Processando...",
-            "◓  Processando...",
-            "◑  Processando...",
-            "◒  Processando...",
+            "Processando.",
+            "Processando..",
+            "Processando...",
+            "Processando....",
         ]
         self._anim_frames = frames
         self._anim_frame = 0
@@ -1391,11 +1841,12 @@ class App(tk.Tk):
         self.btn_processar.configure(text="▶  PROCESSAR ARQUIVOS", state='normal',
                                      bg=CORES['btn_bg'])
         if self._janela_progresso and self._janela_progresso.winfo_exists():
-            if hasattr(self._janela_progresso, '_spin_job'):
-                try:
-                    self._janela_progresso.after_cancel(self._janela_progresso._spin_job)
-                except Exception:
-                    pass
+            for job_attr in ('_spin_job', '_dots_job', '_pulse_job'):
+                if hasattr(self._janela_progresso, job_attr):
+                    try:
+                        self._janela_progresso.after_cancel(getattr(self._janela_progresso, job_attr))
+                    except Exception:
+                        pass
             self._janela_progresso.destroy()
         self._janela_progresso = None
 

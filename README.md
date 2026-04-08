@@ -100,4 +100,4 @@ A aplicação salva preferências em `~/.ocorrencias_config.json`:
 
 **Nicolas Almeida Hader Dias**
 
-Versão atual: **1.22**
+Versão atual: **1.23**
