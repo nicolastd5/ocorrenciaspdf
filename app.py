@@ -49,7 +49,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.23"
+VERSION = "1.24"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -1077,7 +1077,10 @@ class App(tk.Tk):
         if alertas:
             self._vtc_log_append(f'\n🤖 Relatório IA ({self.vtc_model_id.get()}):', 'info')
             for linha in alertas:
-                tag = 'err' if any(k in linha.lower() for k in ('erro', 'inconsistência', 'alerta', 'vazio', 'zerado')) else None
+                ll = linha.lower()
+                # Frases de negação ("Nenhuma inconsistência encontrada.") não são erros.
+                eh_negacao = 'nenhuma' in ll or 'tudo ok' in ll or 'sem inconsist' in ll
+                tag = 'err' if (not eh_negacao and any(k in ll for k in ('erro', 'inconsistência', 'alerta', 'vazio', 'zerado'))) else None
                 self._vtc_log_append(f"   {linha}", tag)
             self.after(100, lambda: self._vtc_mostrar_janela_ia(alertas, self.vtc_model_id.get()))
 
@@ -1128,10 +1131,12 @@ class App(tk.Tk):
         tem_problema = False
         for linha in alertas:
             linha_lower = linha.lower()
-            if any(k in linha_lower for k in ('inconsistência', 'erro', 'alerta', 'vazio', 'zerado', 'truncado', 'estranho')):
+            # Frases de negação ("Nenhuma inconsistência encontrada.") não contam como problema.
+            eh_negacao = 'nenhuma' in linha_lower or 'tudo ok' in linha_lower or 'sem inconsist' in linha_lower
+            if not eh_negacao and any(k in linha_lower for k in ('inconsistência', 'erro', 'alerta', 'vazio', 'zerado', 'truncado', 'estranho')):
                 txt.insert(tk.END, linha + '\n', 'err')
                 tem_problema = True
-            elif any(k in linha_lower for k in ('aviso', 'atenção', 'verificar')):
+            elif not eh_negacao and any(k in linha_lower for k in ('aviso', 'atenção', 'verificar')):
                 txt.insert(tk.END, linha + '\n', 'warn')
                 tem_problema = True
             elif linha.strip() == '':
