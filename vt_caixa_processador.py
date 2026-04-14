@@ -47,6 +47,7 @@ _COL_ALIASES = {
     'Cidade':           ['cidade', 'municipio'],
     'UF End':           ['uf end', 'uf endereco', 'uf', 'estado end'],
     'Estado Civil':     ['estado civil'],
+    'Nome Mae':         ['nome mae', 'nome da mae', 'mae', 'nome_mae'],
 }
 
 
@@ -409,6 +410,7 @@ class ProcessadorVTCaixa:
             'UF End':           _idx('UF End'),
             'Estado Civil':     _idx('Estado Civil'),
             'Data EX':          _idx('Data EX'),
+            'Nome Mae':         _idx('Nome Mae'),
         }
         idx_cod     = mapa_colunas['Cód Epr']
         idx_cpf     = mapa_colunas['CPF']
@@ -426,6 +428,7 @@ class ProcessadorVTCaixa:
         idx_uf_end  = mapa_colunas['UF End']
         idx_est_civ = mapa_colunas['Estado Civil']
         idx_dt_ex   = mapa_colunas['Data EX']
+        idx_nome_mae = mapa_colunas['Nome Mae']
 
         if idx_cod is None:
             raise ValueError(
@@ -483,6 +486,7 @@ class ProcessadorVTCaixa:
                 'UF End':           _val(idx_uf_end),
                 'Estado Civil':     _val(idx_est_civ),
                 'Data EX':          self._formatar_data(ws.cell_value(row, idx_dt_ex) if idx_dt_ex is not None else None, wb),
+                'Nome Mae':         _val(idx_nome_mae),
             }
 
         if not dados:
@@ -549,7 +553,7 @@ class ProcessadorVTCaixa:
                 'DATA DE NASCIMENTO':          ex['Data nascimento'],
                 'CARGO':                       self._sanitizar(ex['Descrição cargo']),
                 'DEPARTAMENTO':                self._sanitizar(ex['Descrição Ccusto']),
-                'NOME DA MÃE':                 '',
+                'NOME DA MÃE':                 self._sanitizar(ex['Nome Mae']),
                 'BENEFÍCIO DO FUNCIONÁRIO':    self._sanitizar(linha['administradora']),
                 'VALOR UNITÁRIO':              self._limpar_valor_unitario(linha['valor_unitario']),
                 'QUANTIDADE DIÁRIA':           qtd_str,
