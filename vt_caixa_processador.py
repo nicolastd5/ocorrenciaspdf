@@ -12,11 +12,8 @@ COLUNAS_CSV = [
     'CNPJ', 'CEP', 'LOGRADOURO', 'NÚMERO', 'COMPLEMENTO', 'PONTO REFERENCIA',
     'UF', 'ESTADO', 'MATRÍCULA', 'NOME DO FUNCIONÁRIO', 'CPF', 'RG',
     'DATA DE NASCIMENTO', 'CARGO', 'DEPARTAMENTO', 'NOME DA MÃE',
-    'BENEFÍCIO DO FUNCIONÁRIO', 'VALOR UNITÁRIO', 'QUANTIDADE DIÁRIA',
-    'PERÍODO DE DIAS TRABALHADOS', 'TIPO VALOR', 'REDE RECARGA',
-    'CEP RESIDENCIAL', 'LOGRADOURO RESIDENCIAL', 'NÚMERO RESIDENCIAL',
-    'COMPLEMENTO RESIDENCIAL', 'ESTADO CIVIL', 'DATA DE EMISSÃO DO RG',
-    'ÓRGÃO EXPEDIDOR', 'ESTADO EMISSÃO RG',
+    'BENEFÍCIO DO FUNCIONÁRIO', 'VALOR UNITÁRIO', 'QUANTIDADE DIÁRIA',  # Coluna Q
+    'PERÍODO DE DIAS TRABALHADOS',  # Coluna T (layout solicitado: preencher até T)
 ]
 
 # Endereço fixo da empresa (primeira parte do CSV — linhas antes da MATRÍCULA)
@@ -59,7 +56,8 @@ _COL_ALIASES_FONTE = {
     'periodo':        ['periodo', 'periodo trabalhado', 'periodo de dias trabalhados'],
     'quantidade':     ['quantidade', 'qtd', 'quantidade diaria', 'qtd diaria'],
     'valor_unitario': ['valor unitario', 'valor', 'valor diario', 'valor un'],
-    'administradora': ['administradora', 'rede recarga', 'beneficio do funcionario', 'beneficio'],
+    'administradora': ['administradora', 'administradora do beneficio', 'operadora',
+                       'rede recarga', 'beneficio do funcionario', 'beneficio', 'adm'],
 }
 
 
