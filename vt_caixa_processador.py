@@ -674,7 +674,6 @@ class ProcessadorVTCaixa:
                 nao_encontrados.append(f"{codigo} - {linha['colaborador']}")
                 continue
 
-            qtd_str = re.sub(r'\D', '', linha['quantidade'])  # só dígitos
             dias_trab = self._calcular_dias_uteis(linha['periodo'])
 
             registros.append({
@@ -696,7 +695,7 @@ class ProcessadorVTCaixa:
                 'NOME DA MÃE':                 self._sanitizar(ex['Nome Mae']),
                 'BENEFÍCIO DO FUNCIONÁRIO':    self._sanitizar(linha['administradora']),
                 'VALOR UNITÁRIO':              self._limpar_valor_unitario(linha['valor_unitario']),
-                'QUANTIDADE DIÁRIA':           qtd_str,
+                'QUANTIDADE DIÁRIA':           '2',
                 'PERÍODO DE DIAS TRABALHADOS': str(dias_trab),
                 'TIPO VALOR':                  '',
                 'REDE RECARGA':                self._sanitizar(linha['administradora']),
