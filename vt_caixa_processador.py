@@ -640,7 +640,7 @@ class ProcessadorVTCaixa:
     # ── Cruzamento ─────────────────────────────────────────────────────
 
     def _limpar_valor_unitario(self, valor_str):
-        """Converte 'R$ 1.234,56' → '1234.56'. Aceita string vazia."""
+        """Converte valor monetario para formato com virgula decimal (ex: '1234,56')."""
         if valor_str is None:
             return ''
         v = str(valor_str).replace('R$', '').replace('\xa0', ' ').strip()
@@ -651,7 +651,7 @@ class ProcessadorVTCaixa:
             v = v.replace('.', '').replace(',', '.')
         # Sem vírgula: pode já estar em US ("1234.56") — preservar.
         try:
-            return f'{float(v):.2f}'
+            return f'{float(v):.2f}'.replace('.', ',')
         except ValueError:
             return ''
 
