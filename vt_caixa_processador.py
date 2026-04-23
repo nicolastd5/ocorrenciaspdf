@@ -29,7 +29,7 @@ EMPRESA_ESTADO       = 'BARUERI'
 # acentos, minúsculo) que podem aparecer como cabeçalho no Excel cadastral.
 # A ordem da lista é a ordem de preferência (primeiro = mais específico).
 _COL_ALIASES = {
-    'Cód Epr':          ['cod epr', 'codigo epr', 'codigo empresa', 'matricula'],
+    'Cód Epr':          ['cod emp', 'cod epr', 'codigo epr', 'codigo empresa', 'matricula'],
     'CPF':              ['cpf'],
     'RG':               ['rg', 'numero rg', 'no rg'],
     'UF RG':            ['uf rg', 'uf do rg', 'estado rg'],
@@ -55,7 +55,7 @@ _COL_ALIASES = {
 
 # Possiveis cabecalhos para planilha usada como fonte de extracao (no lugar do PDF).
 _COL_ALIASES_FONTE = {
-    'codigo':         ['codigo', 'cod epr', 'matricula', 'matricula vt', 're', 'folha re'],
+    'codigo':         ['codigo', 'cod emp', 'cod epr', 're', 'folha re', 'matricula', 'matricula vt'],
     'colaborador':    ['colaborador', 'nome', 'nome funcionario', 'nome do funcionario'],
     'periodo':        ['periodo', 'periodo trabalhado', 'periodo de dias trabalhados'],
     'quantidade':     ['quantidade', 'qtd', 'quantidade diaria', 'qtd diaria'],
@@ -568,7 +568,7 @@ class ProcessadorVTCaixa:
                 for col in range(candidato.ncols)
                 if candidato.cell_value(0, col)
             }
-            if 'cod epr' in cabecalhos:
+            if 'cod emp' in cabecalhos or 'cod epr' in cabecalhos:
                 ws = candidato
                 avisos.append(f'Aba selecionada no Excel: {candidato.name}')
                 break
@@ -576,7 +576,7 @@ class ProcessadorVTCaixa:
         if ws is None:
             ws = wb.sheet_by_index(0)
             avisos.append(
-                f"Aviso: aba com 'Cód Epr' não encontrada; usando a primeira aba: {ws.name}"
+                f"Aviso: aba com 'Cód Emp'/'Cód Epr' não encontrada; usando a primeira aba: {ws.name}"
             )
 
         cabecalhos_norm = {}
