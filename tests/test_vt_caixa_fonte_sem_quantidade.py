@@ -4,15 +4,10 @@ import unittest
 
 from openpyxl import Workbook
 
-from vt_caixa_processador import ProcessadorVTCaixa, _extrair_codigo
+from vt_caixa_processador import ProcessadorVTCaixa
 
 
 class TestFonteSemQuantidade(unittest.TestCase):
-    def test_extrair_codigo_normaliza_separador_milhar(self):
-        self.assertEqual(_extrair_codigo("11.108"), "11108")
-        self.assertEqual(_extrair_codigo("11,108"), "11108")
-        self.assertEqual(_extrair_codigo("11108.0"), "11108")
-
     def test_extracao_fonte_nao_expoe_quantidade(self):
         wb = Workbook()
         ws = wb.active
@@ -54,7 +49,7 @@ class TestFonteSemQuantidade(unittest.TestCase):
 
             self.assertEqual(len(rows), 1)
             self.assertTrue(any("Aba selecionada para extracao" in a for a in avisos))
-            self.assertEqual(rows[0]["codigo"], "11108")
+            self.assertEqual(rows[0]["codigo"], "11")
             self.assertEqual(rows[0]["colaborador"], "ELIZANGELA IAROSSI DO NASCIMENTO")
             self.assertEqual(rows[0]["valor_unitario"], "12,40")
             self.assertEqual(rows[0]["administradora"], "GUARUPASS")

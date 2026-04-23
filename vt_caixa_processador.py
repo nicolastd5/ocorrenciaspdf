@@ -74,17 +74,8 @@ def _extrair_codigo(valor):
     """Extrai código numérico de célula, lidando com '123.0', '  123 ', etc."""
     if valor is None:
         return ''
-
     s = str(valor).strip().replace('\n', '').replace('\r', '')
-    s = re.sub(r'\s+', '', s)
-
-    # Artefato comum de planilha: valor numérico inteiro vindo como decimal ".0".
-    s = re.sub(r'([.,])0+$', '', s) if re.match(r'^\d+[.,]0+$', s) else s
-
-    # Matrículas com separador de milhar textual ("11.108", "11,108").
-    if re.match(r'^\d{1,3}([.,]\d{3})+$', s):
-        return re.sub(r'\D', '', s)
-
+    s = re.sub(r'\.0+$', '', s)
     m = re.match(r'^(\d+)', s)
     return m.group(1) if m else ''
 
