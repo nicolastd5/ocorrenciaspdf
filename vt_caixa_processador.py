@@ -512,8 +512,9 @@ class ProcessadorVTCaixa:
         if isinstance(valor, float):
             return str(int(valor))
         s = str(valor).strip()
-        # Remove apenas '.0' final (artefato de float→str), preserva pontuação interna.
-        return re.sub(r'\.0+$', '', s)
+        s = re.sub(r'\.0+$', '', s)
+        digits = re.sub(r'\D', '', s)
+        return digits if digits else s
 
     def _formatar_data(self, valor, wb):
         if valor is None or valor == '':
@@ -760,7 +761,7 @@ class ProcessadorVTCaixa:
                 'MATRÍCULA':                   codigo,
                 'NOME DO FUNCIONÁRIO':         self._sanitizar(linha['colaborador']),
                 'CPF':                         ex['CPF'],
-                'RG':                          ex['RG'],
+                'RG':                          ex['RG'] or ex['CPF'],
                 'DATA DE NASCIMENTO':          ex['Data nascimento'],
                 'CARGO':                       self._sanitizar(ex['Descrição cargo']),
                 'DEPARTAMENTO':                self._sanitizar(ex['Descrição Ccusto']),

@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 import os
+from datetime import datetime
 import urllib.request
 import urllib.error
 import json
@@ -49,7 +50,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.25"
+VERSION = "1.26"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -98,6 +99,7 @@ class App(tk.Tk):
         self._anim_job = None
         self._anim_frame = 0
         self._historico = []
+        self._historico_vtc = []
         self._janela_progresso = None
         self.deduzir_dias = tk.BooleanVar(value=False)
         self.dias_mes = tk.StringVar(value="")
@@ -643,7 +645,7 @@ class App(tk.Tk):
         log_wrapper = tk.Frame(parent, bg=CORES['bg_card'],
                                highlightbackground=CORES['border'],
                                highlightthickness=1)
-        log_wrapper.pack(fill='both', expand=True, pady=(12, 0))
+        log_wrapper.pack(fill='x', pady=(12, 0))
         tk.Frame(log_wrapper, bg=CORES['accent'], width=3).pack(side='left', fill='y')
         log_inner = tk.Frame(log_wrapper, bg=CORES['bg_card'])
         log_inner.pack(side='left', fill='both', expand=True)
@@ -670,6 +672,137 @@ class App(tk.Tk):
         self.vtc_log.tag_configure('warn', foreground=CORES['warning'])
         self.vtc_log.tag_configure('err',  foreground=CORES['error'])
         self.vtc_log.tag_configure('info', foreground=CORES['accent_light'])
+
+        # ── Histórico VT Caixa ──────────────────────────────────────────
+        hist_outer = tk.Frame(parent, bg=CORES['bg'])
+        hist_outer.pack(fill='both', expand=True, pady=(12, 0))
+
+        hist_header = tk.Frame(hist_outer, bg=CORES['bg'])
+        hist_header.pack(fill='x', pady=(0, 6))
+        tk.Label(hist_header, text="🕘  Histórico VT Caixa",
+                 font=("Segoe UI", 11, "bold"), fg=CORES['fg_bright'],
+                 bg=CORES['bg']).pack(side='left')
+        tk.Button(hist_header, text="Limpar", font=("Segoe UI", 9),
+                  fg=CORES['fg_dim'], bg=CORES['bg_input'],
+                  activeforeground=CORES['fg'], activebackground=CORES['border'],
+                  relief='flat', cursor='hand2', padx=10, pady=3, borderwidth=0,
+                  command=self._vtc_limpar_historico).pack(side='right')
+
+        self._vtc_hist_lista = tk.Frame(hist_outer, bg=CORES['bg'])
+        self._vtc_hist_lista.pack(fill='both', expand=True)
+
+        self._vtc_hist_vazio = tk.Label(
+            self._vtc_hist_lista,
+            text="Nenhum processamento realizado ainda.",
+            font=("Segoe UI", 10), fg=CORES['fg_dim'], bg=CORES['bg'])
+        self._vtc_hist_vazio.pack(pady=20)
+
+    def _vtc_limpar_historico(self):
+        self._historico_vtc.clear()
+        self._vtc_atualizar_historico()
+
+    def _vtc_atualizar_historico(self):
+        for w in self._vtc_hist_lista.winfo_children():
+            w.destroy()
+
+        if not self._historico_vtc:
+            tk.Label(self._vtc_hist_lista,
+                     text="Nenhum processamento realizado ainda.",
+                     font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                     bg=CORES['bg']).pack(pady=20)
+            return
+
+        canvas = tk.Canvas(self._vtc_hist_lista, bg=CORES['bg'], highlightthickness=0)
+        sb = ttk.Scrollbar(self._vtc_hist_lista, orient='vertical', command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg=CORES['bg'])
+        scroll_frame.bind('<Configure>',
+                          lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.create_window((0, 0), window=scroll_frame, anchor='nw')
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side='left', fill='both', expand=True)
+        sb.pack(side='right', fill='y')
+        canvas.bind('<Enter>', lambda e: canvas.bind_all(
+            '<MouseWheel>', lambda ev: canvas.yview_scroll(-1*(ev.delta//120), 'units')))
+        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+
+        total = len(self._historico_vtc)
+        for i, entrada in enumerate(reversed(self._historico_vtc)):
+            card = tk.Frame(scroll_frame, bg=CORES['bg_card'],
+                            highlightbackground=CORES['border'], highlightthickness=1)
+            card.pack(fill='x', pady=(0, 8))
+
+            top = tk.Frame(card, bg=CORES['bg_card'])
+            top.pack(fill='x', padx=14, pady=(10, 6))
+            tk.Label(top, text=f"#{total - i}  {entrada['arquivo']}",
+                     font=("Segoe UI", 10, "bold"), fg=CORES['fg_bright'],
+                     bg=CORES['bg_card']).pack(side='left')
+            tk.Label(top,
+                     text=f"{entrada['data']}  •  {entrada['tipo_fonte']}",
+                     font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                     bg=CORES['bg_card']).pack(side='right')
+
+            stats_row = tk.Frame(card, bg=CORES['bg_card'])
+            stats_row.pack(fill='x', padx=14, pady=(0, 8))
+            nao_enc = len(entrada['nao_encontrados'])
+            avisos = len(entrada['avisos_csv'])
+            for label, valor, cor in [
+                (entrada['tipo_fonte'], str(entrada['total_fonte']), CORES['accent_light']),
+                ("Gerados",            str(entrada['total_ok']),    CORES['success']),
+                ("Sem cadastro",       str(nao_enc),
+                 CORES['error'] if nao_enc else CORES['success']),
+                ("Avisos encoding",    str(avisos),
+                 CORES['warning'] if avisos else CORES['fg_dim']),
+            ]:
+                bloco = tk.Frame(stats_row, bg=CORES['bg_input'])
+                bloco.pack(side='left', padx=(0, 6))
+                tk.Label(bloco, text=valor, font=("Segoe UI", 12, "bold"),
+                         fg=cor, bg=CORES['bg_input']).pack(side='left', padx=(8, 4), pady=4)
+                tk.Label(bloco, text=label, font=("Segoe UI", 8),
+                         fg=CORES['fg_dim'], bg=CORES['bg_input']).pack(side='left', padx=(0, 8))
+
+            # Sem cadastro
+            if entrada['nao_encontrados']:
+                det = tk.Frame(card, bg=CORES['bg_card'])
+                det.pack(fill='x', padx=14, pady=(0, 4))
+                tk.Label(det, text="Sem cadastro no Excel:",
+                         font=("Segoe UI", 9, "bold"), fg=CORES['error'],
+                         bg=CORES['bg_card']).pack(anchor='w', pady=(0, 3))
+                for item in entrada['nao_encontrados']:
+                    tk.Label(det, text=f"  • {item}",
+                             font=("Consolas", 9), fg=CORES['fg_dim'],
+                             bg=CORES['bg_card'], anchor='w').pack(fill='x')
+
+            # Avisos de encoding
+            if entrada['avisos_csv']:
+                det2 = tk.Frame(card, bg=CORES['bg_card'])
+                det2.pack(fill='x', padx=14, pady=(0, 4))
+                tk.Label(det2, text="Avisos de encoding (latin-1):",
+                         font=("Segoe UI", 9, "bold"), fg=CORES['warning'],
+                         bg=CORES['bg_card']).pack(anchor='w', pady=(0, 3))
+                for av in entrada['avisos_csv']:
+                    tk.Label(det2, text=f"  • {av}",
+                             font=("Consolas", 8), fg=CORES['fg_dim'],
+                             bg=CORES['bg_card'], anchor='w').pack(fill='x')
+
+            # Alertas IA
+            if entrada['alertas_ia']:
+                det3 = tk.Frame(card, bg=CORES['bg_card'])
+                det3.pack(fill='x', padx=14, pady=(0, 8))
+                tk.Label(det3, text=f"Relatório IA:",
+                         font=("Segoe UI", 9, "bold"), fg=CORES['accent_light'],
+                         bg=CORES['bg_card']).pack(anchor='w', pady=(0, 3))
+                for linha in entrada['alertas_ia']:
+                    ll = linha.lower()
+                    eh_negacao = 'nenhuma' in ll or 'tudo ok' in ll or 'sem inconsist' in ll
+                    cor_ia = CORES['fg_dim'] if eh_negacao else (
+                        CORES['error'] if any(k in ll for k in ('erro', 'inconsistência', 'alerta', 'vazio', 'zerado'))
+                        else CORES['fg_dim']
+                    )
+                    tk.Label(det3, text=f"  {linha}",
+                             font=("Consolas", 8), fg=cor_ia,
+                             bg=CORES['bg_card'], anchor='w').pack(fill='x')
+            else:
+                tk.Frame(card, bg=CORES['bg_card']).pack(pady=2)
 
     def _vtc_carregar_modelos(self):
         """Busca modelos disponíveis na API do Google AI e popula o combobox."""
@@ -1059,6 +1192,18 @@ class App(tk.Tk):
         self._vtc_animar_btn()
 
     def _vtc_mostrar_resultado(self, resultado, output_path):
+        self._historico_vtc.append({
+            'arquivo':        os.path.basename(output_path),
+            'data':           datetime.now().strftime('%d/%m/%Y %H:%M'),
+            'tipo_fonte':     resultado.get('tipo_fonte', 'PDF'),
+            'total_fonte':    resultado.get('total_fonte', resultado.get('total_pdf', 0)),
+            'total_ok':       resultado['total_ok'],
+            'nao_encontrados': list(resultado['nao_encontrados']),
+            'avisos_csv':     list(resultado.get('avisos_csv', [])),
+            'alertas_ia':     list(resultado.get('alertas_ia', [])),
+        })
+        self._vtc_atualizar_historico()
+
         # Persiste apenas o modelo selecionado (não a API key)
         err_cfg = _salvar_config({
             'vtc_model_id': self.vtc_model_id.get().strip(),
