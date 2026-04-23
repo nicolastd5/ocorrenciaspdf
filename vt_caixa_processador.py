@@ -51,12 +51,12 @@ _COL_ALIASES = {
 
 # Possiveis cabecalhos para planilha usada como fonte de extracao (no lugar do PDF).
 _COL_ALIASES_FONTE = {
-    'codigo':         ['codigo', 'cod epr', 'matricula', 'matricula vt', 're', 'folha re'],
+    'codigo':         ['codigo', 'cod epr', 'matricula', 're', 'folha re'],
     'colaborador':    ['colaborador', 'nome', 'nome funcionario', 'nome do funcionario'],
     'periodo':        ['periodo', 'periodo trabalhado', 'periodo de dias trabalhados'],
+    'quantidade':     ['quantidade', 'qtd', 'quantidade diaria', 'qtd diaria'],
     'valor_unitario': ['valor unitario', 'valor', 'valor diario', 'valor un'],
     'administradora': ['administradora', 'administradora do beneficio', 'operadora',
-                       'administradora(fornecedor)', 'administradora (fornecedor)',
                        'rede recarga', 'beneficio do funcionario', 'beneficio', 'adm'],
 }
 
@@ -177,6 +177,7 @@ class ProcessadorVTCaixa:
                             'codigo':         codigo,
                             'colaborador':    _limpar_nome_extraido(_cel(1)),
                             'periodo':        _cel(3),
+                            'quantidade':     re.sub(r'\.0+$', '', _cel(5)),
                             'valor_unitario': _cel(6),
                             'administradora': _cel(8),
                         })
@@ -244,6 +245,7 @@ class ProcessadorVTCaixa:
                         'codigo':         codigo,
                         'colaborador':    colaborador,
                         'periodo':        periodo,
+                        'quantidade':     m_tail.group(1),
                         'valor_unitario': m_tail.group(2),
                         'administradora': m_tail.group(4).strip(),
                     })
@@ -310,10 +312,11 @@ class ProcessadorVTCaixa:
             idx_codigo = _idx_chave('codigo')
             idx_nome = _idx_chave('colaborador')
             idx_periodo = _idx_chave('periodo')
+            idx_qtd = _idx_chave('quantidade')
             idx_valor = _idx_chave('valor_unitario')
             idx_adm = _idx_chave('administradora')
 
-            campos_fonte = [idx_nome, idx_periodo, idx_valor, idx_adm]
+            campos_fonte = [idx_nome, idx_periodo, idx_qtd, idx_valor, idx_adm]
             campos_encontrados = sum(1 for idx in campos_fonte if idx is not None)
             usou_cabecalho = idx_codigo is not None and campos_encontrados >= 2
             if usou_cabecalho:
@@ -321,7 +324,7 @@ class ProcessadorVTCaixa:
             else:
                 # Mesma posicao usada na extracao tabular de PDF.
                 idx_codigo, idx_nome, idx_periodo = 0, 1, 3
-                idx_valor, idx_adm = 6, 8
+                idx_qtd, idx_valor, idx_adm = 5, 6, 8
                 dados_linhas = linhas
 
             def _get(ln, idx):
@@ -344,6 +347,7 @@ class ProcessadorVTCaixa:
                     'codigo':         codigo,
                     'colaborador':    _limpar_nome_extraido(_get(ln, idx_nome)),
                     'periodo':        _get(ln, idx_periodo),
+                    'quantidade':     re.sub(r'\.0+$', '', _get(ln, idx_qtd)),
                     'valor_unitario': _get(ln, idx_valor),
                     'administradora': _get(ln, idx_adm),
                 })
