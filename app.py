@@ -491,10 +491,8 @@ class App(tk.Tk):
     def _criar_aba_vtcaixa(self, parent):
         # ── Card: Arquivos ──────────────────────────────────────────────
         files_frame = self._criar_card(parent, "📁  Arquivos")
-        self._criar_file_picker(files_frame, "Fonte Nautilus (PDF/Excel)", self.vtc_pdf_path,
-                                [("PDF/Excel", "*.pdf *.xls *.xlsx"),
-                                 ("PDF", "*.pdf"),
-                                 ("Excel", "*.xls *.xlsx")], "Selecionar")
+        self._criar_file_picker(files_frame, "PDF Nautilus", self.vtc_pdf_path,
+                                [("PDF", "*.pdf")], "Selecionar")
         self._criar_file_picker(files_frame, "Excel Cadastral", self.vtc_xls_path,
                                 [("Excel .xls", "*.xls")], "Selecionar")
 
@@ -723,16 +721,12 @@ class App(tk.Tk):
         self.vtc_log.configure(state='disabled')
 
     def _gerar_vtcaixa(self):
-        fonte = self.vtc_pdf_path.get().strip()
+        pdf  = self.vtc_pdf_path.get().strip()
         xls  = self.vtc_xls_path.get().strip()
         out  = self.vtc_output_path.get().strip()
 
-        ext_fonte = os.path.splitext(fonte)[1].lower() if fonte else ''
-        if not fonte or not os.path.exists(fonte):
-            messagebox.showerror("Erro", "Selecione uma fonte válida (PDF ou Excel).")
-            return
-        if ext_fonte not in ('.pdf', '.xls', '.xlsx', '.xlsm', '.xltx', '.xltm'):
-            messagebox.showerror("Erro", "A fonte deve ser PDF ou Excel (.xls/.xlsx).")
+        if not pdf or not os.path.exists(pdf):
+            messagebox.showerror("Erro", "Selecione um arquivo PDF válido.")
             return
         if not xls or not os.path.exists(xls):
             messagebox.showerror("Erro", "Selecione um arquivo Excel cadastral (.xls) válido.")
@@ -765,7 +759,7 @@ class App(tk.Tk):
         def _worker():
             try:
                 proc = ProcessadorVTCaixa()
-                resultado = proc.processar(fonte, xls, out,
+                resultado = proc.processar(pdf, xls, out,
                                            progress_cb=_cb,
                                            usar_ia=usar_ia,
                                            api_key=api_key,
@@ -887,8 +881,8 @@ class App(tk.Tk):
 
         steps = [
             ("prepare", "Preparar"),
-            ("fonte", "Ler Fonte (PDF/Excel)"),
-            ("excel", "Carregar Excel Cadastral"),
+            ("pdf", "Ler PDF"),
+            ("excel", "Carregar Excel"),
             ("match", "Cruzar dados"),
             ("csv", "Gerar CSV"),
         ]
@@ -968,14 +962,10 @@ class App(tk.Tk):
             return "csv", "Gerando CSV"
         if "cruz" in texto or "correspond" in texto:
             return "match", "Cruzando dados"
-        if "excel cadastral" in texto:
-            return "excel", "Carregando Excel cadastral"
-        if "fonte" in texto or "pdf" in texto:
-            return "fonte", "Lendo fonte de extracao"
         if "excel" in texto:
-            return "excel", "Carregando Excel cadastral"
-        if "lendo" in texto:
-            return "fonte", "Lendo fonte de extracao"
+            return "excel", "Carregando Excel"
+        if "pdf" in texto or "lendo" in texto:
+            return "pdf", "Lendo PDF"
         return "prepare", "Preparando"
 
     def _vtc_atualizar_etapas_progresso(self, etapa_atual):
@@ -983,7 +973,7 @@ class App(tk.Tk):
         if not win or not win.winfo_exists():
             return
 
-        order = getattr(win, '_order', ["prepare", "fonte", "excel", "match", "csv", "ia", "done"])
+        order = getattr(win, '_order', ["prepare", "pdf", "excel", "match", "csv", "ia", "done"])
         idx_atual = order.index(etapa_atual) if etapa_atual in order else 0
         win._current_step = etapa_atual
 
@@ -1059,8 +1049,7 @@ class App(tk.Tk):
         if err_cfg:
             self._vtc_log_append(f'Aviso: não foi possível salvar configuração: {err_cfg}', 'warn')
 
-        total   = resultado.get('total_fonte', resultado.get('total_pdf', 0))
-        tipo_fonte = resultado.get('tipo_fonte', 'PDF')
+        total   = resultado['total_pdf']
         ok      = resultado['total_ok']
         nao_enc = resultado['nao_encontrados']
         alertas = resultado['alertas_ia']
@@ -1068,7 +1057,7 @@ class App(tk.Tk):
 
         self._vtc_log_append('─' * 50)
         self._vtc_log_append(f"✔ {ok} registro(s) processado(s) com sucesso.", 'ok')
-        self._vtc_log_append(f"  Total na fonte ({tipo_fonte}): {total}")
+        self._vtc_log_append(f"  Total no PDF: {total}")
 
         if nao_enc:
             self._vtc_log_append(

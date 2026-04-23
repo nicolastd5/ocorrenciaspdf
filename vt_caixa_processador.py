@@ -1,10 +1,8 @@
 import csv
-import os
 import re
 import unicodedata
 from datetime import date, datetime
 
-from openpyxl import load_workbook
 import pdfplumber
 import xlrd
 
@@ -48,18 +46,6 @@ _COL_ALIASES = {
     'Estado Civil':     ['estado civil'],
     'Nome Mae':         ['nome mae', 'nome da mae', 'mae', 'nome_mae'],
 }
-
-# Possiveis cabecalhos para planilha usada como fonte de extracao (no lugar do PDF).
-_COL_ALIASES_FONTE = {
-    'codigo':         ['codigo', 'cod epr', 'matricula', 're', 'folha re'],
-    'colaborador':    ['colaborador', 'nome', 'nome funcionario', 'nome do funcionario'],
-    'periodo':        ['periodo', 'periodo trabalhado', 'periodo de dias trabalhados'],
-    'quantidade':     ['quantidade', 'qtd', 'quantidade diaria', 'qtd diaria'],
-    'valor_unitario': ['valor unitario', 'valor', 'valor diario', 'valor un'],
-    'administradora': ['administradora', 'administradora do beneficio', 'operadora',
-                       'rede recarga', 'beneficio do funcionario', 'beneficio', 'adm'],
-}
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Funções auxiliares de módulo
@@ -251,136 +237,6 @@ class ProcessadorVTCaixa:
                     })
 
         return rows
-
-    def _texto_celula(self, valor):
-        if valor is None:
-            return ''
-        if isinstance(valor, datetime):
-            return valor.strftime('%d/%m/%Y')
-        if isinstance(valor, date):
-            return valor.strftime('%d/%m/%Y')
-        if isinstance(valor, float):
-            if valor.is_integer():
-                return str(int(valor))
-            return str(valor)
-        return str(valor).strip().replace('\n', ' ').replace('\r', '')
-
-    def _iterar_abas_planilha_fonte(self, planilha_path):
-        ext = os.path.splitext(planilha_path)[1].lower()
-
-        if ext == '.xls':
-            wb = xlrd.open_workbook(planilha_path)
-            for idx in range(wb.nsheets):
-                ws = wb.sheet_by_index(idx)
-                linhas = []
-                for row in range(ws.nrows):
-                    linhas.append([ws.cell_value(row, col) for col in range(ws.ncols)])
-                yield ws.name, linhas
-            return
-
-        wb = load_workbook(planilha_path, data_only=True, read_only=True)
-        try:
-            for ws in wb.worksheets:
-                linhas = [list(row) for row in ws.iter_rows(values_only=True)]
-                yield ws.title, linhas
-        finally:
-            wb.close()
-
-    def _extrair_fonte_planilha(self, planilha_path):
-        avisos = []
-        candidatos = []
-        ordem_aba = 0
-
-        for aba_nome, linhas in self._iterar_abas_planilha_fonte(planilha_path):
-            ordem_aba += 1
-            if not linhas:
-                continue
-
-            cabecalho = linhas[0]
-            cabecalhos_norm = {}
-            for i, val in enumerate(cabecalho):
-                txt = self._texto_celula(val)
-                if txt:
-                    cabecalhos_norm[_norm(txt)] = i
-
-            def _idx_chave(chave):
-                for alias in _COL_ALIASES_FONTE[chave]:
-                    if alias in cabecalhos_norm:
-                        return cabecalhos_norm[alias]
-                return None
-
-            idx_codigo = _idx_chave('codigo')
-            idx_nome = _idx_chave('colaborador')
-            idx_periodo = _idx_chave('periodo')
-            idx_qtd = _idx_chave('quantidade')
-            idx_valor = _idx_chave('valor_unitario')
-            idx_adm = _idx_chave('administradora')
-
-            campos_fonte = [idx_nome, idx_periodo, idx_qtd, idx_valor, idx_adm]
-            campos_encontrados = sum(1 for idx in campos_fonte if idx is not None)
-            usou_cabecalho = idx_codigo is not None and campos_encontrados >= 2
-            if usou_cabecalho:
-                dados_linhas = linhas[1:]
-            else:
-                # Mesma posicao usada na extracao tabular de PDF.
-                idx_codigo, idx_nome, idx_periodo = 0, 1, 3
-                idx_qtd, idx_valor, idx_adm = 5, 6, 8
-                dados_linhas = linhas
-
-            def _get(ln, idx):
-                if idx is None:
-                    return ''
-                if idx < 0 or idx >= len(ln):
-                    return ''
-                return self._texto_celula(ln[idx])
-
-            rows = []
-            for ln in dados_linhas:
-                if not ln:
-                    continue
-
-                codigo = _extrair_codigo(_get(ln, idx_codigo))
-                if not codigo:
-                    continue
-
-                rows.append({
-                    'codigo':         codigo,
-                    'colaborador':    _limpar_nome_extraido(_get(ln, idx_nome)),
-                    'periodo':        _get(ln, idx_periodo),
-                    'quantidade':     re.sub(r'\.0+$', '', _get(ln, idx_qtd)),
-                    'valor_unitario': _get(ln, idx_valor),
-                    'administradora': _get(ln, idx_adm),
-                })
-
-            if not rows:
-                continue
-
-            prioridade = 0 if usou_cabecalho else 1
-            candidatos.append((prioridade, -len(rows), ordem_aba, aba_nome, rows, usou_cabecalho))
-
-        if not candidatos:
-            avisos.append(
-                'AVISO: Nenhuma linha valida foi extraida da planilha de fonte.'
-            )
-            return [], avisos
-
-        candidatos.sort(key=lambda item: (item[0], item[1], item[2]))
-        _, _, _, aba_escolhida, rows_escolhidas, usou_cab = candidatos[0]
-        modo = 'cabecalho' if usou_cab else 'posicao de colunas'
-        avisos.append(
-            f'Aba selecionada para extracao: {aba_escolhida} ({modo})'
-        )
-        return rows_escolhidas, avisos
-
-    def _extrair_fonte(self, fonte_path):
-        ext = os.path.splitext(fonte_path)[1].lower()
-        if ext == '.pdf':
-            return self._extrair_pdf(fonte_path)
-        if ext in ('.xls', '.xlsx', '.xlsm', '.xltx', '.xltm'):
-            return self._extrair_fonte_planilha(fonte_path)
-        raise ValueError(
-            'Formato de fonte nao suportado. Use PDF ou Excel (.xls/.xlsx).'
-        )
 
     # ── Dias úteis ─────────────────────────────────────────────────────
 
@@ -820,35 +676,32 @@ Responda em português com lista numerada. Se tudo OK: "Nenhuma inconsistência 
 
     # ── Orquestrador ───────────────────────────────────────────────────
 
-    def processar(self, fonte_path, xls_path, output_path,
+    def processar(self, pdf_path, xls_path, output_path,
                   progress_cb=None, usar_ia=False, api_key='', model_id='gemini-2.5-flash'):
         def _prog(pct, msg):
             if progress_cb:
                 progress_cb(pct, msg)
 
-        ext_fonte = os.path.splitext(fonte_path)[1].lower()
-        tipo_fonte = 'PDF' if ext_fonte == '.pdf' else 'Excel'
-
-        _prog(5, 'Lendo fonte de extracao...')
-        pdf_rows, avisos_pdf = self._extrair_fonte(fonte_path)
-        _prog(35, f'Fonte ({tipo_fonte}): {len(pdf_rows)} linha(s) encontrada(s).')
+        _prog(5, 'Lendo PDF...')
+        pdf_rows, avisos_pdf = self._extrair_pdf(pdf_path)
+        _prog(35, f'PDF: {len(pdf_rows)} linha(s) encontrada(s).')
         for av in avisos_pdf:
             _prog(35, av)
         if pdf_rows:
-            _prog(35, f'1º código fonte: {pdf_rows[0]["codigo"]}  |  último: {pdf_rows[-1]["codigo"]}')
+            _prog(35, f'1º código PDF: {pdf_rows[0]["codigo"]}  |  último: {pdf_rows[-1]["codigo"]}')
 
         _prog(40, 'Carregando Excel cadastral...')
         excel_data, avisos_xls = self._carregar_excel(xls_path)
-        _prog(60, f'Excel cadastral: {len(excel_data)} funcionário(s).')
+        _prog(60, f'Excel: {len(excel_data)} funcionário(s).')
         for av in avisos_xls:
             _prog(60, av)
         if excel_data:
-            _prog(60, f'Primeiros códigos Excel cadastral: {list(excel_data.keys())[:3]}')
+            _prog(60, f'Primeiros códigos Excel: {list(excel_data.keys())[:3]}')
 
         if not pdf_rows:
             raise ValueError(
-                'Nenhuma linha valida foi extraida da fonte VT Caixa (PDF/Excel). '
-                'Verifique se o arquivo informado contem os dados esperados para extracao.'
+                'Nenhuma linha válida foi extraída do PDF VT Caixa. '
+                'Verifique se o PDF informado é o relatório correto e se o layout continua compatível com a extração.'
             )
 
         if not excel_data:
@@ -863,8 +716,8 @@ Responda em português com lista numerada. Se tudo OK: "Nenhuma inconsistência 
 
         if pdf_rows and not registros:
             raise ValueError(
-                'Nenhuma correspondencia encontrada entre a fonte (PDF/Excel) e o Excel cadastral. '
-                'Verifique se o cadastro esta na aba correta e se a coluna Cod Epr corresponde aos codigos da fonte.'
+                'Nenhuma correspondência encontrada entre o PDF e o Excel cadastral. '
+                'Verifique se o cadastro está na aba correta e se a coluna Cód Epr corresponde aos códigos do PDF.'
             )
 
         _prog(85, 'Gerando CSV...')
@@ -878,12 +731,10 @@ Responda em português com lista numerada. Se tudo OK: "Nenhuma inconsistência 
             _prog(92, f'Verificando com IA ({model_id})...')
             alertas_ia = self.verificar_com_ia(registros, nao_encontrados, api_key, model_id)
 
-        _prog(100, 'Concluido!')
+        _prog(100, 'Concluído!')
 
         return {
             'total_pdf':       len(pdf_rows),
-            'total_fonte':     len(pdf_rows),
-            'tipo_fonte':      tipo_fonte,
             'total_ok':        len(registros),
             'nao_encontrados': nao_encontrados,
             'alertas_ia':      alertas_ia,
