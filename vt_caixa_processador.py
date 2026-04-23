@@ -1,8 +1,10 @@
 import csv
+import os
 import re
 import unicodedata
 from datetime import date, datetime
 
+from openpyxl import load_workbook
 import pdfplumber
 import xlrd
 
@@ -45,6 +47,22 @@ _COL_ALIASES = {
     'UF End':           ['uf end', 'uf endereco', 'uf', 'estado end'],
     'Estado Civil':     ['estado civil'],
     'Nome Mae':         ['nome mae', 'nome da mae', 'mae', 'nome_mae'],
+    'Administradora(Fornecedor)': [
+        'administradora(fornecedor)', 'administradora (fornecedor)',
+        'administradora', 'administradora do beneficio', 'fornecedor'
+    ],
+}
+
+# Possiveis cabecalhos para planilha usada como fonte de extracao (no lugar do PDF).
+_COL_ALIASES_FONTE = {
+    'codigo':         ['codigo', 'cod epr', 'matricula', 'matricula vt', 're', 'folha re'],
+    'colaborador':    ['colaborador', 'nome', 'nome funcionario', 'nome do funcionario'],
+    'periodo':        ['periodo', 'periodo trabalhado', 'periodo de dias trabalhados'],
+    'quantidade':     ['quantidade', 'qtd', 'quantidade diaria', 'qtd diaria'],
+    'valor_unitario': ['valor unitario', 'valor', 'valor diario', 'valor un'],
+    'administradora': ['administradora', 'administradora do beneficio', 'operadora',
+                       'administradora(fornecedor)', 'administradora (fornecedor)',
+                       'rede recarga', 'beneficio do funcionario', 'beneficio', 'adm'],
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -240,6 +258,201 @@ class ProcessadorVTCaixa:
 
     # ── Dias úteis ─────────────────────────────────────────────────────
 
+    def _texto_celula(self, valor):
+        if valor is None:
+            return ''
+        if isinstance(valor, datetime):
+            return valor.strftime('%d/%m/%Y')
+        if isinstance(valor, date):
+            return valor.strftime('%d/%m/%Y')
+        if isinstance(valor, float):
+            if valor.is_integer():
+                return str(int(valor))
+            return str(valor)
+        return str(valor).strip().replace('\n', ' ').replace('\r', '')
+
+    def _iterar_abas_planilha_fonte(self, planilha_path):
+        ext = os.path.splitext(planilha_path)[1].lower()
+
+        if ext == '.xls':
+            wb = xlrd.open_workbook(planilha_path)
+            for idx in range(wb.nsheets):
+                ws = wb.sheet_by_index(idx)
+                linhas = []
+                for row in range(ws.nrows):
+                    linhas.append([ws.cell_value(row, col) for col in range(ws.ncols)])
+                yield ws.name, linhas
+            return
+
+        wb = load_workbook(planilha_path, data_only=True, read_only=True)
+        try:
+            for ws in wb.worksheets:
+                linhas = [list(row) for row in ws.iter_rows(values_only=True)]
+                yield ws.title, linhas
+        finally:
+            wb.close()
+
+    def _extrair_fonte_planilha(self, planilha_path):
+        avisos = []
+        candidatos = []
+        ordem_aba = 0
+
+        for aba_nome, linhas in self._iterar_abas_planilha_fonte(planilha_path):
+            ordem_aba += 1
+            if not linhas:
+                continue
+
+            cabecalho = linhas[0]
+            cabecalhos_norm = {}
+            for i, val in enumerate(cabecalho):
+                txt = self._texto_celula(val)
+                if txt:
+                    cabecalhos_norm[_norm(txt)] = i
+
+            def _idx_chave(chave):
+                for alias in _COL_ALIASES_FONTE[chave]:
+                    if alias in cabecalhos_norm:
+                        return cabecalhos_norm[alias]
+                return None
+
+            idx_codigo = _idx_chave('codigo')
+            idx_nome = _idx_chave('colaborador')
+            idx_periodo = _idx_chave('periodo')
+            idx_qtd = _idx_chave('quantidade')
+            idx_valor = _idx_chave('valor_unitario')
+            idx_adm = _idx_chave('administradora')
+
+            campos_fonte = [idx_nome, idx_periodo, idx_qtd, idx_valor, idx_adm]
+            campos_encontrados = sum(1 for idx in campos_fonte if idx is not None)
+            usou_cabecalho = idx_codigo is not None and campos_encontrados >= 2
+            if usou_cabecalho:
+                dados_linhas = linhas[1:]
+            else:
+                idx_codigo, idx_nome, idx_periodo = 0, 1, 3
+                idx_qtd, idx_valor, idx_adm = 5, 6, 8
+                dados_linhas = linhas
+
+            def _get(ln, idx):
+                if idx is None:
+                    return ''
+                if idx < 0 or idx >= len(ln):
+                    return ''
+                return self._texto_celula(ln[idx])
+
+            rows = []
+            for ln in dados_linhas:
+                if not ln:
+                    continue
+
+                codigo = _extrair_codigo(_get(ln, idx_codigo))
+                if not codigo:
+                    continue
+
+                rows.append({
+                    'codigo':         codigo,
+                    'colaborador':    _limpar_nome_extraido(_get(ln, idx_nome)),
+                    'periodo':        _get(ln, idx_periodo),
+                    'quantidade':     re.sub(r'\.0+$', '', _get(ln, idx_qtd)),
+                    'valor_unitario': _get(ln, idx_valor),
+                    'administradora': _get(ln, idx_adm),
+                })
+
+            if not rows:
+                continue
+
+            prioridade = 0 if usou_cabecalho else 1
+            candidatos.append((prioridade, -len(rows), ordem_aba, aba_nome, rows, usou_cabecalho))
+
+        if not candidatos:
+            avisos.append('AVISO: Nenhuma linha valida foi extraida da planilha de fonte.')
+            return [], avisos
+
+        candidatos.sort(key=lambda item: (item[0], item[1], item[2]))
+        _, _, _, aba_escolhida, rows_escolhidas, usou_cab = candidatos[0]
+        modo = 'cabecalho' if usou_cab else 'posicao de colunas'
+        avisos.append(f'Aba selecionada para extracao: {aba_escolhida} ({modo})')
+        return rows_escolhidas, avisos
+
+    def _extrair_pdf_fonte(self, pdf_path):
+        """Extrai dados de PDF-fonte com cabeçalho (Setor, Re, Nome, ...)."""
+        rows = []
+        avisos = []
+
+        with pdfplumber.open(pdf_path) as pdf:
+            col_map = {}
+            cabecalho_detectado = False
+
+            for pagina in pdf.pages:
+                tabelas = pagina.extract_tables() or []
+                if not tabelas:
+                    tabela = pagina.extract_table()
+                    if tabela:
+                        tabelas = [tabela]
+                if not tabelas:
+                    continue
+
+                for tabela in tabelas:
+                    if not tabela:
+                        continue
+
+                    for linha in tabela:
+                        if not linha or all(c is None for c in linha):
+                            continue
+
+                        if not cabecalho_detectado:
+                            cab_norm = {}
+                            for j, cel in enumerate(linha):
+                                if cel:
+                                    cab_norm[_norm(str(cel))] = j
+                            mapa = {}
+                            for chave, aliases in _COL_ALIASES_FONTE.items():
+                                for alias in aliases:
+                                    if alias in cab_norm:
+                                        mapa[chave] = cab_norm[alias]
+                                        break
+                            if mapa.get('codigo') is not None:
+                                col_map = mapa
+                                cabecalho_detectado = True
+                            continue
+
+                        def _cel(key, ln=linha):
+                            idx = col_map.get(key)
+                            if idx is None or idx >= len(ln):
+                                return ''
+                            v = ln[idx]
+                            return str(v).strip().replace('\n', ' ').replace('\r', '') if v else ''
+
+                        codigo = _extrair_codigo(_cel('codigo'))
+                        if not codigo:
+                            continue
+
+                        rows.append({
+                            'codigo':         codigo,
+                            'colaborador':    _limpar_nome_extraido(_cel('colaborador')),
+                            'periodo':        _cel('periodo'),
+                            'quantidade':     re.sub(r'\.0+$', '', _cel('quantidade')),
+                            'valor_unitario': _cel('valor_unitario'),
+                            'administradora': _cel('administradora'),
+                        })
+
+        if not rows:
+            avisos.append('AVISO: Nenhuma linha extraída do PDF-fonte com cabeçalho.')
+
+        return rows, avisos
+
+    def _extrair_fonte(self, fonte_path):
+        ext = os.path.splitext(fonte_path)[1].lower()
+        if ext == '.pdf':
+            rows, avisos = self._extrair_pdf_fonte(fonte_path)
+            if rows:
+                return rows, avisos
+            avisos.append('Fallback: tentando extração posicional do PDF.')
+            rows_leg, avisos_leg = self._extrair_pdf(fonte_path)
+            return rows_leg, avisos + avisos_leg
+        if ext in ('.xls', '.xlsx', '.xlsm', '.xltx', '.xltm'):
+            return self._extrair_fonte_planilha(fonte_path)
+        raise ValueError('Formato de fonte nao suportado. Use PDF ou Excel (.xls/.xlsx).')
+
     def _calcular_dias_uteis(self, periodo_str):
         if not periodo_str:
             return 0
@@ -407,6 +620,7 @@ class ProcessadorVTCaixa:
             'Estado Civil':     _idx('Estado Civil'),
             'Data EX':          _idx('Data EX'),
             'Nome Mae':         _idx('Nome Mae'),
+            'Administradora(Fornecedor)': _idx('Administradora(Fornecedor)'),
         }
         idx_cod     = mapa_colunas['Cód Epr']
         idx_cpf     = mapa_colunas['CPF']
@@ -425,6 +639,7 @@ class ProcessadorVTCaixa:
         idx_est_civ = mapa_colunas['Estado Civil']
         idx_dt_ex   = mapa_colunas['Data EX']
         idx_nome_mae = mapa_colunas['Nome Mae']
+        idx_adm_forn = mapa_colunas['Administradora(Fornecedor)']
 
         if idx_cod is None:
             raise ValueError(
@@ -483,6 +698,7 @@ class ProcessadorVTCaixa:
                 'Estado Civil':     _val(idx_est_civ),
                 'Data EX':          self._formatar_data(ws.cell_value(row, idx_dt_ex) if idx_dt_ex is not None else None, wb),
                 'Nome Mae':         _val(idx_nome_mae),
+                'Administradora(Fornecedor)': _val(idx_adm_forn),
             }
 
         if not dados:
@@ -564,6 +780,18 @@ class ProcessadorVTCaixa:
                 'ÓRGÃO EXPEDIDOR':             self._sanitizar(ex['Orgão RG']),
                 'ESTADO EMISSÃO RG':           self._sanitizar(ex['UF RG']),
             })
+
+        for reg in registros:
+            chave_mat = next((k for k in reg.keys() if 'MATR' in k), None)
+            chave_benef = next((k for k in reg.keys() if 'BENEF' in k and 'FUNCION' in k), None)
+            if not chave_mat or not chave_benef:
+                continue
+            ex = excel_data.get(str(reg[chave_mat]).strip())
+            if not ex:
+                continue
+            adm_forn = ex.get('Administradora(Fornecedor)')
+            if adm_forn:
+                reg[chave_benef] = self._sanitizar(adm_forn)
 
         return registros, nao_encontrados
 
@@ -676,15 +904,18 @@ Responda em português com lista numerada. Se tudo OK: "Nenhuma inconsistência 
 
     # ── Orquestrador ───────────────────────────────────────────────────
 
-    def processar(self, pdf_path, xls_path, output_path,
+    def processar(self, fonte_path, xls_path, output_path,
                   progress_cb=None, usar_ia=False, api_key='', model_id='gemini-2.5-flash'):
         def _prog(pct, msg):
             if progress_cb:
                 progress_cb(pct, msg)
 
-        _prog(5, 'Lendo PDF...')
-        pdf_rows, avisos_pdf = self._extrair_pdf(pdf_path)
-        _prog(35, f'PDF: {len(pdf_rows)} linha(s) encontrada(s).')
+        ext_fonte = os.path.splitext(fonte_path)[1].lower()
+        tipo_fonte = 'PDF' if ext_fonte == '.pdf' else 'Excel'
+
+        _prog(5, 'Lendo fonte de extracao...')
+        pdf_rows, avisos_pdf = self._extrair_fonte(fonte_path)
+        _prog(35, f'Fonte ({tipo_fonte}): {len(pdf_rows)} linha(s) encontrada(s).')
         for av in avisos_pdf:
             _prog(35, av)
         if pdf_rows:
@@ -735,6 +966,8 @@ Responda em português com lista numerada. Se tudo OK: "Nenhuma inconsistência 
 
         return {
             'total_pdf':       len(pdf_rows),
+            'total_fonte':     len(pdf_rows),
+            'tipo_fonte':      tipo_fonte,
             'total_ok':        len(registros),
             'nao_encontrados': nao_encontrados,
             'alertas_ia':      alertas_ia,
