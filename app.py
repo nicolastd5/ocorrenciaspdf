@@ -141,10 +141,17 @@ class App(tk.Tk):
         """Verifica nova versão no GitHub em background (chamada automática ao iniciar)."""
         def _checar():
             tag, erro = self._buscar_versao_github()
-            if tag and tag != VERSION:
+            if tag and self._parse_versao(tag) > self._parse_versao(VERSION):
                 self.after(0, lambda: self._mostrar_banner_update(tag))
 
         threading.Thread(target=_checar, daemon=True).start()
+
+    @staticmethod
+    def _parse_versao(v):
+        try:
+            return tuple(int(x) for x in v.strip().split('.'))
+        except Exception:
+            return (0,)
 
     def _buscar_versao_github(self):
         """Consulta a API do GitHub e retorna (tag, erro). Síncrono — chamar em thread."""
@@ -1271,7 +1278,7 @@ class App(tk.Tk):
         if erro:
             self._lbl_update_status.configure(
                 text=f"Erro: {erro}", fg=CORES['error'])
-        elif tag and tag != VERSION:
+        elif tag and self._parse_versao(tag) > self._parse_versao(VERSION):
             self._lbl_update_status.configure(
                 text=f"Nova versão disponível: v{tag}", fg=CORES['success'])
             self._mostrar_banner_update(tag)
