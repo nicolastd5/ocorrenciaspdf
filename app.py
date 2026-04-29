@@ -2333,6 +2333,129 @@ class App(tk.Tk):
             command=win.destroy
         ).pack(side='right')
 
+    def _abrir_modal_conflitos(self, conflitos, resultado_queue):
+        """
+        Abre janela modal listando conflitos entre camadas.
+        Coloca as escolhas do usuário em resultado_queue como lista de
+        (re, codigo, valor) ou None se cancelado.
+        """
+        win = tk.Toplevel(self)
+        win.title("Conflitos encontrados")
+        win.configure(bg=CORES['bg'])
+        win.geometry("760x540")
+        win.minsize(640, 400)
+        win.grab_set()
+        win.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        win.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - 380
+        y = self.winfo_y() + (self.winfo_height() // 2) - 270
+        win.geometry(f"760x540+{x}+{y}")
+
+        main = tk.Frame(win, bg=CORES['bg'])
+        main.pack(fill='both', expand=True, padx=20, pady=16)
+
+        tk.Label(main,
+                 text=f"Conflitos encontrados — {len(conflitos)} item(s) precisam de revisão",
+                 font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
+                 bg=CORES['bg']).pack(anchor='w', pady=(0, 4))
+        tk.Label(main,
+                 text="Selecione o valor correto para cada conflito. A sugestão já está pré-selecionada.",
+                 font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                 bg=CORES['bg']).pack(anchor='w', pady=(0, 12))
+
+        canvas = tk.Canvas(main, bg=CORES['bg'], highlightthickness=0)
+        sb = ttk.Scrollbar(main, orient='vertical', command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg=CORES['bg'])
+        scroll_frame.bind('<Configure>',
+                          lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.create_window((0, 0), window=scroll_frame, anchor='nw')
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side='left', fill='both', expand=True)
+        sb.pack(side='right', fill='y')
+        canvas.bind('<Enter>', lambda e: canvas.bind_all(
+            '<MouseWheel>', lambda ev: canvas.yview_scroll(-1*(ev.delta//120), 'units')))
+        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+
+        escolha_vars = {}
+
+        for conflito in conflitos:
+            re_val = conflito['re']
+            nome   = conflito['nome']
+            cod    = conflito['codigo']
+            vals   = conflito['valores']
+            sug    = conflito['sugestao']
+
+            card = tk.Frame(scroll_frame, bg=CORES['bg_card'],
+                            highlightbackground=CORES['border'], highlightthickness=1)
+            card.pack(fill='x', pady=(0, 8))
+
+            top = tk.Frame(card, bg=CORES['bg_card'])
+            top.pack(fill='x', padx=14, pady=(10, 6))
+            tk.Label(top, text=f"RE {re_val}  —  {nome}",
+                     font=("Segoe UI", 10, "bold"), fg=CORES['fg_bright'],
+                     bg=CORES['bg_card']).pack(side='left')
+            tk.Label(top, text=f"Código: {cod}",
+                     font=("Segoe UI", 9), fg=CORES['accent_light'],
+                     bg=CORES['bg_card']).pack(side='right')
+
+            opcoes_row = tk.Frame(card, bg=CORES['bg_card'])
+            opcoes_row.pack(fill='x', padx=14, pady=(0, 12))
+
+            var = tk.IntVar(value=sug)
+            escolha_vars[(re_val, cod)] = var
+
+            rotulos = {'v1': 'V1 (tabelas)', 'v2': 'V2 (texto)', 'ia': 'IA (Gemini)'}
+            valores_unicos = {}
+            for chave, val in vals.items():
+                if val is None:
+                    continue
+                label_camada = rotulos.get(chave, chave)
+                if val not in valores_unicos:
+                    valores_unicos[val] = []
+                valores_unicos[val].append(label_camada)
+
+            for val_opcao, camadas_label in sorted(valores_unicos.items()):
+                texto_btn = f"{val_opcao} {cod}  ({', '.join(camadas_label)})"
+                is_sug = (val_opcao == sug)
+                rb = tk.Radiobutton(
+                    opcoes_row, text=texto_btn,
+                    variable=var, value=val_opcao,
+                    font=("Segoe UI", 9, "bold" if is_sug else "normal"),
+                    fg=CORES['accent_light'] if is_sug else CORES['fg'],
+                    bg=CORES['bg_card'],
+                    activebackground=CORES['bg_card'],
+                    selectcolor=CORES['bg_input'],
+                )
+                rb.pack(side='left', padx=(0, 16))
+
+        btn_row = tk.Frame(main, bg=CORES['bg'])
+        btn_row.pack(fill='x', pady=(12, 0))
+
+        def confirmar():
+            escolhas = [(re_val, cod, var.get())
+                        for (re_val, cod), var in escolha_vars.items()]
+            win.destroy()
+            resultado_queue.put(escolhas)
+
+        def cancelar():
+            win.destroy()
+            resultado_queue.put(None)
+
+        tk.Button(btn_row, text="Confirmar e gravar",
+                  font=("Segoe UI", 11, "bold"),
+                  fg=CORES['btn_fg'], bg=CORES['btn_bg'],
+                  activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
+                  relief='flat', cursor='hand2', padx=18, pady=8, borderwidth=0,
+                  command=confirmar).pack(side='left')
+
+        tk.Button(btn_row, text="Cancelar",
+                  font=("Segoe UI", 11),
+                  fg=CORES['fg_dim'], bg=CORES['bg_input'],
+                  activeforeground=CORES['fg'], activebackground=CORES['border'],
+                  relief='flat', cursor='hand2', padx=18, pady=8, borderwidth=0,
+                  command=cancelar).pack(side='left', padx=(10, 0))
+
     def _criar_tabela(self, parent, titulo, dados, cor_titulo):
         wrapper = tk.Frame(parent, bg=CORES['bg_card'],
                            highlightbackground=CORES['border'], highlightthickness=1)
