@@ -7,6 +7,7 @@ import pdfplumber
 from openpyxl import load_workbook
 import shutil
 import os
+import re
 
 
 class ProcessadorOcorrencias:
@@ -86,11 +87,10 @@ class ProcessadorOcorrencias:
         Independente de detecção de tabelas. Mesmo formato de retorno que
         extrair_ocorrencias: {re: {'nome': str, 'ocorrencias': {codigo: contagem}}}
         """
-        import re as _re
         resultados = {}
         codigos_set = set(codigos_alvo)
         # RE: 5+ dígitos no início ou após espaços, precedido de nome
-        re_linha = _re.compile(r'^(.+?)\s{2,}(\d{5,})\b')
+        re_linha = re.compile(r'^(.+?)\s{2,}(\d{5,})\b')
 
         with pdfplumber.open(pdf_path) as pdf:
             for pagina in pdf.pages:
