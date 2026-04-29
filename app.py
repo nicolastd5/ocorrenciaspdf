@@ -50,7 +50,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.26"
+VERSION = "1.27"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -313,6 +313,7 @@ class App(tk.Tk):
 
         codigos_info = [
             ('AT', 'Atestado', True),
+            ('A-', 'Decl. Horas Negativas', True),
             ('FA', 'Faltas', True),
             ('AP', 'Afast. Previdenciário', False),
             ('LM', 'Afast. Maternidade', False),
@@ -320,6 +321,8 @@ class App(tk.Tk):
             ('SD', 'Suspensão Disciplinar', True),
             ('AA', 'Ausência Autorizada', True),
             ('FE', 'Férias', False),
+            ('14', 'Luto', True),
+            ('13', 'Falecimento', True),
         ]
 
         for i, (codigo, desc, tem_qtd) in enumerate(codigos_info):

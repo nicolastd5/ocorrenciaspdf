@@ -12,21 +12,24 @@ import os
 class ProcessadorOcorrencias:
     """Processador principal de ocorrências PDF → Excel."""
 
-    TODOS_CODIGOS = ['FA', 'AT', 'SD', 'LC', 'AA', 'AP', 'LM', 'FE']
+    TODOS_CODIGOS = ['FA', 'AT', 'A-', 'SD', 'LC', 'AA', 'AP', 'LM', 'FE', '14', '13']
     SEM_QUANTIDADE = ['AP', 'LM', 'FE']
-    ORDEM = ['FA', 'AT', 'SD', 'LC', 'AA', 'AP', 'LM', 'FE']
+    ORDEM = ['FA', 'AT', 'A-', 'SD', 'LC', 'AA', 'AP', 'LM', 'FE', '14', '13']
     CODIGOS_DEDUZIR = ['FA', 'AT', 'SD', 'LC']
     COLUNAS_QT = ['qt va', 'qt vr', 'qt vt']
     VU_VT_HEADER = 'vu vt'
     DESCRICOES = {
         'FA': 'Faltas',
         'AT': 'Atestado',
+        'A-': 'Declaração Horas Negativas',
         'SD': 'Suspensão Disciplinar',
         'LC': 'Licença Casamento',
         'AA': 'Ausência Autorizada',
         'AP': 'Afastamento Previdenciário',
         'LM': 'Afastamento Maternidade',
         'FE': 'Férias',
+        '14': 'Luto',
+        '13': 'Falecimento',
     }
 
     def extrair_ocorrencias(self, pdf_path, codigos_alvo):
