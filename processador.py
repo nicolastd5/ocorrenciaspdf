@@ -118,6 +118,81 @@ class ProcessadorOcorrencias:
                             )
         return resultados
 
+    def reconciliar(self, resultados, codigos_alvo):
+        """
+        Compara resultados de 2 ou 3 camadas de extração.
+
+        Args:
+            resultados: lista de dicts no formato {re: {'nome', 'ocorrencias'}}
+                        Ordem: [v1, v2] ou [v1, v2, ia]
+            codigos_alvo: lista de códigos a considerar
+
+        Returns:
+            {
+              'concordantes': {re: {'nome', 'ocorrencias'}},
+              'conflitos': [{re, nome, codigo, valores, sugestao}]
+            }
+        """
+        from collections import Counter
+
+        nomes = ['v1', 'v2', 'ia']
+        camadas = resultados
+
+        todos_res = set()
+        for c in camadas:
+            todos_res.update(c.keys())
+
+        concordantes = {}
+        conflitos = []
+
+        for re_val in todos_res:
+            nome = next(
+                (c[re_val]['nome'] for c in camadas if re_val in c), ''
+            )
+
+            todos_codigos = set()
+            for c in camadas:
+                if re_val in c:
+                    todos_codigos.update(c[re_val]['ocorrencias'].keys())
+            todos_codigos = todos_codigos.intersection(set(codigos_alvo))
+
+            re_conflitos = []
+            ocorrencias_finais = {}
+
+            for cod in todos_codigos:
+                valores_por_camada = {}
+                for i, c in enumerate(camadas):
+                    chave = nomes[i]
+                    val = c.get(re_val, {}).get('ocorrencias', {}).get(cod, 0)
+                    valores_por_camada[chave] = val
+
+                vals = list(valores_por_camada.values())
+                counter = Counter(vals)
+                valor_majoritario, votos = counter.most_common(1)[0]
+
+                todos_iguais = len(set(vals)) == 1
+                maioria_clara = votos > len(camadas) / 2
+
+                if todos_iguais or maioria_clara:
+                    ocorrencias_finais[cod] = valor_majoritario
+                else:
+                    sugestao = max(vals)
+                    re_conflitos.append({
+                        're': re_val,
+                        'nome': nome,
+                        'codigo': cod,
+                        'valores': valores_por_camada,
+                        'sugestao': sugestao,
+                    })
+
+            if re_conflitos:
+                conflitos.extend(re_conflitos)
+            else:
+                if ocorrencias_finais:
+                    concordantes[re_val] = {'nome': nome, 'ocorrencias': ocorrencias_finais}
+
+        return {'concordantes': concordantes, 'conflitos': conflitos}
+
     def montar_motivo(self, ocorrencias, codigos_selecionados):
         """
         Monta a string de motivo a partir das ocorrências.
