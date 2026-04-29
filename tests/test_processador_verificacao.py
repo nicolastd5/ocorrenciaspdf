@@ -95,3 +95,54 @@ def test_reconciliar_re_ausente_em_uma_camada():
     c = resultado['conflitos'][0]
     assert c['valores']['v1'] == 1
     assert c['valores']['v2'] == 0
+
+
+def test_verificar_com_ia_retorna_none_sem_api_key():
+    resultado = proc.verificar_com_ia('fake.pdf', ['AT', 'FA'], api_key='', modelo='gemini-1.5-flash')
+    assert resultado is None
+
+
+def test_verificar_com_ia_retorna_none_em_erro(monkeypatch):
+    import pypdfium2 as pdfium
+
+    def raise_err(path):
+        raise Exception("pdf error")
+
+    monkeypatch.setattr(pdfium, 'PdfDocument', raise_err)
+    resultado = proc.verificar_com_ia('fake.pdf', ['AT'], api_key='fake-key', modelo='gemini-1.5-flash')
+    assert resultado is None
+
+
+def test_verificar_com_ia_parseia_json_valido(monkeypatch):
+    import pypdfium2 as pdfium
+    import google.generativeai as genai
+
+    resposta_json = '[{"re": "12345", "nome": "SILVA", "ocorrencias": {"AT": 2, "FA": 1}}]'
+
+    class FakeResponse:
+        text = resposta_json
+
+    class FakeModel:
+        def generate_content(self, parts): return FakeResponse()
+
+    class FakeBitmap:
+        def to_pil(self):
+            from PIL import Image
+            return Image.new('RGB', (10, 10))
+
+    class FakePage:
+        def render(self, scale):
+            return FakeBitmap()
+
+    class FakeDoc:
+        def __len__(self): return 1
+        def __getitem__(self, i): return FakePage()
+
+    monkeypatch.setattr(pdfium, 'PdfDocument', lambda path: FakeDoc())
+    monkeypatch.setattr(genai, 'configure', lambda **kw: None)
+    monkeypatch.setattr(genai, 'GenerativeModel', lambda model: FakeModel())
+
+    resultado = proc.verificar_com_ia('fake.pdf', ['AT', 'FA'], api_key='fake-key', modelo='gemini-1.5-flash')
+    assert resultado is not None
+    assert '12345' in resultado
+    assert resultado['12345']['ocorrencias']['AT'] == 2

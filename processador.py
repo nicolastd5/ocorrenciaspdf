@@ -193,6 +193,82 @@ class ProcessadorOcorrencias:
 
         return {'concordantes': concordantes, 'conflitos': conflitos}
 
+    def verificar_com_ia(self, pdf_path, codigos_alvo, api_key, modelo):
+        """
+        Terceira camada opcional: Gemini Vision re-extrai ocorrências a partir
+        de imagens das páginas do PDF.
+
+        Args:
+            pdf_path: Caminho do arquivo PDF.
+            codigos_alvo: Lista de códigos a procurar.
+            api_key: API Key do Google Gemini.
+            modelo: Nome do modelo Gemini a usar.
+
+        Returns:
+            dict no formato {re: {'nome', 'ocorrencias'}} ou None em caso de erro.
+        """
+        if not api_key:
+            return None
+
+        try:
+            import pypdfium2 as pdfium
+            import google.generativeai as genai
+            import json as _json
+
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(modelo)
+
+            codigos_str = ', '.join(codigos_alvo)
+            prompt = (
+                f"Analise esta folha de ponto. Para cada linha que contenha um RE numérico "
+                f"(número de matrícula com 5+ dígitos), identifique o RE, o nome do funcionário "
+                f"e a contagem de cada código de ocorrência presente na linha. "
+                f"Códigos a procurar: {codigos_str}. "
+                f"Responda APENAS em JSON válido, sem markdown, no formato: "
+                f'[{{"re": "12345", "nome": "NOME", "ocorrencias": {{"AT": 2, "FA": 1}}}}]'
+            )
+
+            doc = pdfium.PdfDocument(pdf_path)
+            resultados = {}
+
+            for i in range(len(doc)):
+                page = doc[i]
+                bitmap = page.render(scale=2)
+                img = bitmap.to_pil()
+
+                response = model.generate_content([prompt, img])
+                raw = response.text.strip()
+
+                if raw.startswith('```'):
+                    raw = raw.split('```')[1]
+                    if raw.startswith('json'):
+                        raw = raw[4:]
+                    raw = raw.strip()
+
+                try:
+                    registros = _json.loads(raw)
+                except _json.JSONDecodeError:
+                    continue
+
+                for reg in registros:
+                    re_val = str(reg.get('re', '')).strip()
+                    nome = str(reg.get('nome', '')).strip()
+                    ocorr = reg.get('ocorrencias', {})
+                    if not re_val:
+                        continue
+                    if re_val not in resultados:
+                        resultados[re_val] = {'nome': nome, 'ocorrencias': {}}
+                    for cod, cnt in ocorr.items():
+                        if cod in set(codigos_alvo):
+                            resultados[re_val]['ocorrencias'][cod] = (
+                                resultados[re_val]['ocorrencias'].get(cod, 0) + int(cnt)
+                            )
+
+            return resultados if resultados else {}
+
+        except Exception:
+            return None
+
     def montar_motivo(self, ocorrencias, codigos_selecionados):
         """
         Monta a string de motivo a partir das ocorrências.
