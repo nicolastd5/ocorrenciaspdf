@@ -2221,6 +2221,7 @@ class App(tk.Tk):
             'matched': resultado['matched'],
             'nao_encontrados': len(resultado['nao_encontrados']),
             'lista_nao_encontrados': resultado['nao_encontrados'],
+            'info_verif': resultado.get('info_verif', {'modo': 'unica'}),
         })
         self._atualizar_historico()
         self._abrir_tela_resumo(resultado, output_path)
@@ -2270,6 +2271,53 @@ class App(tk.Tk):
                      fg=color, bg=CORES['bg_card']).pack(pady=(10, 0))
             tk.Label(card, text=label, font=("Segoe UI", 9),
                      fg=CORES['fg_dim'], bg=CORES['bg_card']).pack(pady=(0, 10))
+
+        # Bloco de verificação
+        info_verif = resultado.get('info_verif', {'modo': 'unica'})
+        modo = info_verif.get('modo', 'unica')
+        if modo != 'unica':
+            vf = tk.Frame(main, bg=CORES['bg_card'],
+                          highlightbackground=CORES['border'], highlightthickness=1)
+            vf.pack(fill='x', pady=(0, 14))
+            vf_inner = tk.Frame(vf, bg=CORES['bg_card'])
+            vf_inner.pack(fill='x', padx=14, pady=10)
+
+            modo_labels = {'dupla': 'Dupla varredura', 'ia': 'Dupla + IA (Gemini)'}
+            tk.Label(vf_inner,
+                     text=f"🔍  {modo_labels.get(modo, modo)}",
+                     font=("Segoe UI", 10, "bold"), fg=CORES['accent_light'],
+                     bg=CORES['bg_card']).pack(anchor='w', pady=(0, 6))
+
+            stats_v = tk.Frame(vf_inner, bg=CORES['bg_card'])
+            stats_v.pack(fill='x')
+
+            conc = info_verif.get('concordantes', 0)
+            conf = info_verif.get('conflitos_resolvidos', 0)
+            ia_usada = info_verif.get('ia_usada', False)
+            ia_fallback = info_verif.get('ia_fallback', False)
+
+            for label, valor, cor in [
+                ("Automáticos",          str(conc), CORES['success']),
+                ("Conflitos resolvidos", str(conf),
+                 CORES['warning'] if conf else CORES['fg_dim']),
+            ]:
+                bloco = tk.Frame(stats_v, bg=CORES['bg_input'])
+                bloco.pack(side='left', padx=(0, 6))
+                tk.Label(bloco, text=valor, font=("Segoe UI", 12, "bold"),
+                         fg=cor, bg=CORES['bg_input']).pack(side='left', padx=(8, 4), pady=4)
+                tk.Label(bloco, text=label, font=("Segoe UI", 8),
+                         fg=CORES['fg_dim'], bg=CORES['bg_input']).pack(side='left', padx=(0, 8))
+
+            if modo == 'ia':
+                if ia_usada:
+                    ia_txt, ia_cor = "IA utilizada", CORES['success']
+                elif ia_fallback:
+                    ia_txt, ia_cor = "IA indisponível — usou dupla varredura", CORES['warning']
+                else:
+                    ia_txt, ia_cor = "IA não ativada", CORES['fg_dim']
+                tk.Label(vf_inner, text=ia_txt,
+                         font=("Segoe UI", 9), fg=ia_cor,
+                         bg=CORES['bg_card']).pack(anchor='w', pady=(6, 0))
 
         # Tabela de não localizados
         if resultado['nao_encontrados']:
