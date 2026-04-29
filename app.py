@@ -107,6 +107,12 @@ class App(tk.Tk):
         self.qt_vr_var = tk.BooleanVar(value=True)
         self.qt_vt_var = tk.BooleanVar(value=True)
 
+        # Modo de verificação: 'unica', 'dupla', 'ia'
+        self.modo_verificacao = tk.StringVar(value='unica')
+        self.verif_api_key = tk.StringVar(value='')
+        self.verif_modelo = tk.StringVar(value='')
+        self._verif_api_row = None
+
         # VT Caixa
         _cfg = _carregar_config()
         self.vtc_pdf_path    = tk.StringVar()
@@ -121,6 +127,9 @@ class App(tk.Tk):
         self._vtc_anim_job        = None
         self._vtc_anim_frame      = 0
         self._vtc_janela_progresso = None
+
+        self.verif_api_key.set(_cfg.get('gemini_api_key_ocorrencias', ''))
+        self.verif_modelo.set(_cfg.get('gemini_modelo_ocorrencias', ''))
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -336,6 +345,75 @@ class App(tk.Tk):
 
         for col in range(4):
             codes_grid.columnconfigure(col, weight=1)
+
+        # ── Card Verificação ────────────────────────────────────────
+        verif_frame = self._criar_card(parent, "🔍  Verificação")
+
+        modo_row = tk.Frame(verif_frame, bg=CORES['bg_card'])
+        modo_row.pack(fill='x', pady=(0, 6))
+
+        modos = [
+            ('unica',  'Varredura única',    'Comportamento atual'),
+            ('dupla',  'Dupla varredura',    'V1 (tabelas) + V2 (texto/regex)'),
+            ('ia',     'Dupla + IA (Gemini)','V1 + V2 + Gemini Vision'),
+        ]
+
+        def _atualizar_modo():
+            modo = self.modo_verificacao.get()
+            if modo == 'ia':
+                self._verif_api_row.pack(fill='x', pady=(6, 0))
+            else:
+                self._verif_api_row.pack_forget()
+            for m, btn in _modo_btns.items():
+                on = (m == modo)
+                btn.configure(
+                    bg=CORES['chip_on'] if on else CORES['chip_off'],
+                    fg=CORES['accent_light'] if on else CORES['fg_dim'],
+                    highlightbackground=CORES['chip_border_on'] if on else CORES['chip_border_off'],
+                )
+
+        _modo_btns = {}
+        for val, label, tooltip in modos:
+            btn = tk.Label(
+                modo_row, text=label,
+                font=("Segoe UI", 9, "bold"),
+                fg=CORES['fg_dim'], bg=CORES['chip_off'],
+                padx=12, pady=5, cursor='hand2',
+                highlightbackground=CORES['chip_border_off'], highlightthickness=1,
+            )
+            btn.pack(side='left', padx=(0, 6))
+            btn.bind('<Button-1>', lambda e, v=val: (self.modo_verificacao.set(v), _atualizar_modo()))
+            _modo_btns[val] = btn
+
+        # Subpainel da API Key (visível só em modo 'ia')
+        self._verif_api_row = tk.Frame(verif_frame, bg=CORES['bg_card'])
+
+        api_linha = tk.Frame(self._verif_api_row, bg=CORES['bg_card'])
+        api_linha.pack(fill='x', pady=(0, 4))
+        tk.Label(api_linha, text="API Key Gemini:",
+                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 bg=CORES['bg_card']).pack(side='left', padx=(0, 8))
+        tk.Entry(api_linha, textvariable=self.verif_api_key,
+                 font=("Segoe UI", 10), fg=CORES['fg_bright'],
+                 bg=CORES['bg_input'], insertbackground=CORES['fg'],
+                 relief='flat', highlightbackground=CORES['accent'],
+                 highlightthickness=1, show='*', width=36).pack(side='left')
+
+        modelo_linha = tk.Frame(self._verif_api_row, bg=CORES['bg_card'])
+        modelo_linha.pack(fill='x', pady=(0, 2))
+        tk.Label(modelo_linha, text="Modelo:",
+                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 bg=CORES['bg_card']).pack(side='left', padx=(0, 8))
+        self._verif_modelo_combo = ttk.Combobox(
+            modelo_linha, textvariable=self.verif_modelo,
+            font=("Segoe UI", 10), width=30, state='readonly')
+        self._verif_modelo_combo.pack(side='left')
+        self._criar_mini_btn(
+            modelo_linha, "Carregar modelos",
+            self._verif_carregar_modelos
+        ).pack(side='left', padx=(8, 0))
+
+        _atualizar_modo()
 
         # Opções adicionais
         opcoes_frame = self._criar_card(parent, "⚙  Opções")
@@ -856,6 +934,33 @@ class App(tk.Tk):
 
         self._vtc_lbl_modelo_status.configure(
             text=f"{len(modelos)} modelo(s) disponível(is)", fg=CORES['success'])
+
+    def _verif_carregar_modelos(self):
+        api_key = self.verif_api_key.get().strip()
+        if not api_key:
+            messagebox.showerror("Erro", "Informe a API Key antes de carregar os modelos.")
+            return
+
+        def _buscar():
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=api_key)
+                modelos = [m.name for m in genai.list_models()
+                           if 'generateContent' in m.supported_generation_methods
+                           and ('vision' in m.name.lower() or 'gemini' in m.name.lower())]
+                modelos = sorted(set(modelos))
+                self.after(0, lambda: self._verif_popular_modelos(modelos))
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Erro", f"Falha ao carregar modelos:\n{e}"))
+
+        threading.Thread(target=_buscar, daemon=True).start()
+
+    def _verif_popular_modelos(self, modelos):
+        self._verif_modelo_combo['values'] = modelos
+        if modelos:
+            atual = self.verif_modelo.get()
+            if atual not in modelos:
+                self.verif_modelo.set(modelos[0])
 
     def _vtc_log_append(self, msg, tag=None):
         """Adiciona linha ao log da aba VT Caixa (thread-safe via self.after)."""
