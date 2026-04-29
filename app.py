@@ -50,7 +50,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.27"
+VERSION = "1.28"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -241,7 +241,7 @@ class App(tk.Tk):
         tabs_container = tk.Frame(topbar, bg=CORES['bg'])
         tabs_container.pack(side='right')
 
-        for tab_id, label in [('processar', '⚙  Processar'), ('historico', '🕘  Histórico'), ('vtcaixa', '💳  VT Caixa'), ('sobre', 'ℹ  Sobre')]:
+        for tab_id, label in [('processar', '⚙  Processar'), ('historico', '🕘  Histórico'), ('vtcaixa', '💳  VT Caixa'), ('historico_vtc', '🕘  Histórico VT'), ('sobre', 'ℹ  Sobre')]:
             btn = tk.Button(tabs_container, text=label,
                             font=("Segoe UI", 10),
                             fg=CORES['fg_dim'], bg=CORES['bg'],
@@ -269,6 +269,10 @@ class App(tk.Tk):
         frame_vtcaixa = tk.Frame(content, bg=CORES['bg'])
         self._criar_aba_vtcaixa(frame_vtcaixa)
         self._tab_frames['vtcaixa'] = frame_vtcaixa
+
+        frame_historico_vtc = tk.Frame(content, bg=CORES['bg'])
+        self._criar_aba_historico_vtc(frame_historico_vtc)
+        self._tab_frames['historico_vtc'] = frame_historico_vtc
 
         frame_sobre = tk.Frame(content, bg=CORES['bg'])
         self._criar_aba_sobre(frame_sobre)
@@ -676,29 +680,27 @@ class App(tk.Tk):
         self.vtc_log.tag_configure('err',  foreground=CORES['error'])
         self.vtc_log.tag_configure('info', foreground=CORES['accent_light'])
 
-        # ── Histórico VT Caixa ──────────────────────────────────────────
-        hist_outer = tk.Frame(parent, bg=CORES['bg'])
-        hist_outer.pack(fill='both', expand=True, pady=(12, 0))
 
-        hist_header = tk.Frame(hist_outer, bg=CORES['bg'])
-        hist_header.pack(fill='x', pady=(0, 6))
-        tk.Label(hist_header, text="🕘  Histórico VT Caixa",
-                 font=("Segoe UI", 11, "bold"), fg=CORES['fg_bright'],
+    def _criar_aba_historico_vtc(self, parent):
+        header = tk.Frame(parent, bg=CORES['bg'])
+        header.pack(fill='x', pady=(0, 12))
+
+        tk.Label(header, text="🕘  Histórico VT Caixa",
+                 font=("Segoe UI", 14, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
-        tk.Button(hist_header, text="Limpar", font=("Segoe UI", 9),
+        tk.Button(header, text="Limpar", font=("Segoe UI", 9),
                   fg=CORES['fg_dim'], bg=CORES['bg_input'],
                   activeforeground=CORES['fg'], activebackground=CORES['border'],
                   relief='flat', cursor='hand2', padx=10, pady=3, borderwidth=0,
                   command=self._vtc_limpar_historico).pack(side='right')
 
-        self._vtc_hist_lista = tk.Frame(hist_outer, bg=CORES['bg'])
+        self._vtc_hist_lista = tk.Frame(parent, bg=CORES['bg'])
         self._vtc_hist_lista.pack(fill='both', expand=True)
 
-        self._vtc_hist_vazio = tk.Label(
-            self._vtc_hist_lista,
-            text="Nenhum processamento realizado ainda.",
-            font=("Segoe UI", 10), fg=CORES['fg_dim'], bg=CORES['bg'])
-        self._vtc_hist_vazio.pack(pady=20)
+        tk.Label(self._vtc_hist_lista,
+                 text="Nenhum processamento realizado ainda.",
+                 font=("Segoe UI", 11), fg=CORES['fg_dim'],
+                 bg=CORES['bg']).pack(pady=40)
 
     def _vtc_limpar_historico(self):
         self._historico_vtc.clear()
