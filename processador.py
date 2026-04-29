@@ -295,7 +295,9 @@ class ProcessadorOcorrencias:
 
         return ', '.join(partes)
 
-    def processar(self, pdf_path, xlsx_path, output_path, codigos, progress_cb=None, dias_mes=None, colunas_qt_sel=None):
+    def processar(self, pdf_path, xlsx_path, output_path, codigos,
+                  progress_cb=None, dias_mes=None, colunas_qt_sel=None,
+                  dados_externos=None):
         """
         Processa os arquivos e retorna um dicionário com os resultados.
 
@@ -320,8 +322,12 @@ class ProcessadorOcorrencias:
 
         # 1. Extrair ocorrências do PDF
         _prog(5, "Lendo PDF...")
-        resultados_pdf = self.extrair_ocorrencias(pdf_path, codigos)
-        _prog(50, "PDF lido. Abrindo planilha...")
+        if dados_externos is not None:
+            resultados_pdf = dados_externos
+            _prog(50, "Dados reconciliados recebidos. Abrindo planilha...")
+        else:
+            resultados_pdf = self.extrair_ocorrencias(pdf_path, codigos)
+            _prog(50, "PDF lido. Abrindo planilha...")
 
         # 2. Copiar e abrir planilha
         shutil.copy(xlsx_path, output_path)

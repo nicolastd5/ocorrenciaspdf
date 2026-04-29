@@ -1823,14 +1823,25 @@ class App(tk.Tk):
         self.btn_processar.configure(state='disabled', bg=CORES['bg_input'],
                                      text="Processando...")
 
+        if self.modo_verificacao.get() == 'ia':
+            _salvar_config({
+                'gemini_api_key_ocorrencias': self.verif_api_key.get().strip(),
+                'gemini_modelo_ocorrencias':  self.verif_modelo.get().strip(),
+            })
+
         for w in self.resultado_frame.winfo_children():
             w.destroy()
 
         self._janela_progresso = self._abrir_janela_progresso()
         self._iniciar_animacao()
 
+        modo_verif   = self.modo_verificacao.get()
+        verif_key    = self.verif_api_key.get().strip()
+        verif_modelo = self.verif_modelo.get().strip()
+
         thread = threading.Thread(target=self._processar,
-                                  args=(pdf, xlsx, output, codigos, dias_mes, colunas_qt))
+                                  args=(pdf, xlsx, output, codigos, dias_mes, colunas_qt,
+                                        modo_verif, verif_key, verif_modelo))
         thread.daemon = True
         thread.start()
 
@@ -1942,12 +1953,15 @@ class App(tk.Tk):
         steps_frame.pack(fill='x')
 
         steps = [
-            ("prepare", "Preparar"),
-            ("pdf", "Ler PDF"),
-            ("sheet", "Abrir planilha"),
-            ("match", "Cruzar dados"),
-            ("save", "Salvar"),
-            ("done", "Concluir"),
+            ("prepare",   "Preparar"),
+            ("pdf",       "Ler PDF (V1)"),
+            ("pdf2",      "Varredura 2"),
+            ("ia",        "Verificar com IA"),
+            ("reconcile", "Reconciliar"),
+            ("sheet",     "Abrir planilha"),
+            ("match",     "Cruzar dados"),
+            ("save",      "Salvar"),
+            ("done",      "Concluir"),
         ]
         step_widgets = []
         for idx, (step_id, label) in enumerate(steps):
@@ -2022,6 +2036,12 @@ class App(tk.Tk):
             return "match", "Cruzando dados"
         if "planilha" in texto:
             return "sheet", "Abrindo planilha"
+        if "reconcil" in texto:
+            return "reconcile", "Reconciliando"
+        if "gemini" in texto or "ia" in texto or "intelig" in texto:
+            return "ia", "Verificando com IA"
+        if "varredura 2" in texto:
+            return "pdf2", "Varredura 2"
         if "pdf" in texto or "lendo" in texto:
             return "pdf", "Lendo PDF"
         return "prepare", "Preparando"
@@ -2031,7 +2051,7 @@ class App(tk.Tk):
         if not win or not win.winfo_exists():
             return
 
-        order = ["prepare", "pdf", "sheet", "match", "save", "done"]
+        order = ["prepare", "pdf", "pdf2", "ia", "reconcile", "sheet", "match", "save", "done"]
         idx_atual = order.index(etapa_atual) if etapa_atual in order else 0
         win._current_step = etapa_atual
 
@@ -2081,12 +2101,73 @@ class App(tk.Tk):
 
         self.after(700, self._finalizar_processamento)
 
-    def _processar(self, pdf_path, xlsx_path, output_path, codigos, dias_mes=None, colunas_qt=None):
+    def _processar(self, pdf_path, xlsx_path, output_path, codigos,
+                   dias_mes=None, colunas_qt=None,
+                   modo_verif='unica', verif_key='', verif_modelo=''):
         def cb(pct, msg):
             self.after(0, lambda p=pct, m=msg: self._atualizar_progresso(p, m))
 
         try:
-            resultado = self.processador.processar(pdf_path, xlsx_path, output_path, codigos, cb, dias_mes, colunas_qt)
+            cb(5, "Lendo PDF (varredura 1)...")
+            v1 = self.processador.extrair_ocorrencias(pdf_path, codigos)
+
+            dados_reconciliados = v1
+            info_verif = {'modo': modo_verif, 'ia_usada': False, 'ia_fallback': False}
+
+            if modo_verif in ('dupla', 'ia'):
+                cb(20, "Varredura 2 (texto/regex)...")
+                v2 = self.processador.extrair_ocorrencias_texto(pdf_path, codigos)
+
+                if not v2:
+                    camadas = [v1]
+                else:
+                    camadas = [v1, v2]
+
+                if modo_verif == 'ia':
+                    cb(35, "Verificando com IA (Gemini Vision)...")
+                    v3 = self.processador.verificar_com_ia(
+                        pdf_path, codigos, verif_key, verif_modelo
+                    )
+                    if v3 is not None:
+                        camadas.append(v3)
+                        info_verif['ia_usada'] = True
+                    else:
+                        info_verif['ia_fallback'] = True
+
+                cb(45, "Reconciliando resultados...")
+                rec = self.processador.reconciliar(camadas, codigos)
+
+                concordantes = rec['concordantes']
+                conflitos    = rec['conflitos']
+
+                if conflitos:
+                    import queue
+                    q = queue.Queue()
+                    self.after(0, lambda: self._abrir_modal_conflitos(conflitos, q))
+                    escolhas = q.get()
+
+                    if escolhas is None:
+                        self.after(0, self._finalizar_processamento)
+                        return
+
+                    for re_val, cod, val in escolhas:
+                        if re_val not in concordantes:
+                            nome = next(
+                                (c.get(re_val, {}).get('nome', '') for c in camadas if re_val in c), ''
+                            )
+                            concordantes[re_val] = {'nome': nome, 'ocorrencias': {}}
+                        concordantes[re_val]['ocorrencias'][cod] = val
+
+                dados_reconciliados = concordantes
+                info_verif['concordantes'] = len(concordantes)
+                info_verif['conflitos_resolvidos'] = len(conflitos)
+
+            resultado = self.processador.processar(
+                pdf_path, xlsx_path, output_path, codigos, cb, dias_mes, colunas_qt,
+                dados_externos=dados_reconciliados if modo_verif != 'unica' else None
+            )
+            resultado['info_verif'] = info_verif
+
             self.after(0, self._marcar_sucesso_progresso)
             self.after(750, lambda: self._mostrar_resultados(resultado, output_path))
         except Exception as e:
