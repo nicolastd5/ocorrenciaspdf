@@ -80,6 +80,44 @@ class ProcessadorOcorrencias:
 
         return resultados
 
+    def extrair_ocorrencias_texto(self, pdf_path, codigos_alvo):
+        """
+        Segunda varredura: extrai ocorrências via extract_text() + regex posicional.
+        Independente de detecção de tabelas. Mesmo formato de retorno que
+        extrair_ocorrencias: {re: {'nome': str, 'ocorrencias': {codigo: contagem}}}
+        """
+        import re as _re
+        resultados = {}
+        codigos_set = set(codigos_alvo)
+        # RE: 5+ dígitos no início ou após espaços, precedido de nome
+        re_linha = _re.compile(r'^(.+?)\s{2,}(\d{5,})\b')
+
+        with pdfplumber.open(pdf_path) as pdf:
+            for pagina in pdf.pages:
+                texto = pagina.extract_text()
+                if not texto:
+                    continue
+                for linha in texto.splitlines():
+                    m = re_linha.match(linha.strip())
+                    if not m:
+                        continue
+                    nome = m.group(1).strip()
+                    codigo_re = m.group(2).strip()
+                    tokens = linha.split()
+                    ocorrencias = {}
+                    for tok in tokens:
+                        tok_clean = tok.strip()
+                        if tok_clean in codigos_set:
+                            ocorrencias[tok_clean] = ocorrencias.get(tok_clean, 0) + 1
+                    if ocorrencias:
+                        if codigo_re not in resultados:
+                            resultados[codigo_re] = {'nome': nome, 'ocorrencias': {}}
+                        for k, v in ocorrencias.items():
+                            resultados[codigo_re]['ocorrencias'][k] = (
+                                resultados[codigo_re]['ocorrencias'].get(k, 0) + v
+                            )
+        return resultados
+
     def montar_motivo(self, ocorrencias, codigos_selecionados):
         """
         Monta a string de motivo a partir das ocorrências.
