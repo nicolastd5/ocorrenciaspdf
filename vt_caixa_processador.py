@@ -13,7 +13,9 @@ COLUNAS_CSV = [
     'UF', 'ESTADO', 'MATRÍCULA', 'NOME DO FUNCIONÁRIO', 'CPF', 'RG',
     'DATA DE NASCIMENTO', 'CARGO', 'DEPARTAMENTO', 'NOME DA MÃE',
     'BENEFÍCIO DO FUNCIONÁRIO', 'VALOR UNITÁRIO', 'QUANTIDADE DIÁRIA',  # Coluna Q
-    'PERÍODO DE DIAS TRABALHADOS',  # Coluna T (layout solicitado: preencher até T)
+    'PERÍODO DE DIAS TRABALHADOS',  # Coluna T
+    'TIPO VALOR',   # Coluna U
+    'REDE RECARGA', # Coluna V — valor 3 quando operadora for RIOCARD
 ]
 
 # Endereço fixo da empresa (primeira parte do CSV — linhas antes da MATRÍCULA)
@@ -735,6 +737,28 @@ class ProcessadorVTCaixa:
         s = str(texto).replace('\r', ' ').replace('\n', ' ').replace('\t', ' ')
         return re.sub(r'\s+', ' ', s).strip()
 
+    # Tabela: (substring operadora uppercase, valor unitário normalizado) → código benefício
+    # Valor None = qualquer valor (ex: VIANOVA TOP independe do valor)
+    _CODIGOS_BENEFICIO = [
+        ('SPTRANS', '11,64', '701'),
+        ('SPTRANS', '11,84', '695'),
+        ('SPTRANS', '22,64', '698'),
+        ('VIANOVA - TOP', None, '13665'),
+        ('CIDADAO MANAUS', None, '4481'),
+        ('VIACAO BOA VISTA', None, '3275'),
+        ('VIAÇÃO BOA VISTA', None, '3275'),
+    ]
+
+    def _resolver_codigo_beneficio(self, administradora, valor_unitario):
+        """Retorna o código de benefício quando a operadora+valor bate uma regra, ou None."""
+        adm_up = administradora.upper()
+        for operadora, valor_regra, codigo in self._CODIGOS_BENEFICIO:
+            if operadora not in adm_up:
+                continue
+            if valor_regra is None or valor_unitario == valor_regra:
+                return codigo
+        return None
+
     def _cruzar_dados(self, pdf_rows, excel_data):
         registros = []
         nao_encontrados = []
@@ -771,7 +795,7 @@ class ProcessadorVTCaixa:
                 'QUANTIDADE DIÁRIA':           '2',
                 'PERÍODO DE DIAS TRABALHADOS': str(dias_trab),
                 'TIPO VALOR':                  '',
-                'REDE RECARGA':                self._sanitizar(linha['administradora']),
+                'REDE RECARGA':                '3' if 'RIOCARD' in self._sanitizar(linha['administradora']).upper() else '',
                 'CEP RESIDENCIAL':             ex['Cep'],
                 'LOGRADOURO RESIDENCIAL':      self._sanitizar(ex['Endereço']),
                 'NÚMERO RESIDENCIAL':          ex['Numero'],
@@ -793,6 +817,18 @@ class ProcessadorVTCaixa:
             adm_forn = ex.get('Administradora(Fornecedor)')
             if adm_forn:
                 reg[chave_benef] = self._sanitizar(adm_forn)
+
+        # Substituir BENEFÍCIO DO FUNCIONÁRIO pelo código quando operadora+valor bater uma regra
+        for reg in registros:
+            chave_benef = next((k for k in reg.keys() if 'BENEF' in k and 'FUNCION' in k), None)
+            if not chave_benef:
+                continue
+            codigo = self._resolver_codigo_beneficio(
+                reg[chave_benef],
+                reg.get('VALOR UNITÁRIO', ''),
+            )
+            if codigo:
+                reg[chave_benef] = codigo
 
         return registros, nao_encontrados
 

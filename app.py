@@ -50,7 +50,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.29"
+VERSION = "1.31"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -130,6 +130,7 @@ class App(tk.Tk):
 
         self.verif_api_key.set(_cfg.get('gemini_api_key_ocorrencias', ''))
         self.verif_modelo.set(_cfg.get('gemini_modelo_ocorrencias', ''))
+        self.vtc_api_key.set(_cfg.get('vtc_api_key', ''))
 
         self.processador = ProcessadorOcorrencias()
         self._criar_interface()
@@ -303,6 +304,41 @@ class App(tk.Tk):
         self._tab_frames[tab_id].pack(fill='both', expand=True)
 
     def _criar_aba_processar(self, parent):
+        # Botão Processar fixo no rodapé (fora do scroll)
+        self.btn_processar = tk.Button(
+            parent, text="▶  PROCESSAR ARQUIVOS",
+            font=("Segoe UI", 13, "bold"),
+            fg=CORES['btn_fg'], bg=CORES['btn_bg'],
+            activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
+            relief='flat', cursor='hand2', pady=14, borderwidth=0,
+            command=self._iniciar_processamento
+        )
+        self.btn_processar.pack(side='bottom', fill='x', pady=(4, 0))
+        self._bind_hover(self.btn_processar, CORES['btn_bg'], CORES['btn_hover'])
+
+        # Área de Resultados (também fora do scroll, acima do botão)
+        self.resultado_frame = tk.Frame(parent, bg=CORES['bg'])
+        self.resultado_frame.pack(side='bottom', fill='x', pady=(8, 0))
+
+        # Canvas scrollável para o conteúdo dos cards
+        _canvas = tk.Canvas(parent, bg=CORES['bg'], highlightthickness=0)
+        _vsb = ttk.Scrollbar(parent, orient='vertical', command=_canvas.yview)
+        _scroll_inner = tk.Frame(_canvas, bg=CORES['bg'])
+        _scroll_inner.bind(
+            '<Configure>',
+            lambda e: _canvas.configure(scrollregion=_canvas.bbox('all'))
+        )
+        _canvas.create_window((0, 0), window=_scroll_inner, anchor='nw')
+        _canvas.configure(yscrollcommand=_vsb.set)
+        _vsb.pack(side='right', fill='y')
+        _canvas.pack(side='left', fill='both', expand=True)
+        _canvas.bind('<Enter>', lambda e: _canvas.bind_all(
+            '<MouseWheel>', lambda ev: _canvas.yview_scroll(-1 * (ev.delta // 120), 'units')))
+        _canvas.bind('<Leave>', lambda e: _canvas.unbind_all('<MouseWheel>'))
+
+        # A partir daqui, todos os cards vão em _scroll_inner
+        parent = _scroll_inner
+
         # Seleção de Arquivos
         files_frame = self._criar_card(parent, "📁  Arquivos de Entrada")
         self._criar_file_picker(files_frame, "PDF de Faltas", self.pdf_path,
@@ -464,21 +500,6 @@ class App(tk.Tk):
         ]:
             self._criar_toggle_qt(linha_qt, sigla, label, var)
 
-        # Botão Processar
-        self.btn_processar = tk.Button(
-            parent, text="▶  PROCESSAR ARQUIVOS",
-            font=("Segoe UI", 13, "bold"),
-            fg=CORES['btn_fg'], bg=CORES['btn_bg'],
-            activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
-            relief='flat', cursor='hand2', pady=14, borderwidth=0,
-            command=self._iniciar_processamento
-        )
-        self.btn_processar.pack(fill='x', pady=(4, 0))
-        self._bind_hover(self.btn_processar, CORES['btn_bg'], CORES['btn_hover'])
-
-        # Área de Resultados
-        self.resultado_frame = tk.Frame(parent, bg=CORES['bg'])
-        self.resultado_frame.pack(fill='both', expand=True, pady=(8, 0))
 
     def _criar_aba_historico(self, parent):
         self._historico_frame = parent

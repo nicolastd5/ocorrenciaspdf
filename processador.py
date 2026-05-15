@@ -214,6 +214,7 @@ class ProcessadorOcorrencias:
             import pypdfium2 as pdfium
             import google.generativeai as genai
             import json as _json
+            import time as _time
 
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(modelo)
@@ -232,6 +233,8 @@ class ProcessadorOcorrencias:
             resultados = {}
 
             for i in range(len(doc)):
+                if i > 0:
+                    _time.sleep(4)
                 page = doc[i]
                 bitmap = page.render(scale=2)
                 img = bitmap.to_pil()
