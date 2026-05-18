@@ -744,6 +744,8 @@ class ProcessadorVTCaixa:
         ('SPTRANS', '11,84', '695'),
         ('SPTRANS', '22,64', '698'),
         ('VIANOVA - TOP', None, '13665'),
+        ('ONPAG RADIAL', None, '13671'),
+        ('GUARUPASS', None, '9100'),
         ('CIDADAO MANAUS', None, '4481'),
         ('VIACAO BOA VISTA', None, '3275'),
         ('VIAÇÃO BOA VISTA', None, '3275'),
@@ -817,6 +819,15 @@ class ProcessadorVTCaixa:
             adm_forn = ex.get('Administradora(Fornecedor)')
             if adm_forn:
                 reg[chave_benef] = self._sanitizar(adm_forn)
+
+        # Substituições de departamento
+        _DEPART_MAP = {
+            'CEF LESTE 10 SP 4719/2022': 'CEF 10 84',
+        }
+        for reg in registros:
+            depart = reg.get('DEPARTAMENTO', '')
+            if depart in _DEPART_MAP:
+                reg['DEPARTAMENTO'] = _DEPART_MAP[depart]
 
         # Substituir BENEFÍCIO DO FUNCIONÁRIO pelo código quando operadora+valor bater uma regra
         for reg in registros:
