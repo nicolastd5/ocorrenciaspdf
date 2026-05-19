@@ -50,7 +50,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.33"
+VERSION = "1.34"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -215,6 +215,25 @@ class App(tk.Tk):
                   command=banner.destroy
                   ).pack(side='right')
 
+    def _bind_scroll(self, canvas, inner_frame):
+        """Vincula scroll do mouse ao canvas e a todos os seus filhos recursivamente."""
+        def _scroll(ev):
+            canvas.yview_scroll(-1 * (ev.delta // 120), 'units')
+
+        def _bind_tree(w):
+            w.bind('<MouseWheel>', _scroll)
+            for child in w.winfo_children():
+                _bind_tree(child)
+
+        canvas.bind('<MouseWheel>', _scroll)
+        inner_frame.bind('<MouseWheel>', _scroll)
+
+        # Re-vincula filhos novos quando inner_frame muda
+        def _on_configure(e):
+            _bind_tree(inner_frame)
+
+        inner_frame.bind('<Configure>', _on_configure, add=True)
+
     def _bind_hover(self, widget, bg_normal, bg_hover, fg_normal=None, fg_hover=None):
         def on_enter(e):
             if str(widget.cget('state')) != 'disabled':
@@ -337,9 +356,7 @@ class App(tk.Tk):
         _canvas.configure(yscrollcommand=_vsb.set)
         _vsb.pack(side='right', fill='y')
         _canvas.pack(side='left', fill='both', expand=True)
-        _canvas.bind('<Enter>', lambda e: _canvas.bind_all(
-            '<MouseWheel>', lambda ev: _canvas.yview_scroll(-1 * (ev.delta // 120), 'units')))
-        _canvas.bind('<Leave>', lambda e: _canvas.unbind_all('<MouseWheel>'))
+        self._bind_scroll(_canvas, _scroll_inner)
 
         # A partir daqui, todos os cards vão em _scroll_inner
         parent = _scroll_inner
@@ -555,9 +572,7 @@ class App(tk.Tk):
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side='left', fill='both', expand=True)
         sb.pack(side='right', fill='y')
-        canvas.bind('<Enter>', lambda e: canvas.bind_all(
-            '<MouseWheel>', lambda ev: canvas.yview_scroll(-1*(ev.delta//120), 'units')))
-        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+        self._bind_scroll(canvas, scroll_frame)
 
         for i, entrada in enumerate(reversed(self._historico)):
             card = tk.Frame(scroll_frame, bg=CORES['bg_card'],
@@ -830,9 +845,7 @@ class App(tk.Tk):
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side='left', fill='both', expand=True)
         sb.pack(side='right', fill='y')
-        canvas.bind('<Enter>', lambda e: canvas.bind_all(
-            '<MouseWheel>', lambda ev: canvas.yview_scroll(-1*(ev.delta//120), 'units')))
-        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+        self._bind_scroll(canvas, scroll_frame)
 
         total = len(self._historico_vtc)
         for i, entrada in enumerate(reversed(self._historico_vtc)):
@@ -2533,9 +2546,7 @@ class App(tk.Tk):
         canvas.configure(yscrollcommand=sb.set)
         canvas.pack(side='left', fill='both', expand=True)
         sb.pack(side='right', fill='y')
-        canvas.bind('<Enter>', lambda e: canvas.bind_all(
-            '<MouseWheel>', lambda ev: canvas.yview_scroll(-1*(ev.delta//120), 'units')))
-        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+        self._bind_scroll(canvas, scroll_frame)
 
         escolha_vars = {}
 
