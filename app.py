@@ -50,7 +50,7 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.31"
+VERSION = "1.33"
 GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
 GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
 
@@ -86,9 +86,9 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Processador de Ocorrências")
-        self.geometry("920x780")
+        self.geometry("1080x780")
         self.configure(bg=CORES['bg'])
-        self.minsize(800, 650)
+        self.minsize(1000, 650)
 
         self.pdf_path = tk.StringVar()
         self.xlsx_path = tk.StringVar()
@@ -233,36 +233,36 @@ class App(tk.Tk):
         # Barra de acento no topo
         tk.Frame(self, bg=CORES['accent'], height=3).pack(fill='x', side='top')
 
-        # Cabeçalho com título e abas
-        topbar = tk.Frame(self, bg=CORES['bg'])
-        topbar.pack(fill='x', padx=20, pady=(14, 0))
+        # Linha 1: título + versão
+        titlebar = tk.Frame(self, bg=CORES['bg'])
+        titlebar.pack(fill='x', padx=20, pady=(12, 4))
 
-        tk.Label(topbar, text="Processador de Ocorrências",
+        tk.Label(titlebar, text="Processador de Ocorrências",
                  font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Label(topbar, text=f"v{VERSION}",
+        tk.Label(titlebar, text=f"v{VERSION}",
                  font=("Segoe UI", 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
-        # Botões de aba alinhados à direita
+        # Linha 2: abas centralizadas
         self._tab_btns = {}
         self._tab_frames = {}
-        tabs_container = tk.Frame(topbar, bg=CORES['bg'])
-        tabs_container.pack(side='right')
+        tabbar = tk.Frame(self, bg=CORES['bg'])
+        tabbar.pack(fill='x', padx=20, pady=(0, 0))
 
-        for tab_id, label in [('processar', '⚙  Processar'), ('historico', '🕘  Histórico'), ('vtcaixa', '💳  VT Caixa'), ('historico_vtc', '🕘  Histórico VT'), ('sobre', 'ℹ  Sobre')]:
-            btn = tk.Button(tabs_container, text=label,
+        for tab_id, label in [('processar', '⚙  Processar'), ('historico', '🕘  Histórico'), ('vtcaixa', '💳  VT Caixa'), ('historico_vtc', '🕘  Hist. VT'), ('codigos', '🏷  Códigos'), ('sobre', 'ℹ  Sobre')]:
+            btn = tk.Button(tabbar, text=label,
                             font=("Segoe UI", 10),
                             fg=CORES['fg_dim'], bg=CORES['bg'],
                             relief='flat', cursor='hand2',
-                            padx=14, pady=6, borderwidth=0,
+                            padx=12, pady=6, borderwidth=0,
                             command=lambda t=tab_id: self._mostrar_aba(t))
             btn.pack(side='left', padx=(0, 2))
             self._tab_btns[tab_id] = btn
 
         # Linha separadora
-        tk.Frame(self, bg=CORES['border'], height=1).pack(fill='x', padx=20, pady=(10, 0))
+        tk.Frame(self, bg=CORES['border'], height=1).pack(fill='x', padx=20, pady=(4, 0))
 
         # Área de conteúdo
         content = tk.Frame(self, bg=CORES['bg'])
@@ -283,6 +283,10 @@ class App(tk.Tk):
         frame_historico_vtc = tk.Frame(content, bg=CORES['bg'])
         self._criar_aba_historico_vtc(frame_historico_vtc)
         self._tab_frames['historico_vtc'] = frame_historico_vtc
+
+        frame_codigos = tk.Frame(content, bg=CORES['bg'])
+        self._criar_aba_codigos(frame_codigos)
+        self._tab_frames['codigos'] = frame_codigos
 
         frame_sobre = tk.Frame(content, bg=CORES['bg'])
         self._criar_aba_sobre(frame_sobre)
@@ -324,11 +328,12 @@ class App(tk.Tk):
         _canvas = tk.Canvas(parent, bg=CORES['bg'], highlightthickness=0)
         _vsb = ttk.Scrollbar(parent, orient='vertical', command=_canvas.yview)
         _scroll_inner = tk.Frame(_canvas, bg=CORES['bg'])
+        _win_id = _canvas.create_window((0, 0), window=_scroll_inner, anchor='nw')
         _scroll_inner.bind(
             '<Configure>',
             lambda e: _canvas.configure(scrollregion=_canvas.bbox('all'))
         )
-        _canvas.create_window((0, 0), window=_scroll_inner, anchor='nw')
+        _canvas.bind('<Configure>', lambda e: _canvas.itemconfig(_win_id, width=e.width))
         _canvas.configure(yscrollcommand=_vsb.set)
         _vsb.pack(side='right', fill='y')
         _canvas.pack(side='left', fill='both', expand=True)
@@ -350,7 +355,7 @@ class App(tk.Tk):
         codigos_frame = self._criar_card(parent, "🏷  Códigos de Ocorrência")
 
         btn_row = tk.Frame(codigos_frame, bg=CORES['bg_card'])
-        btn_row.pack(fill='x', pady=(0, 10))
+        btn_row.pack(fill='x', pady=(0, 6))
 
         self._criar_mini_btn(btn_row, "Selecionar Todos",
                              self._selecionar_todos).pack(side='left')
@@ -386,7 +391,7 @@ class App(tk.Tk):
         verif_frame = self._criar_card(parent, "🔍  Verificação")
 
         modo_row = tk.Frame(verif_frame, bg=CORES['bg_card'])
-        modo_row.pack(fill='x', pady=(0, 6))
+        modo_row.pack(fill='x', pady=(0, 2))
 
         modos = [
             ('unica',  'Varredura única',    'Comportamento atual'),
@@ -1473,6 +1478,92 @@ class App(tk.Tk):
             self._vtc_janela_progresso.destroy()
         self._vtc_janela_progresso = None
 
+    def _criar_aba_codigos(self, parent):
+        # Scroll
+        canvas = tk.Canvas(parent, bg=CORES['bg'], highlightthickness=0)
+        sb = tk.Scrollbar(parent, orient='vertical', command=canvas.yview)
+        canvas.configure(yscrollcommand=sb.set)
+        sb.pack(side='right', fill='y')
+        canvas.pack(side='left', fill='both', expand=True)
+        inner = tk.Frame(canvas, bg=CORES['bg'])
+        win_id = canvas.create_window((0, 0), window=inner, anchor='nw')
+        inner.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>', lambda e: canvas.itemconfig(win_id, width=e.width))
+        inner.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), 'units'))
+
+        # ── Card: Códigos de benefício ───────────────────────────────
+        from vt_caixa_processador import ProcessadorVTCaixa
+        codigos = ProcessadorVTCaixa._CODIGOS_BENEFICIO
+
+        card_cod = self._criar_card(inner, "🏷  Operadora → Código de Benefício (VT Caixa)")
+
+        def _copiar(valor):
+            self.clipboard_clear()
+            self.clipboard_append(valor)
+
+        tabela_cod = tk.Frame(card_cod, bg=CORES['bg_card'])
+        tabela_cod.pack(fill='x', expand=True)
+        tabela_cod.columnconfigure(0, weight=6)
+        tabela_cod.columnconfigure(1, weight=2)
+        tabela_cod.columnconfigure(2, weight=1)
+        tabela_cod.columnconfigure(3, weight=0)
+
+        for col, txt in enumerate(["Operadora", "Valor Unitário", "Código", ""]):
+            tk.Label(tabela_cod, text=txt, font=("Segoe UI", 9, "bold"),
+                     fg=CORES['fg_bright'], bg=CORES['bg_input'],
+                     anchor='w', padx=8, pady=4).grid(row=0, column=col, sticky='ew', padx=(0, 1))
+
+        for i, (operadora, valor, codigo) in enumerate(codigos):
+            bg = CORES['bg_card'] if i % 2 == 0 else CORES['bg_input']
+            r = i + 1
+            tk.Label(tabela_cod, text=operadora, font=("Consolas", 9),
+                     fg=CORES['fg'], bg=bg, anchor='w', padx=8, pady=3).grid(row=r, column=0, sticky='ew', padx=(0, 1))
+            tk.Label(tabela_cod, text=valor if valor else "qualquer", font=("Consolas", 9),
+                     fg=CORES['fg_dim'] if not valor else CORES['fg'],
+                     bg=bg, anchor='w', padx=8).grid(row=r, column=1, sticky='ew', padx=(0, 1))
+            tk.Label(tabela_cod, text=codigo, font=("Consolas", 9, "bold"),
+                     fg=CORES['accent_light'], bg=bg,
+                     anchor='w', padx=8).grid(row=r, column=2, sticky='ew', padx=(0, 1))
+            tk.Button(tabela_cod, text="📋", font=("Segoe UI", 8),
+                      fg=CORES['fg_dim'], bg=bg, relief='flat', cursor='hand2',
+                      borderwidth=0, padx=6, pady=2,
+                      command=lambda c=codigo: _copiar(c)).grid(row=r, column=3, sticky='ew', padx=(0, 4))
+
+        # ── Card: Substituições de departamento ──────────────────────
+        depart_map = {
+            'CEF LESTE 10 SP 4719/2022': 'CEF 10 84',
+            'CEF 17 CONTRATO 477/2026':  'CEF 17 LIMPEZA',
+        }
+
+        card_dep = self._criar_card(inner, "🏢  Substituições de Departamento (VT Caixa)")
+
+        tabela_dep = tk.Frame(card_dep, bg=CORES['bg_card'])
+        tabela_dep.pack(fill='x', expand=True)
+        tabela_dep.columnconfigure(0, weight=5)
+        tabela_dep.columnconfigure(1, weight=0)
+        tabela_dep.columnconfigure(2, weight=3)
+        tabela_dep.columnconfigure(3, weight=0)
+
+        for col, txt in enumerate(["Departamento original", "", "Substituto", ""]):
+            tk.Label(tabela_dep, text=txt, font=("Segoe UI", 9, "bold"),
+                     fg=CORES['fg_bright'], bg=CORES['bg_input'],
+                     anchor='w', padx=8, pady=4).grid(row=0, column=col, sticky='ew', padx=(0, 1))
+
+        for i, (original, substituto) in enumerate(depart_map.items()):
+            bg = CORES['bg_card'] if i % 2 == 0 else CORES['bg_input']
+            r = i + 1
+            tk.Label(tabela_dep, text=original, font=("Consolas", 9),
+                     fg=CORES['fg'], bg=bg, anchor='w', padx=8, pady=3).grid(row=r, column=0, sticky='ew', padx=(0, 1))
+            tk.Label(tabela_dep, text="→", font=("Segoe UI", 9),
+                     fg=CORES['fg_dim'], bg=bg, anchor='center', padx=6).grid(row=r, column=1, sticky='ew', padx=(0, 1))
+            tk.Label(tabela_dep, text=substituto, font=("Consolas", 9, "bold"),
+                     fg=CORES['accent_light'], bg=bg,
+                     anchor='w', padx=8).grid(row=r, column=2, sticky='ew', padx=(0, 1))
+            tk.Button(tabela_dep, text="📋", font=("Segoe UI", 8),
+                      fg=CORES['fg_dim'], bg=bg, relief='flat', cursor='hand2',
+                      borderwidth=0, padx=6, pady=2,
+                      command=lambda s=substituto: _copiar(s)).grid(row=r, column=3, sticky='ew', padx=(0, 4))
+
     def _criar_aba_sobre(self, parent):
         frame = tk.Frame(parent, bg=CORES['bg'])
         frame.pack(fill='both', expand=True, padx=40, pady=30)
@@ -1583,7 +1674,7 @@ class App(tk.Tk):
         """Card com borda lateral colorida e título."""
         wrapper = tk.Frame(parent, bg=CORES['bg_card'],
                            highlightbackground=CORES['border'], highlightthickness=1)
-        wrapper.pack(fill='x', pady=(0, 12))
+        wrapper.pack(fill='x', pady=(0, 8))
 
         # Faixa lateral de acento
         tk.Frame(wrapper, bg=CORES['accent'], width=3).pack(side='left', fill='y')
@@ -1592,12 +1683,12 @@ class App(tk.Tk):
         card.pack(side='left', fill='both', expand=True)
 
         header = tk.Frame(card, bg=CORES['bg_card'])
-        header.pack(fill='x', padx=16, pady=(12, 8))
-        tk.Label(header, text=titulo, font=("Segoe UI", 11, "bold"),
+        header.pack(fill='x', padx=14, pady=(8, 6))
+        tk.Label(header, text=titulo, font=("Segoe UI", 10, "bold"),
                  fg=CORES['fg_bright'], bg=CORES['bg_card']).pack(side='left')
 
         content = tk.Frame(card, bg=CORES['bg_card'])
-        content.pack(fill='x', padx=16, pady=(0, 14))
+        content.pack(fill='x', padx=14, pady=(0, 10))
         return content
 
     def _criar_file_picker(self, parent, label, var, filetypes, btn_text):
