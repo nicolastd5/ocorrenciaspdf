@@ -375,13 +375,56 @@ class App(tk.Tk):
     # Auto-update
     # ------------------------------------------------------------------
 
+    def _formatar_ultima_validacao(self):
+        """Lê last_validated_at do config e devolve string legível (ou '—')."""
+        try:
+            from license_client import LicenseClient
+            cfg = LicenseClient()._read_config()
+            ts = cfg.get('last_validated_at')
+            if not ts:
+                return '—'
+            # Formato salvo é ISO 8601 (ex.: 2026-05-20T18:27:39+00:00)
+            dt = datetime.fromisoformat(ts)
+            try:
+                dt_local = dt.astimezone()
+            except Exception:
+                dt_local = dt
+            return dt_local.strftime('%d/%m/%Y %H:%M')
+        except Exception:
+            return '—'
+
     def _verificar_conexao_servidor(self):
         """Verifica conectividade e baixa config (API key Gemini) do servidor."""
+        # Cancela qualquer countdown pendente — vamos reagendar ao terminar.
+        if getattr(self, '_conn_countdown_job', None):
+            try:
+                self.after_cancel(self._conn_countdown_job)
+            except Exception:
+                pass
+            self._conn_countdown_job = None
+
+        # Marca os campos do card Sobre como "verificando" (se já existem).
+        rows = getattr(self, '_sobre_status_rows', None)
+        if rows:
+            rows.get('CONEXÃO') and rows['CONEXÃO'].configure(
+                text='Verificando…', fg=CORES['fg_dim'])
+            rows.get('PRÓXIMA CHECAGEM') and rows['PRÓXIMA CHECAGEM'].configure(
+                text='—', fg=CORES['fg_dim'])
+
         def _checar():
             from license_client import LicenseClient
             client = LicenseClient()
             result = client.validate()
-            self.after(0, lambda: self._atualizar_indicador_conexao(result.status))
+            latest_version = None
+            try:
+                from auto_update import _fetch_latest
+                latest = _fetch_latest()
+                if latest:
+                    latest_version = latest.get('version')
+            except Exception:
+                pass
+            self.after(0, lambda: self._atualizar_indicador_conexao(
+                result.status, latest_version=latest_version))
 
             if result.status == LicenseStatus.VALID:
                 key = client.get_saved_key()
@@ -416,19 +459,58 @@ class App(tk.Tk):
         cfg['gemini_api_key_ocorrencias'] = key
         cfg['vtc_api_key'] = key
         _salvar_config(cfg)
+        rows = getattr(self, '_sobre_status_rows', None)
+        if rows and rows.get('API GEMINI'):
+            mascara = (key[:6] + '…' + key[-4:]) if len(key) > 12 else 'configurada'
+            rows['API GEMINI'].configure(text=mascara, fg=CORES['fg_bright'])
 
-    def _atualizar_indicador_conexao(self, status):
+    CONN_REFRESH_INTERVAL = 30  # segundos entre revalidações automáticas
+
+    def _atualizar_indicador_conexao(self, status, latest_version=None):
         if status == LicenseStatus.VALID:
             cor, bg, borda, texto = CORES['success'], '#0f1a14', '#1f3a2a', 'Conectado ao servidor'
+            card_conn_text, card_conn_cor = 'Conectado', CORES['success']
         elif status == LicenseStatus.OFFLINE_TOLERATED:
             cor, bg, borda, texto = CORES['warning'], '#1a1610', '#3a3220', 'Offline — uso tolerado'
+            card_conn_text, card_conn_cor = 'Offline (tolerado)', CORES['warning']
         else:
             cor, bg, borda, texto = CORES['error'], '#1a0f10', '#3a1f22', 'Sem conexão com servidor'
+            card_conn_text, card_conn_cor = 'Sem conexão', CORES['error']
 
         self._conn_pill.configure(bg=bg, highlightbackground=borda)
         self._conn_dot.configure(fg=cor, bg=bg)
         self._conn_label.configure(text=texto, fg=cor, bg=bg)
-        # Sem re-verificação periódica — só o "Revalidar agora" da aba Sobre.
+
+        # Atualiza o card "Status do servidor" da aba Sobre.
+        rows = getattr(self, '_sobre_status_rows', None)
+        if rows:
+            if rows.get('CONEXÃO'):
+                rows['CONEXÃO'].configure(text=card_conn_text, fg=card_conn_cor)
+            if latest_version and rows.get('VERSÃO MAIS RECENTE'):
+                rows['VERSÃO MAIS RECENTE'].configure(
+                    text=f'v{latest_version}', fg=CORES['fg_bright'])
+
+        # Atualiza "ÚLTIMA VALIDAÇÃO" no card Informações.
+        info_rows = getattr(self, '_sobre_info_rows', None)
+        if info_rows and info_rows.get('ÚLTIMA VALIDAÇÃO'):
+            info_rows['ÚLTIMA VALIDAÇÃO'].configure(
+                text=self._formatar_ultima_validacao())
+
+        # Agenda nova checagem automática.
+        self._agendar_proxima_checagem(self.CONN_REFRESH_INTERVAL)
+
+    def _agendar_proxima_checagem(self, segundos_restantes):
+        """Mostra countdown em PRÓXIMA CHECAGEM e dispara revalidação ao zerar."""
+        rows = getattr(self, '_sobre_status_rows', None)
+        if rows and rows.get('PRÓXIMA CHECAGEM'):
+            rows['PRÓXIMA CHECAGEM'].configure(
+                text=f'em {segundos_restantes}s', fg=CORES['fg_dim'])
+        if segundos_restantes <= 0:
+            self._conn_countdown_job = None
+            self._verificar_conexao_servidor()
+            return
+        self._conn_countdown_job = self.after(
+            1000, lambda: self._agendar_proxima_checagem(segundos_restantes - 1))
 
     def _verificar_atualizacao(self):
         """Verifica nova versão no VPS em background (chamada automática ao iniciar)."""
@@ -562,7 +644,9 @@ class App(tk.Tk):
                                     font=(FONT_SANS, 9),
                                     fg=CORES['fg_dim'], bg=CORES['bg_card'])
         self._conn_label.pack(side='left')
-        self._verificar_conexao_servidor()
+        # Adiada para depois da construção das abas, garantindo que o card
+        # "Status do servidor" da aba Sobre já exista quando o callback rodar.
+        self.after(100, self._verificar_conexao_servidor)
 
         # Linha 2: abas centralizadas
         self._tab_btns = {}
@@ -1250,9 +1334,21 @@ class App(tk.Tk):
             if entrada['nao_encontrados']:
                 det = tk.Frame(card, bg=CORES['bg_card'])
                 det.pack(fill='x', padx=14, pady=(0, 4))
-                tk.Label(det, text="Sem cadastro no Excel:",
+                nome_cadastral = entrada.get('arquivo_cadastral', '')
+                titulo_sem = (
+                    f"Sem cadastro no Excel Cadastral ({nome_cadastral}):"
+                    if nome_cadastral
+                    else "Sem cadastro no Excel Cadastral:"
+                )
+                tk.Label(det, text=titulo_sem,
                          font=(FONT_SANS, 9, "bold"), fg=CORES['error'],
                          bg=CORES['bg_card']).pack(anchor='w', pady=(0, 3))
+                nome_fonte = entrada.get('arquivo_fonte', '')
+                if nome_fonte:
+                    tk.Label(det,
+                             text=f"  (presentes na fonte {nome_fonte} mas não encontrados no cadastral)",
+                             font=(FONT_SANS, 8), fg=CORES['fg_dim'],
+                             bg=CORES['bg_card']).pack(anchor='w', pady=(0, 3))
                 for item in entrada['nao_encontrados']:
                     tk.Label(det, text=f"  • {item}",
                              font=(FONT_MONO, 9), fg=CORES['fg_dim'],
@@ -1427,7 +1523,8 @@ class App(tk.Tk):
                                            api_key=api_key,
                                            model_id=model_id)
                 self.after(0, self._vtc_marcar_sucesso_progresso)
-                self.after(750, lambda r=resultado: self._vtc_mostrar_resultado(r, out))
+                self.after(750, lambda r=resultado: self._vtc_mostrar_resultado(
+                    r, out, fonte_path=fonte, cadastral_path=xls))
             except Exception as e:
                 self.after(0, lambda err=str(e): self._vtc_log_append(f"Erro: {err}", 'err'))
                 self.after(0, lambda: messagebox.showerror("Erro ao gerar CSV", str(e)))
@@ -1707,7 +1804,8 @@ class App(tk.Tk):
         self._vtc_anim_frame = 0
         self._vtc_animar_btn()
 
-    def _vtc_mostrar_resultado(self, resultado, output_path):
+    def _vtc_mostrar_resultado(self, resultado, output_path,
+                               fonte_path=None, cadastral_path=None):
         self._historico_vtc.append({
             'arquivo':        os.path.basename(output_path),
             'data':           datetime.now().strftime('%d/%m/%Y %H:%M'),
@@ -1717,6 +1815,8 @@ class App(tk.Tk):
             'nao_encontrados': list(resultado['nao_encontrados']),
             'avisos_csv':     list(resultado.get('avisos_csv', [])),
             'alertas_ia':     list(resultado.get('alertas_ia', [])),
+            'arquivo_fonte':     os.path.basename(fonte_path) if fonte_path else '',
+            'arquivo_cadastral': os.path.basename(cadastral_path) if cadastral_path else '',
         })
         self._vtc_atualizar_historico()
 
@@ -2007,14 +2107,7 @@ class App(tk.Tk):
 
         client = LicenseClient()
         chave = (client.get_saved_key() or '').strip() or '—'
-        ultima_val = '—'
-        try:
-            cfg = client._read_config()
-            ts = cfg.get('last_validated_at')
-            if ts:
-                ultima_val = datetime.fromtimestamp(float(ts)).strftime('%d/%m/%Y %H:%M')
-        except Exception:
-            pass
+        ultima_val = self._formatar_ultima_validacao()
         config_path = '~/.ocorrencias_config.json'
 
         info_rows = [
@@ -2024,6 +2117,7 @@ class App(tk.Tk):
             ('ÚLTIMA VALIDAÇÃO', ultima_val,                     'mono'),
             ('CONFIG LOCAL',     config_path,                    'mono'),
         ]
+        self._sobre_info_rows = {}
         for label, valor, kind in info_rows:
             row = tk.Frame(info_card, bg=CORES['bg_card'])
             row.pack(fill='x', pady=4)
@@ -2032,10 +2126,12 @@ class App(tk.Tk):
                      fg=CORES['fg_dim'], bg=CORES['bg_card'],
                      width=18, anchor='w').pack(side='left')
             font = (FONT_MONO, 10) if kind == 'mono' else (FONT_SANS, 10, "bold")
-            tk.Label(row, text=valor,
+            val_lbl = tk.Label(row, text=valor,
                      font=font,
                      fg=CORES['fg_bright'], bg=CORES['bg_card'],
-                     anchor='w').pack(side='left')
+                     anchor='w')
+            val_lbl.pack(side='left')
+            self._sobre_info_rows[label] = val_lbl
 
         # Coluna direita: Status do servidor
         col_right = tk.Frame(cols, bg=CORES['bg'])

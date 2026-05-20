@@ -847,6 +847,10 @@ class ProcessadorVTCaixa:
         ('RIOCARD', None, '2232'),
         ('JAÉ', None, '14816'),
         ('JAE', None, '14816'),
+        ('BRB MOBILIDADE', None, '2839'),
+        ('CARTAO UTB', None, '10568'),
+        ('AMAZONIA INTER', None, '14039'),
+        ('TAGUATUR AGUAS', None, '10985'),
     ]
 
     def _resolver_codigo_beneficio(self, administradora, valor_unitario):
