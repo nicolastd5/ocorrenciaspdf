@@ -226,7 +226,7 @@ class App(tk.Tk):
         inner.pack(fill='x', padx=14, pady=8)
 
         tk.Label(inner,
-                 text=f"Nova versao disponivel: v{nova_versao}",
+                 text=f"Nova versão disponível: v{nova_versao}",
                  font=("Segoe UI", 10, "bold"),
                  fg='#4ec994', bg='#1a3a1a').pack(side='left')
 
@@ -1672,7 +1672,7 @@ class App(tk.Tk):
         self._lbl_update_status.pack(pady=(0, 10))
 
         self._btn_buscar_update = tk.Button(
-            update_row, text="Buscar Atualizacoes",
+            update_row, text="Buscar Atualizações",
             font=("Segoe UI", 10, "bold"),
             fg=CORES['btn_fg'], bg=CORES['accent'],
             activeforeground=CORES['btn_fg'], activebackground=CORES['accent_hover'],
@@ -1694,18 +1694,18 @@ class App(tk.Tk):
         threading.Thread(target=_checar, daemon=True).start()
 
     def _exibir_resultado_update(self, tag, erro):
-        self._btn_buscar_update.configure(state='normal', text="Buscar Atualizacoes")
+        self._btn_buscar_update.configure(state='normal', text="Buscar Atualizações")
         if erro:
             self._lbl_update_status.configure(
                 text=f"Erro: {erro}", fg=CORES['error'])
         elif tag and self._parse_versao(tag) > self._parse_versao(VERSION):
             self._lbl_update_status.configure(
-                text=f"Nova versao disponivel: v{tag}", fg=CORES['success'])
+                text=f"Nova versão disponível: v{tag}", fg=CORES['success'])
             self._mostrar_banner_update(tag)
             if not hasattr(self, '_btn_download_update') or not self._btn_download_update.winfo_exists():
                 self._btn_download_update = tk.Button(
                     self._btn_buscar_update.master,
-                    text="Atualizar para v" + tag,
+                    text=f"Atualizar para v{tag}",
                     font=("Segoe UI", 10),
                     fg=CORES['btn_fg'], bg=CORES['accent'],
                     activeforeground=CORES['btn_fg'], activebackground=CORES['accent_hover'],
@@ -1715,7 +1715,7 @@ class App(tk.Tk):
                 self._btn_download_update.pack(pady=(8, 0))
         else:
             self._lbl_update_status.configure(
-                text=f"Voce ja esta na versao mais recente (v{VERSION}).",
+                text=f"Você já está na versão mais recente (v{VERSION}).",
                 fg=CORES['fg_dim'])
 
     # ------------------------------------------------------------------
@@ -2742,7 +2742,7 @@ class SplashScreen(tk.Tk):
         self.geometry(f"{W}x{H}+{(sw - W) // 2}+{(sh - H) // 2}")
         self.configure(highlightbackground='#3c3c3c', highlightthickness=1)
 
-        tk.Label(self, text="Processador de Ocorrencias",
+        tk.Label(self, text="Processador de Ocorrências",
                  font=("Segoe UI", 14, "bold"),
                  fg='#ffffff', bg=self._BG).pack(pady=(38, 4))
 
@@ -2761,7 +2761,7 @@ class SplashScreen(tk.Tk):
                                  bg=self._BG, highlightthickness=0)
         self._canvas.pack(side='left', padx=(0, 10))
 
-        self._lbl_status = tk.Label(row, text="Iniciando",
+        self._lbl_status = tk.Label(row, text="Iniciando...",
                                     font=("Segoe UI", 10),
                                     fg='#6b737f', bg=self._BG,
                                     anchor='w', width=22)
@@ -2819,13 +2819,13 @@ def main():
     splash.update()
 
     # 1. Verificar e aplicar atualização
-    splash.set_status("Procurando atualizacoes")
+    splash.set_status("Procurando atualizações...")
     t0 = time.monotonic()
     check_and_update()
     _splash_wait(splash, int((time.monotonic() - t0) * 1000), min_ms=1200)
 
     # 2. Validar licença
-    splash.set_status("Validando licenca")
+    splash.set_status("Validando licença...")
     t0 = time.monotonic()
     ok = bootstrap_license()
     _splash_wait(splash, int((time.monotonic() - t0) * 1000), min_ms=1000)
@@ -2834,7 +2834,7 @@ def main():
         sys.exit(0)
 
     # 3. Carregando
-    splash.set_status("Carregando")
+    splash.set_status("Carregando...")
     _splash_wait(splash, 0, min_ms=600)
 
     splash.fechar()
