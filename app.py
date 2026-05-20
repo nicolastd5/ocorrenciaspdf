@@ -184,6 +184,29 @@ class App(tk.Tk):
     # Auto-update
     # ------------------------------------------------------------------
 
+    def _verificar_conexao_servidor(self):
+        """Verifica conectividade com o servidor e atualiza o indicador. Repete a cada 30s."""
+        def _checar():
+            from license_client import LicenseClient
+            result = LicenseClient().validate()
+            self.after(0, lambda: self._atualizar_indicador_conexao(result.status))
+
+        threading.Thread(target=_checar, daemon=True).start()
+
+    def _atualizar_indicador_conexao(self, status):
+        if status in (LicenseStatus.VALID, LicenseStatus.OFFLINE_TOLERATED):
+            if status == LicenseStatus.VALID:
+                cor, texto = '#4ec994', 'Conectado'
+            else:
+                cor, texto = '#cca700', 'Offline — tolerado'
+        else:
+            cor, texto = '#f14c4c', 'Sem conexão'
+
+        self._conn_dot.configure(fg=cor)
+        self._conn_label.configure(text=texto, fg=cor)
+        # reagenda para daqui 30s
+        self.after(30000, self._verificar_conexao_servidor)
+
     def _verificar_atualizacao(self):
         """Verifica nova versão no VPS em background (chamada automática ao iniciar)."""
         def _checar():
@@ -303,6 +326,19 @@ class App(tk.Tk):
         tk.Label(titlebar, text=f"v{VERSION}",
                  font=("Segoe UI", 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
+
+        # Indicador de conexão com o servidor
+        self._conn_frame = tk.Frame(titlebar, bg=CORES['bg'])
+        self._conn_frame.pack(side='right')
+        self._conn_dot = tk.Label(self._conn_frame, text="●",
+                                  font=("Segoe UI", 10),
+                                  fg=CORES['fg_dim'], bg=CORES['bg'])
+        self._conn_dot.pack(side='left')
+        self._conn_label = tk.Label(self._conn_frame, text="Verificando...",
+                                    font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                                    bg=CORES['bg'])
+        self._conn_label.pack(side='left', padx=(3, 0))
+        self._verificar_conexao_servidor()
 
         # Linha 2: abas centralizadas
         self._tab_btns = {}
