@@ -61,3 +61,27 @@ async def validate(request: Request) -> dict:
     )
     logger.info("validate: OK %s de %s", mask_key(body.key), _client_ip(request))
     return {"valid": True, "client_name": lic.client_name}
+
+
+class ConfigBody(BaseModel):
+    key: str
+
+
+@router.post("/config")
+@limiter.limit("30/minute")
+async def get_config(request: Request) -> dict:
+    try:
+        raw = await request.json()
+        body = ConfigBody(**raw)
+    except (ValidationError, ValueError, TypeError):
+        return {"error": "invalid_request"}
+
+    if not KEY_PATTERN.match(body.key):
+        return {"error": "invalid_key"}
+
+    settings = request.app.state.settings
+    lic = get_by_key(settings.db_path, body.key)
+    if lic is None or lic.revoked:
+        return {"error": "invalid_key"}
+
+    return {"gemini_api_key": settings.gemini_api_key}

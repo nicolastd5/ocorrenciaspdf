@@ -185,13 +185,46 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
 
     def _verificar_conexao_servidor(self):
-        """Verifica conectividade com o servidor e atualiza o indicador. Repete a cada 30s."""
+        """Verifica conectividade e baixa config (API key Gemini) do servidor."""
         def _checar():
             from license_client import LicenseClient
-            result = LicenseClient().validate()
+            client = LicenseClient()
+            result = client.validate()
             self.after(0, lambda: self._atualizar_indicador_conexao(result.status))
 
+            if result.status == LicenseStatus.VALID:
+                key = client.get_saved_key()
+                if key:
+                    self._buscar_config_servidor(key)
+
         threading.Thread(target=_checar, daemon=True).start()
+
+    def _buscar_config_servidor(self, license_key: str):
+        """Baixa a API key do Gemini do servidor e preenche os campos."""
+        import requests as _req
+        from license_client import LicenseClient
+        try:
+            resp = _req.post(
+                f"{LicenseClient.SERVER_URL}/api/config",
+                json={"key": license_key},
+                timeout=LicenseClient.TIMEOUT_SECONDS,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                gemini_key = data.get("gemini_api_key", "")
+                if gemini_key:
+                    self.after(0, lambda: self._aplicar_gemini_key(gemini_key))
+        except Exception:
+            pass
+
+    def _aplicar_gemini_key(self, key: str):
+        """Aplica a API key do Gemini nos dois campos e salva no config local."""
+        self.verif_api_key.set(key)
+        self.vtc_api_key.set(key)
+        cfg = _carregar_config()
+        cfg['gemini_api_key_ocorrencias'] = key
+        cfg['vtc_api_key'] = key
+        _salvar_config(cfg)
 
     def _atualizar_indicador_conexao(self, status):
         if status == LicenseStatus.VALID:
