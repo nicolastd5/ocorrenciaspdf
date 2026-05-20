@@ -79,6 +79,7 @@ def _download_and_relaunch(filename: str) -> None:
 
     bat.write_text(
         f'@echo off\n'
+        f'chcp 65001 >nul\n'
         f'echo [%date% %time%] updater iniciado, aguardando PID {pid} > "{log_path}"\n'
         f'set /a tries=0\n'
         f':wait\n'
@@ -107,7 +108,7 @@ def _download_and_relaunch(filename: str) -> None:
         f'{delete_old_line}'
         f'start "" "{target_exe}"\n'
         f'echo [%date% %time%] start emitido >> "{log_path}"\n',
-        encoding="utf-8",
+        encoding="utf-8-sig",
     )
 
     logger.info("Relançando via updater.bat -> %s (log: %s)", target_exe, log_path)
