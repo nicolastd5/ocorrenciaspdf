@@ -64,26 +64,53 @@ def _download_and_relaunch(filename: str) -> None:
         logger.warning("Falha ao baixar atualização: %s", e)
         return
 
-    # Script bat que aguarda o processo atual fechar, move o novo exe para a pasta
-    # de instalação (com o novo nome) e relança. Se o nome mudou, apaga o antigo.
+    # Script bat robusto:
+    # 1) espera o processo atual terminar (loop com timeout máximo)
+    # 2) tenta mover o novo exe até 5 vezes (Defender pode estar escaneando)
+    # 3) só faz start + del do antigo se o destino existir; senão mostra erro
+    # 4) loga tudo num arquivo para diagnóstico
     bat = tmp_dir / "updater.bat"
-    delete_old = ""
+    log_path = tmp_dir / "updater.log"
+    pid = os.getpid()
+
+    delete_old_line = ""
     if target_exe.resolve() != current_exe.resolve():
-        delete_old = f'del /Q "{current_exe}" >nul 2>&1\n'
+        delete_old_line = f'del /Q "{current_exe}" >> "{log_path}" 2>&1\n'
 
     bat.write_text(
         f'@echo off\n'
+        f'echo [%date% %time%] updater iniciado, aguardando PID {pid} > "{log_path}"\n'
+        f'set /a tries=0\n'
         f':wait\n'
-        f'tasklist /FI "PID eq {os.getpid()}" 2>nul | find /I "{os.getpid()}" >nul\n'
-        f'if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)\n'
-        f'move /Y "{new_exe}" "{target_exe}" >nul\n'
-        f'{delete_old}'
+        f'tasklist /FI "PID eq {pid}" 2>nul | find /I "{pid}" >nul\n'
+        f'if errorlevel 1 goto done_wait\n'
+        f'set /a tries+=1\n'
+        f'if %tries% geq 60 (echo timeout aguardando processo >> "{log_path}" & goto done_wait)\n'
+        f'timeout /t 1 /nobreak >nul\n'
+        f'goto wait\n'
+        f':done_wait\n'
+        f'echo [%date% %time%] processo encerrado, movendo exe >> "{log_path}"\n'
+        f'set /a mtries=0\n'
+        f':move_retry\n'
+        f'move /Y "{new_exe}" "{target_exe}" >> "{log_path}" 2>&1\n'
+        f'if exist "{target_exe}" goto move_ok\n'
+        f'set /a mtries+=1\n'
+        f'if %mtries% geq 5 goto move_fail\n'
+        f'timeout /t 2 /nobreak >nul\n'
+        f'goto move_retry\n'
+        f':move_fail\n'
+        f'echo ERRO: nao foi possivel mover o exe para {target_exe} >> "{log_path}"\n'
+        f'msg * "Falha ao atualizar Processador de Ocorrencias. Veja o log em {log_path}"\n'
+        f'exit /b 1\n'
+        f':move_ok\n'
+        f'echo move OK >> "{log_path}"\n'
+        f'{delete_old_line}'
         f'start "" "{target_exe}"\n'
-        f'del "%~f0"\n',
+        f'echo [%date% %time%] start emitido >> "{log_path}"\n',
         encoding="utf-8",
     )
 
-    logger.info("Relançando via updater.bat -> %s", target_exe)
+    logger.info("Relançando via updater.bat -> %s (log: %s)", target_exe, log_path)
     subprocess.Popen(["cmd", "/c", str(bat)], creationflags=subprocess.CREATE_NO_WINDOW)
     sys.exit(0)
 
