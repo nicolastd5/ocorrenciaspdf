@@ -1613,7 +1613,13 @@ class App(tk.Tk):
         win_id = canvas.create_window((0, 0), window=inner, anchor='nw')
         inner.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
         canvas.bind('<Configure>', lambda e: canvas.itemconfig(win_id, width=e.width))
-        inner.bind('<MouseWheel>', lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), 'units'))
+
+        def _on_wheel(e):
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), 'units')
+
+        # bind_all enquanto o cursor estiver sobre o canvas (cobre todos os widgets filhos)
+        canvas.bind('<Enter>', lambda e: canvas.bind_all('<MouseWheel>', _on_wheel))
+        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
 
         # ── Card: Códigos de benefício ───────────────────────────────
         from vt_caixa_processador import ProcessadorVTCaixa
