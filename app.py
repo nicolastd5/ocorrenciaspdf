@@ -1092,11 +1092,10 @@ class App(tk.Tk):
 
         def _buscar():
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=api_key)
-                modelos = [m.name for m in genai.list_models()
-                           if 'generateContent' in m.supported_generation_methods
-                           and ('vision' in m.name.lower() or 'gemini' in m.name.lower())]
+                import google.genai as genai
+                client = genai.Client(api_key=api_key)
+                modelos = [m.name for m in client.models.list()
+                           if 'gemini' in m.name.lower()]
                 modelos = sorted(set(modelos))
                 self.after(0, lambda: self._verif_popular_modelos(modelos))
             except Exception as e:

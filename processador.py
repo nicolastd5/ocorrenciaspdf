@@ -212,12 +212,11 @@ class ProcessadorOcorrencias:
 
         try:
             import pypdfium2 as pdfium
-            import google.generativeai as genai
+            import google.genai as genai
             import json as _json
             import time as _time
 
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(modelo)
+            client = genai.Client(api_key=api_key)
 
             codigos_str = ', '.join(codigos_alvo)
             prompt = (
@@ -239,7 +238,10 @@ class ProcessadorOcorrencias:
                 bitmap = page.render(scale=2)
                 img = bitmap.to_pil()
 
-                response = model.generate_content([prompt, img])
+                response = client.models.generate_content(
+                    model=modelo,
+                    contents=[prompt, img],
+                )
                 raw = response.text.strip()
 
                 if raw.startswith('```'):
