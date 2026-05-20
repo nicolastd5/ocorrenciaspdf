@@ -14,10 +14,7 @@ from tkinter import ttk, filedialog, messagebox
 import threading
 import os
 from datetime import datetime
-import urllib.request
-import urllib.error
 import json
-import webbrowser
 from processador import ProcessadorOcorrencias
 from vt_caixa_processador import ProcessadorVTCaixa
 from license_client import LicenseClient, LicenseStatus
@@ -89,9 +86,8 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
-VERSION = "1.34"
-GITHUB_API_RELEASES = "https://api.github.com/repos/nicolastd5/ocorrenciaspdf/releases/latest"
-GITHUB_RELEASES_PAGE = "https://github.com/nicolastd5/ocorrenciaspdf/releases/latest"
+from license_client import LicenseClient as _LC
+VERSION = _LC.APP_VERSION
 
 # ============================================================
 # Configurações visuais
@@ -189,11 +185,12 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
 
     def _verificar_atualizacao(self):
-        """Verifica nova versão no GitHub em background (chamada automática ao iniciar)."""
+        """Verifica nova versão no VPS em background (chamada automática ao iniciar)."""
         def _checar():
-            tag, erro = self._buscar_versao_github()
-            if tag and self._parse_versao(tag) > self._parse_versao(VERSION):
-                self.after(0, lambda: self._mostrar_banner_update(tag))
+            from auto_update import _fetch_latest, _parse_version
+            latest = _fetch_latest()
+            if latest and _parse_version(latest.get("version", "0")) > _parse_version(VERSION):
+                self.after(0, lambda: self._mostrar_banner_update(latest["version"]))
 
         threading.Thread(target=_checar, daemon=True).start()
 
@@ -204,26 +201,21 @@ class App(tk.Tk):
         except Exception:
             return (0,)
 
-    def _buscar_versao_github(self):
-        """Consulta a API do GitHub e retorna (tag, erro). Síncrono — chamar em thread."""
+    def _buscar_versao_vps(self):
+        """Consulta o VPS e retorna (versao, erro). Síncrono — chamar em thread."""
+        from auto_update import _fetch_latest
         try:
-            req = urllib.request.Request(
-                GITHUB_API_RELEASES,
-                headers={"User-Agent": "ProcessadorOcorrencias/" + VERSION}
-            )
-            with urllib.request.urlopen(req, timeout=8) as resp:
-                data = json.loads(resp.read().decode())
-            tag = data.get("tag_name", "").lstrip("v")
-            return tag, None
-        except urllib.error.URLError:
-            return None, "Sem conexão com a internet."
+            latest = _fetch_latest()
+            if latest:
+                return latest.get("version"), None
+            return None, "Sem resposta do servidor."
         except Exception as e:
             return None, str(e)
 
     def _mostrar_banner_update(self, nova_versao):
         """Exibe um banner discreto de atualização disponível."""
         if hasattr(self, '_banner_update') and self._banner_update.winfo_exists():
-            return  # já está visível
+            return
 
         banner = tk.Frame(self, bg='#1a3a1a',
                           highlightbackground='#4ec994', highlightthickness=1)
@@ -234,25 +226,34 @@ class App(tk.Tk):
         inner.pack(fill='x', padx=14, pady=8)
 
         tk.Label(inner,
-                 text=f"Nova versão disponível: v{nova_versao}",
+                 text=f"Nova versao disponivel: v{nova_versao}",
                  font=("Segoe UI", 10, "bold"),
                  fg='#4ec994', bg='#1a3a1a').pack(side='left')
 
-        tk.Button(inner, text="Baixar",
+        tk.Button(inner, text="Atualizar agora",
                   font=("Segoe UI", 9, "bold"),
                   fg='#1e1e1e', bg='#4ec994',
                   activeforeground='#1e1e1e', activebackground='#3ab87a',
                   relief='flat', cursor='hand2', padx=10, pady=2, borderwidth=0,
-                  command=lambda: webbrowser.open(GITHUB_RELEASES_PAGE)
+                  command=lambda: self._aplicar_update(nova_versao)
                   ).pack(side='right', padx=(8, 0))
 
-        tk.Button(inner, text="✕",
+        tk.Button(inner, text="X",
                   font=("Segoe UI", 9),
                   fg='#4ec994', bg='#1a3a1a',
                   activeforeground='#ffffff', activebackground='#1a3a1a',
                   relief='flat', cursor='hand2', padx=6, pady=2, borderwidth=0,
                   command=banner.destroy
                   ).pack(side='right')
+
+    def _aplicar_update(self, nova_versao):
+        """Baixa e aplica a atualização (fecha o app e relança o novo exe)."""
+        from auto_update import _fetch_latest, _download_and_relaunch
+        latest = _fetch_latest()
+        if latest and latest.get("filename"):
+            _download_and_relaunch(latest["filename"])
+        else:
+            messagebox.showerror("Erro", "Nao foi possivel obter o link de download.")
 
     def _bind_scroll(self, canvas, inner_frame):
         """Vincula scroll do mouse ao canvas e a todos os seus filhos recursivamente."""
@@ -1671,7 +1672,7 @@ class App(tk.Tk):
         self._lbl_update_status.pack(pady=(0, 10))
 
         self._btn_buscar_update = tk.Button(
-            update_row, text="🔍  Buscar Atualizações",
+            update_row, text="Buscar Atualizacoes",
             font=("Segoe UI", 10, "bold"),
             fg=CORES['btn_fg'], bg=CORES['accent'],
             activeforeground=CORES['btn_fg'], activebackground=CORES['accent_hover'],
@@ -1687,35 +1688,34 @@ class App(tk.Tk):
         self._lbl_update_status.configure(text="", fg=CORES['fg_dim'])
 
         def _checar():
-            tag, erro = self._buscar_versao_github()
+            tag, erro = self._buscar_versao_vps()
             self.after(0, lambda: self._exibir_resultado_update(tag, erro))
 
         threading.Thread(target=_checar, daemon=True).start()
 
     def _exibir_resultado_update(self, tag, erro):
-        self._btn_buscar_update.configure(state='normal', text="🔍  Buscar Atualizações")
+        self._btn_buscar_update.configure(state='normal', text="Buscar Atualizacoes")
         if erro:
             self._lbl_update_status.configure(
                 text=f"Erro: {erro}", fg=CORES['error'])
         elif tag and self._parse_versao(tag) > self._parse_versao(VERSION):
             self._lbl_update_status.configure(
-                text=f"Nova versão disponível: v{tag}", fg=CORES['success'])
+                text=f"Nova versao disponivel: v{tag}", fg=CORES['success'])
             self._mostrar_banner_update(tag)
-            # Adiciona botão de download inline
             if not hasattr(self, '_btn_download_update') or not self._btn_download_update.winfo_exists():
                 self._btn_download_update = tk.Button(
                     self._btn_buscar_update.master,
-                    text="⬇  Baixar v" + tag,
+                    text="Atualizar para v" + tag,
                     font=("Segoe UI", 10),
-                    fg=CORES['success'], bg=CORES['bg_card'],
-                    activeforeground=CORES['success'], activebackground=CORES['bg_input'],
+                    fg=CORES['btn_fg'], bg=CORES['accent'],
+                    activeforeground=CORES['btn_fg'], activebackground=CORES['accent_hover'],
                     relief='flat', cursor='hand2', padx=14, pady=6, borderwidth=0,
-                    command=lambda: webbrowser.open(GITHUB_RELEASES_PAGE),
+                    command=lambda: self._aplicar_update(tag),
                 )
                 self._btn_download_update.pack(pady=(8, 0))
         else:
             self._lbl_update_status.configure(
-                text=f"Você já está na versão mais recente (v{VERSION}).",
+                text=f"Voce ja esta na versao mais recente (v{VERSION}).",
                 fg=CORES['fg_dim'])
 
     # ------------------------------------------------------------------
