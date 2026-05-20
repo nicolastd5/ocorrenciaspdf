@@ -743,7 +743,8 @@ class App(tk.Tk):
                                  ("PDF", "*.pdf"),
                                  ("Excel", "*.xls *.xlsx *.xlsm *.xltx *.xltm")], "Selecionar")
         self._criar_file_picker(files_frame, "Excel Cadastral", self.vtc_xls_path,
-                                [("Excel .xls", "*.xls")], "Selecionar")
+                                [("Excel", "*.xls *.xlsx"), ("Excel .xls", "*.xls"),
+                                 ("Excel .xlsx", "*.xlsx")], "Selecionar")
 
         # File picker de saída (salvar como)
         out_row = tk.Frame(files_frame, bg=CORES['bg_card'])
@@ -1135,7 +1136,11 @@ class App(tk.Tk):
             messagebox.showerror("Erro", "A fonte deve ser PDF ou Excel (.xls/.xlsx).")
             return
         if not xls or not os.path.exists(xls):
-            messagebox.showerror("Erro", "Selecione um arquivo Excel cadastral (.xls) válido.")
+            messagebox.showerror("Erro", "Selecione um arquivo Excel cadastral (.xls/.xlsx) válido.")
+            return
+        ext_xls = os.path.splitext(xls)[1].lower()
+        if ext_xls not in ('.xls', '.xlsx'):
+            messagebox.showerror("Erro", "O Excel cadastral deve ser .xls ou .xlsx.")
             return
         if not out:
             messagebox.showerror("Erro", "Informe o caminho de saída do CSV.")

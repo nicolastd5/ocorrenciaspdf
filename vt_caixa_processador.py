@@ -8,6 +8,65 @@ from openpyxl import load_workbook
 import pdfplumber
 import xlrd
 
+
+# ─── Adapter xlsx → API do xlrd ──────────────────────────────────────────────
+# Permite que o codigo legado (que usa ws.cell_value/nrows/ncols e wb.datemode)
+# leia tambem arquivos .xlsx sem reescrever as funcoes existentes.
+
+class _XlsxSheetAdapter:
+    """Imita a API minima de uma sheet xlrd a partir de uma worksheet openpyxl."""
+
+    def __init__(self, ws):
+        self.name = ws.title
+        self._rows = []
+        for row in ws.iter_rows(values_only=True):
+            self._rows.append(list(row))
+        self.nrows = len(self._rows)
+        self.ncols = max((len(r) for r in self._rows), default=0)
+
+    def cell_value(self, row, col):
+        if row >= self.nrows:
+            return ''
+        linha = self._rows[row]
+        if col >= len(linha):
+            return ''
+        v = linha[col]
+        if v is None:
+            return ''
+        if isinstance(v, datetime):
+            # Devolve string ISO; _formatar_data ja reconhece esse formato.
+            return v.strftime('%Y-%m-%d %H:%M:%S')
+        if isinstance(v, date):
+            return v.strftime('%Y-%m-%d')
+        return v
+
+
+class _XlsxBookAdapter:
+    """Imita wb xlrd para arquivos .xlsx."""
+
+    def __init__(self, xlsx_path):
+        wb = load_workbook(xlsx_path, data_only=True, read_only=True)
+        self._sheets = [_XlsxSheetAdapter(ws) for ws in wb.worksheets]
+        self.nsheets = len(self._sheets)
+        # No xlrd datemode 0 = 1900, 1 = 1904. openpyxl: epoch 1904 = data 1904-01-01.
+        try:
+            self.datemode = 1 if wb.epoch.year == 1904 else 0
+        except Exception:
+            self.datemode = 0
+        wb.close()
+
+    def sheet_by_index(self, idx):
+        return self._sheets[idx]
+
+
+def _abrir_workbook_cadastral(path):
+    """Abre cadastral xls/xlsx e devolve objeto com a API esperada pelo codigo legado."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext == '.xlsx':
+        return _XlsxBookAdapter(path)
+    return xlrd.open_workbook(path)
+# ──────────────────────────────────────────────────────────────────────────────
+
 COLUNAS_CSV = [
     'CNPJ', 'CEP', 'LOGRADOURO', 'NÚMERO', 'COMPLEMENTO', 'PONTO REFERENCIA',
     'UF', 'ESTADO', 'MATRÍCULA', 'NOME DO FUNCIONÁRIO', 'CPF', 'RG',
@@ -560,7 +619,7 @@ class ProcessadorVTCaixa:
     # ── Carregar Excel ─────────────────────────────────────────────────
 
     def _carregar_excel(self, xls_path):
-        wb = xlrd.open_workbook(xls_path)
+        wb = _abrir_workbook_cadastral(xls_path)
         avisos = []
 
         ws = None
