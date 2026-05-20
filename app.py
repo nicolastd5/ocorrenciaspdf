@@ -1668,6 +1668,11 @@ class App(tk.Tk):
         depart_map = {
             'CEF LESTE 10 SP 4719/2022': 'CEF 10 84',
             'CEF 17 CONTRATO 477/2026':  'CEF 17 LIMPEZA',
+            'CEF 12 AMAZONAS - AM e RR': 'CEF 12 87',
+            'CEF BAIXADA 11 SP 4820/2022': 'CEF 11 85',
+            'POLICIA FED SHOP FLAMINGO':   'PF SHOPPING FLAMINGO',
+            'B BRASIL RJ 2022.7421.6922':  'BB RJ 89',
+            'CEF 14 DF':                   'CEF 14 DF 90',
         }
 
         card_dep = self._criar_card(inner, "🏢  Substituições de Departamento (VT Caixa)")
