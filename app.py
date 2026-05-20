@@ -194,17 +194,16 @@ class App(tk.Tk):
         threading.Thread(target=_checar, daemon=True).start()
 
     def _atualizar_indicador_conexao(self, status):
-        if status in (LicenseStatus.VALID, LicenseStatus.OFFLINE_TOLERATED):
-            if status == LicenseStatus.VALID:
-                cor, texto = '#4ec994', 'Conectado'
-            else:
-                cor, texto = '#cca700', 'Offline — tolerado'
+        if status == LicenseStatus.VALID:
+            cor, bg, borda, texto = '#4ec994', '#1a2e24', '#2a4a3a', 'Conectado ao servidor'
+        elif status == LicenseStatus.OFFLINE_TOLERATED:
+            cor, bg, borda, texto = '#cca700', '#2a2410', '#4a3e10', 'Offline — uso tolerado'
         else:
-            cor, texto = '#f14c4c', 'Sem conexão'
+            cor, bg, borda, texto = '#f14c4c', '#2e1a1a', '#4a2a2a', 'Sem conexão com servidor'
 
-        self._conn_dot.configure(fg=cor)
-        self._conn_label.configure(text=texto, fg=cor)
-        # reagenda para daqui 30s
+        self._conn_pill.configure(bg=bg, highlightbackground=borda)
+        self._conn_dot.configure(fg=cor, bg=bg)
+        self._conn_label.configure(text=texto, fg=cor, bg=bg)
         self.after(30000, self._verificar_conexao_servidor)
 
     def _verificar_atualizacao(self):
@@ -328,16 +327,18 @@ class App(tk.Tk):
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
         # Indicador de conexão com o servidor
-        self._conn_frame = tk.Frame(titlebar, bg=CORES['bg'])
-        self._conn_frame.pack(side='right')
-        self._conn_dot = tk.Label(self._conn_frame, text="●",
-                                  font=("Segoe UI", 10),
-                                  fg=CORES['fg_dim'], bg=CORES['bg'])
-        self._conn_dot.pack(side='left')
-        self._conn_label = tk.Label(self._conn_frame, text="Verificando...",
-                                    font=("Segoe UI", 9), fg=CORES['fg_dim'],
-                                    bg=CORES['bg'])
-        self._conn_label.pack(side='left', padx=(3, 0))
+        self._conn_pill = tk.Frame(titlebar, bg='#2a2a2a',
+                                   highlightbackground='#3c3c3c',
+                                   highlightthickness=1)
+        self._conn_pill.pack(side='right', ipadx=10, ipady=4)
+        self._conn_dot = tk.Label(self._conn_pill, text="●",
+                                  font=("Segoe UI", 7),
+                                  fg=CORES['fg_dim'], bg='#2a2a2a')
+        self._conn_dot.pack(side='left', padx=(0, 4))
+        self._conn_label = tk.Label(self._conn_pill, text="Verificando...",
+                                    font=("Segoe UI", 9),
+                                    fg=CORES['fg_dim'], bg='#2a2a2a')
+        self._conn_label.pack(side='left')
         self._verificar_conexao_servidor()
 
         # Linha 2: abas centralizadas
