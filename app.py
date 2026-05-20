@@ -2723,51 +2723,81 @@ class App(tk.Tk):
 class SplashScreen(tk.Tk):
     """Tela de carregamento exibida antes do app principal."""
 
+    _BG      = '#1e1e1e'
+    _ACCENT  = '#007acc'
+    _TRACK   = '#2d2d2d'
+    _SPINNER_R = 18   # raio externo
+    _SPINNER_W =  4   # espessura do arco
+    _ARC_SPAN  = 90   # graus do arco visível
+
     def __init__(self):
         super().__init__()
         self.overrideredirect(True)
-        self.configure(bg='#1e1e1e')
+        self.configure(bg=self._BG)
         self.attributes('-topmost', True)
 
-        W, H = 380, 200
+        W, H = 380, 220
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         self.geometry(f"{W}x{H}+{(sw - W) // 2}+{(sh - H) // 2}")
-
-        # borda sutil
         self.configure(highlightbackground='#3c3c3c', highlightthickness=1)
 
         tk.Label(self, text="Processador de Ocorrencias",
                  font=("Segoe UI", 14, "bold"),
-                 fg='#ffffff', bg='#1e1e1e').pack(pady=(40, 4))
+                 fg='#ffffff', bg=self._BG).pack(pady=(38, 4))
 
         tk.Label(self, text=f"v{VERSION}",
                  font=("Segoe UI", 9),
-                 fg='#6b737f', bg='#1e1e1e').pack()
+                 fg='#6b737f', bg=self._BG).pack()
 
-        tk.Frame(self, bg='#3c3c3c', height=1).pack(fill='x', padx=30, pady=20)
+        tk.Frame(self, bg='#3c3c3c', height=1).pack(fill='x', padx=30, pady=16)
 
-        self._lbl_status = tk.Label(self, text="Iniciando...",
+        # linha com spinner + label lado a lado
+        row = tk.Frame(self, bg=self._BG)
+        row.pack()
+
+        size = (self._SPINNER_R + self._SPINNER_W) * 2 + 2
+        self._canvas = tk.Canvas(row, width=size, height=size,
+                                 bg=self._BG, highlightthickness=0)
+        self._canvas.pack(side='left', padx=(0, 10))
+
+        self._lbl_status = tk.Label(row, text="Iniciando",
                                     font=("Segoe UI", 10),
-                                    fg='#6b737f', bg='#1e1e1e')
-        self._lbl_status.pack()
+                                    fg='#6b737f', bg=self._BG,
+                                    anchor='w', width=22)
+        self._lbl_status.pack(side='left')
 
-        self._dot_count = 0
+        self._angle = 0
+        self._anim_id = None
+        self._draw_spinner()
         self._animar()
+
+    def _draw_spinner(self):
+        self._canvas.delete("all")
+        m = self._SPINNER_W
+        r = self._SPINNER_R
+        cx = cy = r + m + 1
+        # trilha
+        self._canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
+                                  outline=self._TRACK, width=self._SPINNER_W)
+        # arco giratório
+        self._canvas.create_arc(cx - r, cy - r, cx + r, cy + r,
+                                  start=self._angle, extent=self._ARC_SPAN,
+                                  outline=self._ACCENT, width=self._SPINNER_W,
+                                  style='arc')
+
+    def _animar(self):
+        self._angle = (self._angle + 12) % 360
+        self._draw_spinner()
+        self._anim_id = self.after(30, self._animar)
 
     def set_status(self, texto: str):
         self._lbl_status.configure(text=texto)
         self.update()
 
-    def _animar(self):
-        dots = "." * (self._dot_count % 4)
-        base = self._lbl_status.cget("text").rstrip(".")
-        self._lbl_status.configure(text=base + dots)
-        self._dot_count += 1
-        self._anim_id = self.after(400, self._animar)
-
     def fechar(self):
-        self.after_cancel(self._anim_id)
+        if self._anim_id:
+            self.after_cancel(self._anim_id)
         self.destroy()
 
 
