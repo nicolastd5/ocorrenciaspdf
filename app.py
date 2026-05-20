@@ -22,6 +22,7 @@ from processador import ProcessadorOcorrencias
 from vt_caixa_processador import ProcessadorVTCaixa
 from license_client import LicenseClient, LicenseStatus
 from license_ui import show_activation_window, show_error_window
+from auto_update import check_and_update
 
 # ── Config local (API keys e preferências — não versionado) ─────────────────
 _CONFIG_PATH = os.path.join(os.path.expanduser('~'), '.ocorrencias_config.json')
@@ -2721,6 +2722,7 @@ class App(tk.Tk):
 
 def main():
     import sys
+    check_and_update()
     if not bootstrap_license():
         sys.exit(0)
     app = App()

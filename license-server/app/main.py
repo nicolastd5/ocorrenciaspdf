@@ -9,6 +9,7 @@ from app.config import load_settings
 from app.db import init_db
 from app.routes_api import router as api_router, limiter as api_limiter
 from app.routes_admin import router as admin_router
+from app.routes_update import router as update_router
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
 
     fastapi_app.include_router(api_router)
     fastapi_app.include_router(admin_router)
+    fastapi_app.include_router(update_router)
 
     @fastapi_app.exception_handler(RateLimitExceeded)
     async def rate_limit_handler(request, exc):
