@@ -14,10 +14,10 @@
 {% endif %}
 
 <div class="form-card" style="max-width:560px;">
-    <h2 style="font-size:1rem; font-weight:600; margin-bottom:1.25rem; color:var(--text);">
+    <h2 style="font-size:16px; font-weight:600; margin-bottom:14px; color:var(--text-bright); letter-spacing:-0.01em;">
         API Key do Google Gemini
     </h2>
-    <p style="font-size:.875rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.6;">
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:22px; line-height:1.6;">
         Esta chave é distribuída automaticamente para todos os usuários com licença ativa ao abrirem o aplicativo.
         Mantenha-a segura — ela é enviada apenas para licenças válidas.
     </p>
@@ -48,12 +48,12 @@
     </form>
 
     {% if gemini_key %}
-    <div style="margin-top:1.5rem; padding:1rem; background:var(--surface2); border-radius:var(--radius); border:1px solid var(--border);">
+    <div style="margin-top:1.5rem; padding:1rem; background:var(--surface-2); border-radius:var(--radius); border:1px solid var(--border);">
         <div style="font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:.5rem;">Key atual</div>
         <span class="key">{{ gemini_key[:8] }}••••••••••••••••••••••••••••••••••••</span>
     </div>
     {% else %}
-    <div style="margin-top:1.5rem; padding:1rem; background:var(--surface2); border-radius:var(--radius); border:1px solid var(--border); color:var(--text-muted); font-size:.875rem;">
+    <div style="margin-top:1.5rem; padding:1rem; background:var(--surface-2); border-radius:var(--radius); border:1px solid var(--border); color:var(--text-muted); font-size:.875rem;">
         Nenhuma API key configurada. Os usuários precisarão inserir a chave manualmente.
     </div>
     {% endif %}

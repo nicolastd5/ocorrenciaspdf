@@ -10,12 +10,12 @@
 <div class="alert alert-success">{{ message }}</div>
 {% endif %}
 
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; gap:1rem; flex-wrap:wrap;">
+<div class="toolbar">
     {% if app_version %}
-    <div class="card" style="display:flex; align-items:center; gap:1.25rem; padding:.75rem 1.25rem; flex:1; min-width:260px;">
+    <div class="card" style="display:flex; align-items:center; gap:20px; padding:14px 22px; flex:1; min-width:280px;">
         <div>
-            <div style="font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:.2rem;">Versão atual do app</div>
-            <div style="font-size:1rem; font-weight:600;">v{{ app_version }}</div>
+            <div class="eyebrow">Versão atual do app</div>
+            <div style="font-size:18px; font-weight:700; color:var(--text-bright); letter-spacing:-0.01em; font-variant-numeric:tabular-nums;">v{{ app_version }}</div>
         </div>
         {% if app_filename %}
         <a href="/api/download/{{ app_filename }}" class="btn btn-ghost" style="margin-left:auto;">
@@ -27,7 +27,7 @@
             Baixar .exe
         </a>
         {% else %}
-        <span style="color:var(--text-muted); font-size:.85rem; margin-left:auto;">Nenhum release publicado</span>
+        <span style="color:var(--text-muted); font-size:13px; margin-left:auto;">Nenhum release publicado</span>
         {% endif %}
     </div>
     {% endif %}
@@ -64,8 +64,8 @@
                     <span class="badge badge-active">Ativa</span>
                     {% endif %}
                 </td>
-                <td style="color:var(--text-muted); font-size:.85rem;">{{ row.license.created_at | brasilia }}</td>
-                <td style="color:var(--text-muted); font-size:.85rem;">{{ row.last_validation | brasilia }}</td>
+                <td class="meta">{{ row.license.created_at | brasilia }}</td>
+                <td class="meta">{{ row.last_validation | brasilia }}</td>
                 <td>
                     {% if row.license.revoked %}
                     <form method="post" action="/admin/{{ row.license.id }}/unrevoke" class="inline">
@@ -82,7 +82,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">
+                <td colspan="6" class="empty">
                     Nenhuma licença criada ainda.
                 </td>
             </tr>
