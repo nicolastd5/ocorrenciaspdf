@@ -844,6 +844,9 @@ class ProcessadorVTCaixa:
         ('CIDADAO MANAUS', None, '4481'),
         ('VIACAO BOA VISTA', None, '3275'),
         ('VIAÇÃO BOA VISTA', None, '3275'),
+        ('RIOCARD', None, '2232'),
+        ('JAÉ', None, '14816'),
+        ('JAE', None, '14816'),
     ]
 
     def _resolver_codigo_beneficio(self, administradora, valor_unitario):

@@ -165,6 +165,149 @@ CORES = {
 }
 
 
+# ── Botão arredondado (Canvas) ──────────────────────────────────────────────
+class RoundedButton(tk.Canvas):
+    """Botão pintado em Canvas com cantos arredondados (radius 6-10px).
+    Variantes: 'primary' (accent), 'ghost' (surface+border), 'danger' (error),
+    'mini' (transparente fundo bg_input).
+    """
+
+    _VARIANTS = {
+        # variant: (bg, fg, bg_hover, fg_hover, has_border)
+        'primary': (CORES['accent'],     '#ffffff',           CORES['accent_hover'], '#ffffff',           False),
+        'ghost':   (CORES['bg_input'],   CORES['fg_bright'],  CORES['bg_card'],      CORES['fg_bright'],  True),
+        'danger':  (CORES['error'],      '#ffffff',           '#d65454',             '#ffffff',           False),
+        'mini':    (CORES['bg_input'],   CORES['fg'],         CORES['border'],       CORES['fg_bright'],  True),
+        'success': (CORES['success'],    CORES['bg'],         '#86efac',             CORES['bg'],         False),
+    }
+
+    def __init__(self, parent, text='', command=None,
+                 variant='primary', radius=8,
+                 font=None, padx=18, pady=10,
+                 width=None, full_width=False, parent_bg=None, **kw):
+        bg_outer = parent_bg or parent.cget('bg')
+        super().__init__(parent, bg=bg_outer, highlightthickness=0,
+                         borderwidth=0, cursor='hand2', **kw)
+        self._text = text
+        self._command = command
+        self._radius = radius
+        self._padx = padx
+        self._pady = pady
+        self._font = font or (FONT_SANS, 10, 'bold')
+        self._enabled = True
+        self._full_width = full_width
+        bg, fg, bg_hover, fg_hover, has_border = self._VARIANTS.get(
+            variant, self._VARIANTS['primary'])
+        self._bg, self._fg = bg, fg
+        self._bg_hover, self._fg_hover = bg_hover, fg_hover
+        self._has_border = has_border
+        self._variant = variant
+
+        # Mede o texto pra dimensionar
+        self._txt_id = self.create_text(0, 0, text=text, font=self._font, fill=fg)
+        bbox = self.bbox(self._txt_id)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        self.delete(self._txt_id)
+        self._text_h = text_h
+
+        h = text_h + pady * 2
+        self._h = h
+        if full_width:
+            self.configure(height=h)
+            self._rb_w = max(120, text_w + padx * 2)
+            # Desenha pela primeira vez no after_idle, depois do <Configure>
+            self.bind('<Configure>', self._on_resize)
+            self.after_idle(lambda: self._draw(hover=False))
+        else:
+            w = width or (text_w + padx * 2)
+            self.configure(width=w, height=h)
+            self._rb_w = w
+            self._draw(hover=False)
+
+        self.bind('<Enter>', lambda e: self._draw(hover=True))
+        self.bind('<Leave>', lambda e: self._draw(hover=False))
+        self.bind('<Button-1>', self._on_press)
+        self.bind('<ButtonRelease-1>', self._on_release)
+
+    def _on_resize(self, e):
+        if self._full_width and e.width > 1:
+            self._rb_w = e.width
+            try:
+                self._draw(hover=False)
+            except tk.TclError:
+                pass
+
+    def _draw(self, hover=False):
+        self.delete('all')
+        bg = self._bg_hover if hover else self._bg
+        fg = self._fg_hover if hover else self._fg
+        r = self._radius
+        w, h = self._rb_w, self._h
+
+        # Pinta um rect arredondado: 4 ovais nos cantos + 2 rects no meio
+        self.create_oval(0, 0, 2*r, 2*r, fill=bg, outline=bg)
+        self.create_oval(w - 2*r, 0, w, 2*r, fill=bg, outline=bg)
+        self.create_oval(0, h - 2*r, 2*r, h, fill=bg, outline=bg)
+        self.create_oval(w - 2*r, h - 2*r, w, h, fill=bg, outline=bg)
+        self.create_rectangle(r, 0, w - r, h, fill=bg, outline=bg)
+        self.create_rectangle(0, r, w, h - r, fill=bg, outline=bg)
+
+        # Borda 1px (ghost/mini)
+        if self._has_border:
+            border = CORES['border_hover'] if hover else CORES['border']
+            # Linhas arredondadas — usa arcos
+            self.create_arc(0, 0, 2*r, 2*r, start=90, extent=90,
+                            style='arc', outline=border, width=1)
+            self.create_arc(w - 2*r, 0, w, 2*r, start=0, extent=90,
+                            style='arc', outline=border, width=1)
+            self.create_arc(0, h - 2*r, 2*r, h, start=180, extent=90,
+                            style='arc', outline=border, width=1)
+            self.create_arc(w - 2*r, h - 2*r, w, h, start=270, extent=90,
+                            style='arc', outline=border, width=1)
+            self.create_line(r, 0, w - r, 0, fill=border)
+            self.create_line(r, h, w - r, h, fill=border)
+            self.create_line(0, r, 0, h - r, fill=border)
+            self.create_line(w, r, w, h - r, fill=border)
+
+        self.create_text(w / 2, h / 2, text=self._text,
+                         font=self._font, fill=fg)
+
+    def _on_press(self, _e):
+        if not self._enabled:
+            return
+        # press feedback: redesenha 1px deslocado seria caro — só escurece
+        self._draw(hover=True)
+
+    def _on_release(self, _e):
+        if not self._enabled:
+            return
+        self._draw(hover=False)
+        if self._command:
+            self._command()
+
+    def configure(self, **kw):
+        if 'text' in kw:
+            self._text = kw.pop('text')
+            self._draw(hover=False)
+        if 'state' in kw:
+            self._enabled = (kw.pop('state') != 'disabled')
+            # estado disabled: usa fg_dim
+            if not self._enabled:
+                self._fg = CORES['fg_dim']
+                self._fg_hover = CORES['fg_dim']
+            else:
+                bg, fg, bg_hover, fg_hover, _ = self._VARIANTS[self._variant]
+                self._fg, self._fg_hover = fg, fg_hover
+            self._draw(hover=False)
+        if 'command' in kw:
+            self._command = kw.pop('command')
+        if kw:
+            super().configure(**kw)
+
+    config = configure
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -285,7 +428,7 @@ class App(tk.Tk):
         self._conn_pill.configure(bg=bg, highlightbackground=borda)
         self._conn_dot.configure(fg=cor, bg=bg)
         self._conn_label.configure(text=texto, fg=cor, bg=bg)
-        self.after(30000, self._verificar_conexao_servidor)
+        # Sem re-verificação periódica — só o "Revalidar agora" da aba Sobre.
 
     def _verificar_atualizacao(self):
         """Verifica nova versão no VPS em background (chamada automática ao iniciar)."""
@@ -334,21 +477,19 @@ class App(tk.Tk):
                  font=(FONT_SANS, 10, "bold"),
                  fg=CORES['success'], bg=BANNER_BG).pack(side='left')
 
-        tk.Button(inner, text="Atualizar agora",
-                  font=(FONT_SANS, 9, "bold"),
-                  fg=CORES['bg'], bg=CORES['success'],
-                  activeforeground=CORES['bg'], activebackground='#86efac',
-                  relief='flat', cursor='hand2', padx=10, pady=2, borderwidth=0,
-                  command=lambda: self._aplicar_update(nova_versao)
-                  ).pack(side='right', padx=(8, 0))
+        RoundedButton(inner, text="Atualizar agora",
+                      variant='success', radius=6,
+                      font=(FONT_SANS, 9, "bold"),
+                      padx=14, pady=6, parent_bg=BANNER_BG,
+                      command=lambda: self._aplicar_update(nova_versao)
+                      ).pack(side='right', padx=(8, 0))
 
-        tk.Button(inner, text="X",
-                  font=(FONT_SANS, 9),
-                  fg=CORES['success'], bg=BANNER_BG,
-                  activeforeground=CORES['fg_bright'], activebackground=BANNER_BG,
-                  relief='flat', cursor='hand2', padx=6, pady=2, borderwidth=0,
-                  command=banner.destroy
-                  ).pack(side='right')
+        lbl_x = tk.Label(inner, text="✕",
+                         font=(FONT_SANS, 11),
+                         fg=CORES['success'], bg=BANNER_BG,
+                         cursor='hand2', padx=8)
+        lbl_x.pack(side='right')
+        lbl_x.bind('<Button-1>', lambda e: banner.destroy())
 
     def _aplicar_update(self, nova_versao):
         """Baixa e aplica a atualização (fecha o app e relança o novo exe)."""
@@ -531,16 +672,14 @@ class App(tk.Tk):
         )
 
         # Botão Processar fixo no rodapé (fora do scroll)
-        self.btn_processar = tk.Button(
+        self.btn_processar = RoundedButton(
             parent, text="▶  PROCESSAR ARQUIVOS",
+            variant='primary', radius=10,
             font=(FONT_SANS, 14, "bold"),
-            fg=CORES['btn_fg'], bg=CORES['btn_bg'],
-            activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
-            relief='flat', cursor='hand2', pady=16, borderwidth=0,
-            command=self._iniciar_processamento
+            pady=18, full_width=True,
+            command=self._iniciar_processamento,
         )
         self.btn_processar.pack(side='bottom', fill='x', pady=(4, 0))
-        self._bind_hover(self.btn_processar, CORES['btn_bg'], CORES['btn_hover'])
 
         # Área de Resultados (também fora do scroll, acima do botão)
         self.resultado_frame = tk.Frame(parent, bg=CORES['bg'])
@@ -770,11 +909,9 @@ class App(tk.Tk):
                  font=(FONT_SANS, 14, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Button(header, text="Limpar", font=(FONT_SANS, 9),
-                  fg=CORES['fg_dim'], bg=CORES['bg_input'],
-                  activeforeground=CORES['fg'], activebackground=CORES['border'],
-                  relief='flat', cursor='hand2', padx=10, pady=3, borderwidth=0,
-                  command=self._limpar_historico).pack(side='right')
+        RoundedButton(header, text="Limpar histórico", variant='mini', radius=6,
+                      font=(FONT_SANS, 9), padx=12, pady=5,
+                      command=self._limpar_historico).pack(side='right')
 
         self._historico_lista = tk.Frame(parent, bg=CORES['bg'])
         self._historico_lista.pack(fill='both', expand=True)
@@ -897,15 +1034,10 @@ class App(tk.Tk):
             if path:
                 self.vtc_output_path.set(path)
 
-        btn_out = tk.Button(out_row, text="Salvar como", font=(FONT_SANS, 9),
-                            fg=CORES['accent_light'], bg=CORES['bg_input'],
-                            activeforeground=CORES['accent'],
-                            activebackground=CORES['bg_card'],
-                            relief='flat', cursor='hand2', padx=14, pady=5,
-                            borderwidth=0, command=_escolher_saida)
-        btn_out.pack(side='right')
-        self._bind_hover(btn_out, CORES['bg_input'], CORES['bg_card'],
-                         CORES['accent_light'], CORES['accent'])
+        RoundedButton(out_row, text="Salvar como", variant='ghost', radius=6,
+                      font=(FONT_SANS, 9, "bold"), padx=14, pady=6,
+                      parent_bg=CORES['bg_card'],
+                      command=_escolher_saida).pack(side='right')
 
         # ── Card: Opções IA ─────────────────────────────────────────────
         ia_card = self._criar_card(parent, "🤖  Verificação com IA (opcional)")
@@ -953,16 +1085,13 @@ class App(tk.Tk):
                  highlightbackground=CORES['border'], highlightthickness=1,
                  show='*').pack(side='left', fill='x', expand=True, padx=(0, 8), ipady=5)
 
-        self._vtc_btn_carregar = tk.Button(
-            key_row, text="↻  Carregar modelos",
-            font=(FONT_SANS, 9), fg=CORES['accent_light'], bg=CORES['bg_input'],
-            activeforeground=CORES['accent'], activebackground=CORES['bg_card'],
-            relief='flat', cursor='hand2', padx=10, pady=5, borderwidth=0,
+        self._vtc_btn_carregar = RoundedButton(
+            key_row, text="↻  Carregar modelos", variant='ghost', radius=6,
+            font=(FONT_SANS, 9, "bold"), padx=12, pady=6,
+            parent_bg=CORES['bg_card'],
             command=self._vtc_carregar_modelos,
         )
         self._vtc_btn_carregar.pack(side='right')
-        self._bind_hover(self._vtc_btn_carregar, CORES['bg_input'], CORES['bg_card'],
-                         CORES['accent_light'], CORES['accent'])
 
         # Linha 2: Seleção de modelo
         model_row = tk.Frame(self._vtc_ia_key_frame, bg=CORES['bg_card'])
@@ -994,12 +1123,11 @@ class App(tk.Tk):
         self._vtc_lbl_modelo_status.pack(side='left', padx=(8, 0))
 
         # ── Botão Gerar CSV ─────────────────────────────────────────────
-        self.vtc_btn_gerar = tk.Button(
+        self.vtc_btn_gerar = RoundedButton(
             parent, text="▶  GERAR CSV VT CAIXA",
-            font=(FONT_SANS, 13, "bold"),
-            fg=CORES['btn_fg'], bg=CORES['btn_bg'],
-            activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
-            relief='flat', cursor='hand2', pady=14, borderwidth=0,
+            variant='primary', radius=10,
+            font=(FONT_SANS, 14, "bold"),
+            pady=16, full_width=True,
             command=self._gerar_vtcaixa,
         )
         self.vtc_btn_gerar.pack(fill='x', pady=(4, 0))
@@ -1045,11 +1173,9 @@ class App(tk.Tk):
         tk.Label(header, text="🕘  Histórico VT Caixa",
                  font=(FONT_SANS, 14, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
-        tk.Button(header, text="Limpar", font=(FONT_SANS, 9),
-                  fg=CORES['fg_dim'], bg=CORES['bg_input'],
-                  activeforeground=CORES['fg'], activebackground=CORES['border'],
-                  relief='flat', cursor='hand2', padx=10, pady=3, borderwidth=0,
-                  command=self._vtc_limpar_historico).pack(side='right')
+        RoundedButton(header, text="Limpar histórico", variant='mini', radius=6,
+                      font=(FONT_SANS, 9), padx=12, pady=5,
+                      command=self._vtc_limpar_historico).pack(side='right')
 
         self._vtc_hist_lista = tk.Frame(parent, bg=CORES['bg'])
         self._vtc_hist_lista.pack(fill='both', expand=True)
@@ -1708,12 +1834,10 @@ class App(tk.Tk):
         tk.Label(footer, text=resumo_txt, font=(FONT_SANS, 10, "bold"),
                  fg=resumo_cor, bg=CORES['bg']).pack(side='left')
 
-        btn_fechar = tk.Button(footer, text="Fechar", font=(FONT_SANS, 10),
-                               bg=CORES['btn_bg'], fg=CORES['btn_fg'],
-                               relief='flat', bd=0, padx=20, pady=6,
-                               cursor='hand2', command=win.destroy)
+        btn_fechar = RoundedButton(footer, text="Fechar", variant='primary', radius=8,
+                                   font=(FONT_SANS, 10, "bold"),
+                                   padx=22, pady=8, command=win.destroy)
         btn_fechar.pack(side='right')
-        self._bind_hover(btn_fechar, CORES['btn_bg'], CORES['btn_hover'])
 
     def _vtc_finalizar(self):
         self.vtc_processando = False
@@ -1846,65 +1970,141 @@ class App(tk.Tk):
             canvas.itemconfig(win, width=e.width)
         canvas.bind('<Configure>', _resize)
         frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        self._bind_scroll(canvas, frame)
 
         inner = tk.Frame(frame, bg=CORES['bg'])
-        inner.pack(padx=60, pady=30, fill='x')
+        inner.pack(padx=8, pady=4, fill='x')
 
-        # Cabeçalho
-        tk.Label(inner, text="⚙", font=(FONT_SANS, 52),
-                 fg=CORES['accent'], bg=CORES['bg']).pack()
-        tk.Label(inner, text="Processador de Ocorrências",
-                 font=(FONT_SANS, 20, "bold"), fg=CORES['fg_bright'],
-                 bg=CORES['bg']).pack(pady=(6, 2))
-        tk.Label(inner, text=f"Versão {VERSION}",
-                 font=(FONT_SANS, 10), fg=CORES['fg_dim'],
-                 bg=CORES['bg']).pack()
-        tk.Label(inner,
-                 text="Extrai ocorrências de PDFs de jornada de trabalho\n"
-                      "e preenche automaticamente em planilhas Excel.",
-                 font=(FONT_SANS, 10), fg=CORES['fg_dim'], bg=CORES['bg'],
-                 justify='center').pack(pady=(10, 0))
+        # Header padrão da aba
+        self._criar_header_aba(
+            inner,
+            "Sobre",
+            "Informações da instalação, licença e dependências.",
+        )
 
-        tk.Frame(inner, bg=CORES['border'], height=1).pack(fill='x', pady=20)
+        # Card de boas-vindas (subtítulo do produto, sem ícone gigante)
+        welcome = self._criar_card(inner, "ℹ  Processador de Ocorrências")
+        tk.Label(welcome,
+                 text="Aplicação desktop para extrair ocorrências de PDFs de jornada "
+                      "de trabalho e preencher automaticamente planilhas Excel.",
+                 font=(FONT_SANS, 10), fg=CORES['fg'], bg=CORES['bg_card'],
+                 wraplength=900, justify='left').pack(anchor='w')
+        tk.Label(welcome,
+                 text="Inclui processador especializado VT Caixa com assistência "
+                      "de IA (Google Gemini) para extração de campos cadastrais.",
+                 font=(FONT_SANS, 10), fg=CORES['accent_light'], bg=CORES['bg_card'],
+                 wraplength=900, justify='left').pack(anchor='w', pady=(8, 0))
 
-        # Card de informações
-        info_content = self._criar_card(inner, "Informações")
-        for label, valor in [
-            ("Autor",      "Nicolas Almeida Hader Dias"),
-            ("Versão",     VERSION),
-            ("Tecnologia", "Python 3  •  tkinter  •  pdfplumber  •  openpyxl"),
-            ("Plataforma", "Windows"),
+        # ── Duas colunas: Informações | Status do servidor ──
+        cols = tk.Frame(inner, bg=CORES['bg'])
+        cols.pack(fill='x', pady=(4, 10))
+
+        # Coluna esquerda: Informações
+        col_left = tk.Frame(cols, bg=CORES['bg'])
+        col_left.pack(side='left', fill='both', expand=True, padx=(0, 6))
+
+        info_card = self._criar_card(col_left, "ℹ  Informações")
+
+        client = LicenseClient()
+        chave = (client.get_saved_key() or '').strip() or '—'
+        ultima_val = '—'
+        try:
+            cfg = client._read_config()
+            ts = cfg.get('last_validated_at')
+            if ts:
+                ultima_val = datetime.fromtimestamp(float(ts)).strftime('%d/%m/%Y %H:%M')
+        except Exception:
+            pass
+        config_path = '~/.ocorrencias_config.json'
+
+        info_rows = [
+            ('VERSÃO',           f'v{VERSION}',                 'mono'),
+            ('AUTOR',            'Nicolas Almeida Hader Dias',  'sans'),
+            ('LICENÇA',          chave,                          'mono'),
+            ('ÚLTIMA VALIDAÇÃO', ultima_val,                     'mono'),
+            ('CONFIG LOCAL',     config_path,                    'mono'),
+        ]
+        for label, valor, kind in info_rows:
+            row = tk.Frame(info_card, bg=CORES['bg_card'])
+            row.pack(fill='x', pady=4)
+            tk.Label(row, text=label,
+                     font=(FONT_SANS, 8, "bold"),
+                     fg=CORES['fg_dim'], bg=CORES['bg_card'],
+                     width=18, anchor='w').pack(side='left')
+            font = (FONT_MONO, 10) if kind == 'mono' else (FONT_SANS, 10, "bold")
+            tk.Label(row, text=valor,
+                     font=font,
+                     fg=CORES['fg_bright'], bg=CORES['bg_card'],
+                     anchor='w').pack(side='left')
+
+        # Coluna direita: Status do servidor
+        col_right = tk.Frame(cols, bg=CORES['bg'])
+        col_right.pack(side='left', fill='both', expand=True, padx=(6, 0))
+
+        status_card = self._criar_card(col_right, "🌐  Status do servidor")
+
+        self._sobre_status_rows = {}
+        for label, valor, cor in [
+            ('CONEXÃO',           'Verificando…',     CORES['fg_dim']),
+            ('VERSÃO MAIS RECENTE', '—',               CORES['fg']),
+            ('API GEMINI',        '—',                 CORES['fg']),
+            ('PRÓXIMA CHECAGEM',  'em 30s',           CORES['fg_dim']),
         ]:
-            row = tk.Frame(info_content, bg=CORES['bg_card'])
-            row.pack(fill='x', pady=3)
-            tk.Label(row, text=f"{label}:", font=(FONT_SANS, 10, "bold"),
-                     fg=CORES['fg_dim'], bg=CORES['bg_card'], width=12,
-                     anchor='w').pack(side='left')
-            tk.Label(row, text=valor, font=(FONT_SANS, 10),
-                     fg=CORES['fg'], bg=CORES['bg_card'],
-                     anchor='w').pack(side='left')
+            row = tk.Frame(status_card, bg=CORES['bg_card'])
+            row.pack(fill='x', pady=4)
+            tk.Label(row, text=label,
+                     font=(FONT_SANS, 8, "bold"),
+                     fg=CORES['fg_dim'], bg=CORES['bg_card'],
+                     width=20, anchor='w').pack(side='left')
+            lbl = tk.Label(row, text=valor,
+                           font=(FONT_SANS, 10, "bold"),
+                           fg=cor, bg=CORES['bg_card'], anchor='w')
+            lbl.pack(side='left')
+            self._sobre_status_rows[label] = lbl
 
-        tk.Frame(inner, bg=CORES['border'], height=1).pack(fill='x', pady=20)
+        # Ação: revalidar agora
+        action_row = tk.Frame(status_card, bg=CORES['bg_card'])
+        action_row.pack(fill='x', pady=(10, 0))
+        RoundedButton(action_row, text="Revalidar agora",
+                      variant='ghost', radius=6,
+                      font=(FONT_SANS, 9, "bold"),
+                      padx=14, pady=6, parent_bg=CORES['bg_card'],
+                      command=self._verificar_conexao_servidor,
+                      ).pack(side='left')
 
-        # Seção de atualização
-        update_card = self._criar_card(inner, "Atualização")
+        # ── Card de atualização ──
+        update_card = self._criar_card(inner, "⬆  Atualização")
 
         self._lbl_update_status = tk.Label(
-            update_card, text="Clique no botão para verificar se há uma versão mais recente.",
+            update_card,
+            text="Clique no botão para verificar se há uma versão mais recente.",
             font=(FONT_SANS, 10), fg=CORES['fg_dim'], bg=CORES['bg_card'],
-            wraplength=420, justify='left')
+            wraplength=900, justify='left')
         self._lbl_update_status.pack(anchor='w', pady=(0, 12))
 
-        self._btn_buscar_update = tk.Button(
-            update_card, text="Buscar Atualizações",
-            font=(FONT_SANS, 10, "bold"),
-            fg=CORES['btn_fg'], bg=CORES['accent'],
-            activeforeground=CORES['btn_fg'], activebackground=CORES['accent_hover'],
-            relief='flat', cursor='hand2', padx=18, pady=8, borderwidth=0,
+        self._btn_buscar_update = RoundedButton(
+            update_card, text="Buscar atualizações",
+            variant='primary', radius=8,
+            font=(FONT_SANS, 10, "bold"), padx=18, pady=8,
+            parent_bg=CORES['bg_card'],
             command=self._buscar_update_manual,
         )
         self._btn_buscar_update.pack(anchor='w')
-        self._bind_hover(self._btn_buscar_update, CORES['accent'], CORES['accent_hover'])
+
+        # ── Tecnologias (chips) ──
+        tech_card = self._criar_card(inner, "🛠  Tecnologias")
+        chips_row = tk.Frame(tech_card, bg=CORES['bg_card'])
+        chips_row.pack(fill='x')
+
+        for tech in ['Python 3.10+', 'tkinter', 'pdfplumber', 'openpyxl', 'xlrd',
+                     'Google Gemini API', 'PyInstaller', 'FastAPI', 'SQLAlchemy']:
+            chip = tk.Frame(chips_row, bg=CORES['bg_input'],
+                            highlightbackground=CORES['border'], highlightthickness=1)
+            chip.pack(side='left', padx=(0, 6), pady=4)
+            tk.Label(chip, text=tech,
+                     font=(FONT_MONO, 9),
+                     fg=CORES['accent_light'], bg=CORES['bg_input'],
+                     padx=10, pady=4).pack()
 
     def _buscar_update_manual(self):
         """Chamado pelo botão na aba Sobre."""
@@ -1927,13 +2127,12 @@ class App(tk.Tk):
                 text=f"Nova versão disponível: v{tag}", fg=CORES['success'])
             self._mostrar_banner_update(tag)
             if not hasattr(self, '_btn_download_update') or not self._btn_download_update.winfo_exists():
-                self._btn_download_update = tk.Button(
+                self._btn_download_update = RoundedButton(
                     self._btn_buscar_update.master,
                     text=f"Atualizar para v{tag}",
-                    font=(FONT_SANS, 10),
-                    fg=CORES['btn_fg'], bg=CORES['accent'],
-                    activeforeground=CORES['btn_fg'], activebackground=CORES['accent_hover'],
-                    relief='flat', cursor='hand2', padx=14, pady=6, borderwidth=0,
+                    variant='primary', radius=6,
+                    font=(FONT_SANS, 10, "bold"), padx=16, pady=7,
+                    parent_bg=CORES['bg_card'],
                     command=lambda: self._aplicar_update(tag),
                 )
                 self._btn_download_update.pack(pady=(8, 0))
@@ -2085,32 +2284,32 @@ class App(tk.Tk):
                              fg=CORES['success'], bg=CORES['bg_card'])
         lbl_check.pack()
 
-        btn = tk.Button(inner, font=(FONT_SANS, 9, "bold"),
-                        relief='flat', cursor='hand2', padx=16, pady=6,
-                        borderwidth=0,
-                        command=lambda: self._escolher_arquivo(var, filetypes))
-        btn.pack(side='right')
+        btn_holder = tk.Frame(inner, bg=CORES['bg_card'])
+        btn_holder.pack(side='right')
+
+        def _criar_btn(text, variant):
+            for w in btn_holder.winfo_children():
+                w.destroy()
+            b = RoundedButton(btn_holder, text=text, variant=variant, radius=6,
+                              font=(FONT_SANS, 9, "bold"), padx=14, pady=6,
+                              parent_bg=CORES['bg_card'],
+                              command=lambda: self._escolher_arquivo(var, filetypes))
+            b.pack()
+            return b
 
         def on_change(*_):
             valor = var.get().strip()
             if valor:
-                # Mostra só o nome do arquivo, não o path inteiro
                 lbl_file.configure(text=os.path.basename(valor), fg=CORES['fg_bright'])
                 lbl_check.configure(text='✓')
                 card.configure(highlightbackground=CORES['border_hover'])
-                btn.configure(text='Trocar',
-                              fg=CORES['accent_light'], bg=CORES['bg_input'],
-                              activeforeground=CORES['accent_light'],
-                              activebackground=CORES['border'])
+                _criar_btn('Trocar', 'ghost')
             else:
-                lbl_file.configure(text=f'Nenhum arquivo selecionado',
+                lbl_file.configure(text='Nenhum arquivo selecionado',
                                    fg=CORES['fg_dim'])
                 lbl_check.configure(text='')
                 card.configure(highlightbackground=CORES['border'])
-                btn.configure(text='Selecionar',
-                              fg=CORES['fg_bright'], bg=CORES['accent'],
-                              activeforeground=CORES['fg_bright'],
-                              activebackground=CORES['accent_hover'])
+                _criar_btn('Selecionar', 'primary')
 
         # estado inicial: pode já ter valor salvo
         on_change()
@@ -2122,15 +2321,9 @@ class App(tk.Tk):
             var.set(path)
 
     def _criar_mini_btn(self, parent, text, command):
-        btn = tk.Button(parent, text=text, font=(FONT_SANS, 9),
-                        fg=CORES['fg_dim'], bg=CORES['bg_input'],
-                        activeforeground=CORES['fg'],
-                        activebackground=CORES['bg_input'],
-                        relief='flat', cursor='hand2', padx=12, pady=4,
-                        borderwidth=0, command=command)
-        self._bind_hover(btn, CORES['bg_input'], CORES['border'],
-                         CORES['fg_dim'], CORES['fg'])
-        return btn
+        return RoundedButton(parent, text=text, variant='mini', radius=6,
+                             font=(FONT_SANS, 9),
+                             padx=12, pady=5, command=command)
 
     def _toggle_dias_mes(self, on):
         if on:
@@ -2883,21 +3076,15 @@ class App(tk.Tk):
         btn_frame = tk.Frame(main, bg=CORES['bg'])
         btn_frame.pack(fill='x', pady=(14, 0))
 
-        tk.Button(
-            btn_frame, text="📂  Abrir pasta",
-            font=(FONT_SANS, 10), fg=CORES['success'],
-            bg=CORES['bg_card'], activeforeground=CORES['success'],
-            activebackground=CORES['bg_input'],
-            relief='flat', cursor='hand2', padx=14, pady=6, borderwidth=0,
+        RoundedButton(
+            btn_frame, text="📂  Abrir pasta", variant='ghost', radius=6,
+            font=(FONT_SANS, 10, "bold"), padx=14, pady=7,
             command=lambda: os.startfile(os.path.dirname(output_path))
         ).pack(side='left')
 
-        tk.Button(
-            btn_frame, text="Fechar",
-            font=(FONT_SANS, 10), fg=CORES['fg_dim'],
-            bg=CORES['bg_card'], activeforeground=CORES['fg'],
-            activebackground=CORES['bg_input'],
-            relief='flat', cursor='hand2', padx=14, pady=6, borderwidth=0,
+        RoundedButton(
+            btn_frame, text="Fechar", variant='mini', radius=6,
+            font=(FONT_SANS, 10), padx=16, pady=7,
             command=win.destroy
         ).pack(side='right')
 
@@ -3008,19 +3195,17 @@ class App(tk.Tk):
             win.destroy()
             resultado_queue.put(None)
 
-        tk.Button(btn_row, text="Confirmar e gravar",
-                  font=(FONT_SANS, 11, "bold"),
-                  fg=CORES['btn_fg'], bg=CORES['btn_bg'],
-                  activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
-                  relief='flat', cursor='hand2', padx=18, pady=8, borderwidth=0,
-                  command=confirmar).pack(side='left')
+        RoundedButton(btn_row, text="Confirmar e gravar",
+                      variant='primary', radius=8,
+                      font=(FONT_SANS, 11, "bold"),
+                      padx=20, pady=9,
+                      command=confirmar).pack(side='left')
 
-        tk.Button(btn_row, text="Cancelar",
-                  font=(FONT_SANS, 11),
-                  fg=CORES['fg_dim'], bg=CORES['bg_input'],
-                  activeforeground=CORES['fg'], activebackground=CORES['border'],
-                  relief='flat', cursor='hand2', padx=18, pady=8, borderwidth=0,
-                  command=cancelar).pack(side='left', padx=(10, 0))
+        RoundedButton(btn_row, text="Cancelar",
+                      variant='mini', radius=8,
+                      font=(FONT_SANS, 11),
+                      padx=20, pady=9,
+                      command=cancelar).pack(side='left', padx=(10, 0))
 
     def _criar_tabela(self, parent, titulo, dados, cor_titulo):
         wrapper = tk.Frame(parent, bg=CORES['bg_card'],
