@@ -50,6 +50,7 @@ def _download_and_relaunch(filename: str) -> None:
     logger.info("Baixando atualização: %s", url)
 
     current_exe = Path(sys.executable)
+    target_exe = current_exe.parent / filename
     tmp_dir = Path(tempfile.mkdtemp())
     new_exe = tmp_dir / filename
 
@@ -63,20 +64,26 @@ def _download_and_relaunch(filename: str) -> None:
         logger.warning("Falha ao baixar atualização: %s", e)
         return
 
-    # Script bat que aguarda o processo atual fechar, copia o novo exe e relança
+    # Script bat que aguarda o processo atual fechar, move o novo exe para a pasta
+    # de instalação (com o novo nome) e relança. Se o nome mudou, apaga o antigo.
     bat = tmp_dir / "updater.bat"
+    delete_old = ""
+    if target_exe.resolve() != current_exe.resolve():
+        delete_old = f'del /Q "{current_exe}" >nul 2>&1\n'
+
     bat.write_text(
         f'@echo off\n'
         f':wait\n'
         f'tasklist /FI "PID eq {os.getpid()}" 2>nul | find /I "{os.getpid()}" >nul\n'
         f'if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)\n'
-        f'copy /Y "{new_exe}" "{current_exe}" >nul\n'
-        f'start "" "{current_exe}"\n'
+        f'move /Y "{new_exe}" "{target_exe}" >nul\n'
+        f'{delete_old}'
+        f'start "" "{target_exe}"\n'
         f'del "%~f0"\n',
         encoding="utf-8",
     )
 
-    logger.info("Relançando via updater.bat")
+    logger.info("Relançando via updater.bat -> %s", target_exe)
     subprocess.Popen(["cmd", "/c", str(bat)], creationflags=subprocess.CREATE_NO_WINDOW)
     sys.exit(0)
 
