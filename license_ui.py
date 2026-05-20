@@ -19,6 +19,11 @@ def show_activation_window(initial_message: str = "") -> Optional[str]:
     sh = root.winfo_screenheight()
     root.geometry(f"+{(sw - w) // 2}+{(sh - h) // 2}")
 
+    root.attributes("-topmost", True)
+    root.after(200, lambda: root.attributes("-topmost", False))
+    root.lift()
+    root.focus_force()
+
     frm = ttk.Frame(root, padding=20)
     frm.pack(fill=tk.BOTH, expand=True)
 
@@ -68,6 +73,11 @@ def show_error_window(message: str) -> None:
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
     root.geometry(f"+{(sw - w) // 2}+{(sh - h) // 2}")
+
+    root.attributes("-topmost", True)
+    root.after(200, lambda: root.attributes("-topmost", False))
+    root.lift()
+    root.focus_force()
 
     frm = ttk.Frame(root, padding=20)
     frm.pack(fill=tk.BOTH, expand=True)

@@ -25,17 +25,11 @@ from auto_update import check_and_update
 _CONFIG_PATH = os.path.join(os.path.expanduser('~'), '.ocorrencias_config.json')
 
 
-def bootstrap_license() -> bool:
-    """Valida licença antes de abrir o app. Retorna True se app deve continuar."""
-    client = LicenseClient()
-
+def _resolver_licenca(client, result) -> bool:
+    """Resolve um resultado de licença não-válido pedindo a chave em loop.
+    Retorna True se a licença foi resolvida, False se o usuário cancelou."""
     while True:
-        result = client.validate()
-
-        if result.status == LicenseStatus.VALID:
-            return True
-
-        if result.status == LicenseStatus.OFFLINE_TOLERATED:
+        if result.status == LicenseStatus.VALID or result.status == LicenseStatus.OFFLINE_TOLERATED:
             return True
 
         if result.status == LicenseStatus.NO_KEY:
@@ -59,6 +53,14 @@ def bootstrap_license() -> bool:
             return False
 
         client.save_key(new_key)
+        result = client.validate()
+
+
+def bootstrap_license() -> bool:
+    """Valida licença antes de abrir o app. Retorna True se app deve continuar."""
+    client = LicenseClient()
+    result = client.validate()
+    return _resolver_licenca(client, result)
 
 
 def _carregar_config():
@@ -2908,17 +2910,23 @@ def main():
     # 2. Validar licença
     splash.set_status("Validando licença...")
     t0 = time.monotonic()
-    ok = bootstrap_license()
+    client = LicenseClient()
+    result = client.validate()
     _splash_wait(splash, int((time.monotonic() - t0) * 1000), min_ms=1000)
-    if not ok:
+
+    # Fecha a splash antes de qualquer diálogo de licença (evita sobreposição)
+    if result.status not in (LicenseStatus.VALID, LicenseStatus.OFFLINE_TOLERATED):
         splash.fechar()
-        sys.exit(0)
+        ok = _resolver_licenca(client, result)
+        if not ok:
+            sys.exit(0)
 
     # 3. Carregando
-    splash.set_status("Carregando...")
-    _splash_wait(splash, 0, min_ms=600)
+    if splash.winfo_exists():
+        splash.set_status("Carregando...")
+        _splash_wait(splash, 0, min_ms=600)
+        splash.fechar()
 
-    splash.fechar()
     App().mainloop()
 
 
