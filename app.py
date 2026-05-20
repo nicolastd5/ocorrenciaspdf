@@ -515,6 +515,21 @@ class App(tk.Tk):
         self._tab_frames[tab_id].pack(fill='both', expand=True)
 
     def _criar_aba_processar(self, parent):
+        # Header da aba (h1 + subtitle + pills à direita)
+        self._criar_header_aba(
+            parent,
+            "Processar ocorrências",
+            "Cruze um PDF de jornada com a planilha de pedido e preencha a coluna MOTIVO.",
+            pills=[
+                lambda: f"{sum(1 for v in self.codigos_vars.values() if v.get())} códigos",
+                lambda: {
+                    'unica': 'Varredura única',
+                    'dupla': 'Dupla varredura',
+                    'ia':    'Dupla + IA',
+                }.get(self.modo_verificacao.get(), ''),
+            ],
+        )
+
         # Botão Processar fixo no rodapé (fora do scroll)
         self.btn_processar = tk.Button(
             parent, text="▶  PROCESSAR ARQUIVOS",
@@ -593,43 +608,77 @@ class App(tk.Tk):
             codes_grid.columnconfigure(col, weight=1)
 
         # ── Card Verificação ────────────────────────────────────────
-        verif_frame = self._criar_card(parent, "🔍  Verificação")
+        verif_frame = self._criar_card(parent, "🔍  Modo de verificação")
 
         modo_row = tk.Frame(verif_frame, bg=CORES['bg_card'])
-        modo_row.pack(fill='x', pady=(0, 2))
+        modo_row.pack(fill='x', pady=(2, 2))
 
         modos = [
-            ('unica',  'Varredura única',    'Comportamento atual'),
+            ('unica',  'Varredura única',    'Comportamento padrão'),
             ('dupla',  'Dupla varredura',    'V1 (tabelas) + V2 (texto/regex)'),
             ('ia',     'Dupla + IA (Gemini)','V1 + V2 + Gemini Vision'),
         ]
 
+        _modo_widgets = {}  # {val: {'card':..., 'dot':..., 'label':..., 'desc':...}}
+
         def _atualizar_modo():
             modo = self.modo_verificacao.get()
             if modo == 'ia':
-                self._verif_api_row.pack(fill='x', pady=(6, 0))
+                self._verif_api_row.pack(fill='x', pady=(10, 0))
             else:
                 self._verif_api_row.pack_forget()
-            for m, btn in _modo_btns.items():
+            self._atualizar_header_pills()
+            for m, w in _modo_widgets.items():
                 on = (m == modo)
-                btn.configure(
-                    bg=CORES['chip_on'] if on else CORES['chip_off'],
+                bg = CORES['chip_on'] if on else CORES['bg_card']
+                border = CORES['accent'] if on else CORES['border']
+                w['card'].configure(bg=bg, highlightbackground=border)
+                w['inner'].configure(bg=bg)
+                w['dot_outer'].configure(bg=bg)
+                w['dot'].configure(
+                    bg=CORES['accent'] if on else CORES['bg_card'],
+                    highlightbackground=CORES['accent'] if on else CORES['border_hover'],
+                )
+                w['label'].configure(
+                    bg=bg,
+                    fg=CORES['fg_bright'] if on else CORES['fg'],
+                )
+                w['desc'].configure(
+                    bg=bg,
                     fg=CORES['accent_light'] if on else CORES['fg_dim'],
-                    highlightbackground=CORES['chip_border_on'] if on else CORES['chip_border_off'],
                 )
 
-        _modo_btns = {}
-        for val, label, tooltip in modos:
-            btn = tk.Label(
-                modo_row, text=label,
-                font=(FONT_SANS, 9, "bold"),
-                fg=CORES['fg_dim'], bg=CORES['chip_off'],
-                padx=12, pady=5, cursor='hand2',
-                highlightbackground=CORES['chip_border_off'], highlightthickness=1,
-            )
-            btn.pack(side='left', padx=(0, 6))
-            btn.bind('<Button-1>', lambda e, v=val: (self.modo_verificacao.set(v), _atualizar_modo()))
-            _modo_btns[val] = btn
+        for val, label, descricao in modos:
+            card = tk.Frame(modo_row, bg=CORES['bg_card'], cursor='hand2',
+                            highlightbackground=CORES['border'], highlightthickness=1)
+            card.pack(side='left', fill='x', expand=True, padx=(0, 6))
+            inner = tk.Frame(card, bg=CORES['bg_card'])
+            inner.pack(fill='both', expand=True, padx=12, pady=10)
+
+            # Radio dot (círculo com fundo accent quando ON)
+            dot_outer = tk.Frame(inner, bg=CORES['bg_card'])
+            dot_outer.pack(side='left', padx=(0, 10))
+            dot = tk.Frame(dot_outer, width=12, height=12, bg=CORES['bg_card'],
+                           highlightbackground=CORES['border_hover'], highlightthickness=2)
+            dot.pack()
+            dot.pack_propagate(False)
+
+            col = tk.Frame(inner, bg=CORES['bg_card'])
+            col.pack(side='left', fill='both', expand=True)
+            lbl = tk.Label(col, text=label, font=(FONT_SANS, 10, "bold"),
+                           fg=CORES['fg'], bg=CORES['bg_card'], anchor='w')
+            lbl.pack(anchor='w')
+            desc = tk.Label(col, text=descricao, font=(FONT_MONO, 8),
+                            fg=CORES['fg_dim'], bg=CORES['bg_card'], anchor='w')
+            desc.pack(anchor='w', pady=(2, 0))
+
+            _modo_widgets[val] = {
+                'card': card, 'inner': inner,
+                'dot_outer': dot_outer, 'dot': dot,
+                'label': lbl, 'desc': desc,
+            }
+            for w in [card, inner, dot_outer, dot, col, lbl, desc]:
+                w.bind('<Button-1>', lambda e, v=val: (self.modo_verificacao.set(v), _atualizar_modo()))
 
         # Subpainel da API Key (visível só em modo 'ia')
         self._verif_api_row = tk.Frame(verif_frame, bg=CORES['bg_card'])
@@ -1897,6 +1946,49 @@ class App(tk.Tk):
     # Componentes reutilizáveis
     # ------------------------------------------------------------------
 
+    def _criar_header_aba(self, parent, titulo, subtitulo=None, pills=None):
+        """Header de aba estilo design: h1 26px + subtitle + pills opcionais à direita.
+        pills: lista de callables que retornam string (recalculadas a cada atualização)."""
+        header = tk.Frame(parent, bg=CORES['bg'])
+        header.pack(fill='x', pady=(0, 14))
+
+        # Coluna texto
+        col = tk.Frame(header, bg=CORES['bg'])
+        col.pack(side='left', fill='x', expand=True)
+
+        tk.Label(col, text=titulo, font=(FONT_SANS, 18, "bold"),
+                 fg=CORES['fg_bright'], bg=CORES['bg']).pack(anchor='w')
+        if subtitulo:
+            tk.Label(col, text=subtitulo, font=(FONT_SANS, 10),
+                     fg=CORES['fg_dim'], bg=CORES['bg']).pack(anchor='w', pady=(2, 0))
+
+        # Pills à direita (read-only, atualizam quando _atualizar_header_pills é chamada)
+        if pills:
+            pill_row = tk.Frame(header, bg=CORES['bg'])
+            pill_row.pack(side='right', anchor='ne', pady=(4, 0))
+            self._aba_pill_labels = getattr(self, '_aba_pill_labels', [])
+            for fn in pills:
+                pill = tk.Frame(pill_row, bg=CORES['bg_card'],
+                                highlightbackground=CORES['border'], highlightthickness=1)
+                pill.pack(side='left', padx=(0, 6))
+                # dot accent
+                tk.Label(pill, text='●', font=(FONT_SANS, 8),
+                         fg=CORES['accent'], bg=CORES['bg_card'],
+                         padx=8, pady=2).pack(side='left')
+                lbl = tk.Label(pill, text=fn(), font=(FONT_SANS, 9, "bold"),
+                               fg=CORES['accent_light'], bg=CORES['bg_card'],
+                               padx=(0), pady=2)
+                lbl.pack(side='left', padx=(0, 10))
+                self._aba_pill_labels.append((lbl, fn))
+
+    def _atualizar_header_pills(self):
+        """Recalcula textos dos pills do header (chamar após mudar códigos/modo)."""
+        for lbl, fn in getattr(self, '_aba_pill_labels', []):
+            try:
+                lbl.configure(text=fn())
+            except Exception:
+                pass
+
     def _criar_card(self, parent, titulo):
         """Card layered: borda 1px sutil, sem faixa lateral.
         Se o título começa com emoji+espaço, o emoji vira badge accent-faded."""
@@ -1935,36 +2027,94 @@ class App(tk.Tk):
         content.pack(fill='x', padx=18, pady=(0, 14))
         return content
 
+    _EXT_COLORS = {
+        'pdf':  ('#3a1f22', '#f87171'),  # vermelho
+        'xls':  ('#0f1a14', '#4ade80'),  # verde
+        'xlsx': ('#0f1a14', '#4ade80'),
+        'csv':  ('#1a1610', '#fbbf24'),  # âmbar
+    }
+
     def _criar_file_picker(self, parent, label, var, filetypes, btn_text):
-        row = tk.Frame(parent, bg=CORES['bg_card'])
-        row.pack(fill='x', pady=5)
+        """File picker card-style: badge colorido por extensão + nome em mono + Trocar/Selecionar."""
+        # Detecta extensão pelo primeiro filetype (ex.: '*.pdf')
+        ext = 'pdf'
+        if filetypes:
+            patt = filetypes[0][1].lower()
+            for k in self._EXT_COLORS:
+                if k in patt:
+                    ext = k
+                    break
+        bg_badge, fg_badge = self._EXT_COLORS.get(ext, ('#1a1d29', '#a8c0ff'))
 
-        tk.Label(row, text=label, font=(FONT_SANS, 10),
-                 fg=CORES['fg_dim'], bg=CORES['bg_card'], width=14,
-                 anchor='w').pack(side='left')
+        card = tk.Frame(parent, bg=CORES['bg_card'],
+                        highlightbackground=CORES['border'], highlightthickness=1)
+        card.pack(fill='x', pady=6)
 
-        entry = tk.Entry(row, textvariable=var, font=(FONT_MONO, 9),
-                         fg=CORES['fg'], bg=CORES['bg_input'],
-                         insertbackground=CORES['fg'], relief='flat',
-                         highlightbackground=CORES['border'], highlightthickness=1)
-        entry.pack(side='left', fill='x', expand=True, padx=(0, 8), ipady=5)
+        inner = tk.Frame(card, bg=CORES['bg_card'])
+        inner.pack(fill='x', padx=14, pady=10)
 
-        def on_change(*_):
-            color = CORES['accent'] if var.get().strip() else CORES['border']
-            entry.configure(highlightbackground=color)
+        # Badge da extensão
+        badge = tk.Frame(inner, bg=bg_badge,
+                         highlightbackground=fg_badge, highlightthickness=1)
+        badge.pack(side='left')
+        tk.Label(badge, text=ext.upper(),
+                 font=(FONT_MONO, 11, "bold"),
+                 fg=fg_badge, bg=bg_badge,
+                 padx=10, pady=6).pack()
 
-        var.trace_add('write', on_change)
+        # Coluna texto: label em cima + nome em mono embaixo
+        col = tk.Frame(inner, bg=CORES['bg_card'])
+        col.pack(side='left', fill='x', expand=True, padx=(12, 12))
 
-        btn = tk.Button(row, text=btn_text, font=(FONT_SANS, 9),
-                        fg=CORES['accent_light'], bg=CORES['bg_input'],
-                        activeforeground=CORES['accent'],
-                        activebackground=CORES['bg_card'],
-                        relief='flat', cursor='hand2', padx=14, pady=5,
+        lbl_top = tk.Label(col, text=label.upper(),
+                           font=(FONT_SANS, 8, "bold"),
+                           fg=CORES['fg_dim'], bg=CORES['bg_card'])
+        lbl_top.pack(anchor='w')
+
+        lbl_file = tk.Label(col, textvariable=var,
+                            font=(FONT_MONO, 10),
+                            fg=CORES['fg'], bg=CORES['bg_card'],
+                            anchor='w')
+        lbl_file.pack(anchor='w', fill='x')
+
+        # Check verde quando preenchido (à direita do nome)
+        check_holder = tk.Frame(inner, bg=CORES['bg_card'])
+        check_holder.pack(side='left', padx=(0, 10))
+        lbl_check = tk.Label(check_holder, text='',
+                             font=(FONT_SANS, 14, "bold"),
+                             fg=CORES['success'], bg=CORES['bg_card'])
+        lbl_check.pack()
+
+        btn = tk.Button(inner, font=(FONT_SANS, 9, "bold"),
+                        relief='flat', cursor='hand2', padx=16, pady=6,
                         borderwidth=0,
                         command=lambda: self._escolher_arquivo(var, filetypes))
         btn.pack(side='right')
-        self._bind_hover(btn, CORES['bg_input'], CORES['bg_card'],
-                         CORES['accent_light'], CORES['accent'])
+
+        def on_change(*_):
+            valor = var.get().strip()
+            if valor:
+                # Mostra só o nome do arquivo, não o path inteiro
+                lbl_file.configure(text=os.path.basename(valor), fg=CORES['fg_bright'])
+                lbl_check.configure(text='✓')
+                card.configure(highlightbackground=CORES['border_hover'])
+                btn.configure(text='Trocar',
+                              fg=CORES['accent_light'], bg=CORES['bg_input'],
+                              activeforeground=CORES['accent_light'],
+                              activebackground=CORES['border'])
+            else:
+                lbl_file.configure(text=f'Nenhum arquivo selecionado',
+                                   fg=CORES['fg_dim'])
+                lbl_check.configure(text='')
+                card.configure(highlightbackground=CORES['border'])
+                btn.configure(text='Selecionar',
+                              fg=CORES['fg_bright'], bg=CORES['accent'],
+                              activeforeground=CORES['fg_bright'],
+                              activebackground=CORES['accent_hover'])
+
+        # estado inicial: pode já ter valor salvo
+        on_change()
+        var.trace_add('write', on_change)
 
     def _escolher_arquivo(self, var, filetypes):
         path = filedialog.askopenfilename(filetypes=filetypes)
@@ -2053,62 +2203,74 @@ class App(tk.Tk):
         _atualizar()
 
     def _criar_chip(self, parent, codigo, desc, tem_qtd, var, row, col):
-        frame = tk.Frame(parent, bg=CORES['bg_card'])
-        frame.grid(row=row, column=col, padx=4, pady=4, sticky='ew')
+        """Chip estilo design: badge accent-faded com código + descrição + pill QTD/sem qtd."""
+        wrapper = tk.Frame(parent, bg=CORES['bg_card'])
+        wrapper.grid(row=row, column=col, padx=4, pady=4, sticky='ew')
+
+        # OFF: fundo do card, borda sutil. ON: bg lift + borda accent.
+        OFF_BG, ON_BG = CORES['bg_card'], CORES['chip_on']
+        OFF_BORDER, ON_BORDER = CORES['border'], CORES['accent']
 
         def toggle():
             var.set(not var.get())
             atualizar_visual()
+            self._atualizar_header_pills()
 
         def atualizar_visual():
             on = var.get()
-            bg = CORES['chip_on'] if on else CORES['chip_off']
-            border = CORES['chip_border_on'] if on else CORES['chip_border_off']
-            dot_text = '●' if on else '○'
-            dot_fg = CORES['success'] if on else CORES['fg_dim']
-            cod_fg = CORES['accent_light'] if on else CORES['fg_dim']
-            desc_fg = CORES['fg'] if on else CORES['fg_dim']
+            bg = ON_BG if on else OFF_BG
+            border = ON_BORDER if on else OFF_BORDER
+            badge_bg = CORES['accent_faded'] if on else CORES['bg_input']
+            cod_fg = CORES['accent_light'] if on else CORES['fg']
+            desc_fg = CORES['fg_bright'] if on else CORES['fg']
 
             chip.configure(bg=bg, highlightbackground=border)
             inner.configure(bg=bg)
-            lbl_dot.configure(bg=bg, fg=dot_fg, text=dot_text)
-            lbl_cod.configure(bg=bg, fg=cod_fg)
+            badge.configure(bg=badge_bg, highlightbackground=border)
+            lbl_cod.configure(bg=badge_bg, fg=cod_fg)
             lbl_desc.configure(bg=bg, fg=desc_fg)
-            if lbl_badge:
-                lbl_badge.configure(bg=bg)
+            if lbl_qtd:
+                pill_bg = CORES['accent_faded'] if (on and tem_qtd) else CORES['bg_input']
+                pill_fg = CORES['accent_light'] if (on and tem_qtd) else (
+                    CORES['warning'] if not tem_qtd else CORES['fg_dim']
+                )
+                lbl_qtd.configure(bg=pill_bg, fg=pill_fg)
 
-        chip = tk.Frame(frame, bg=CORES['chip_on'], cursor='hand2',
-                        highlightbackground=CORES['chip_border_on'],
-                        highlightthickness=1)
+        chip = tk.Frame(wrapper, bg=ON_BG, cursor='hand2',
+                        highlightbackground=ON_BORDER, highlightthickness=1)
         chip.pack(fill='x')
 
-        inner = tk.Frame(chip, bg=CORES['chip_on'])
-        inner.pack(fill='x', padx=10, pady=7)
+        inner = tk.Frame(chip, bg=ON_BG)
+        inner.pack(fill='x', padx=10, pady=8)
 
-        lbl_dot = tk.Label(inner, text='●', font=(FONT_SANS, 8),
-                           fg=CORES['success'], bg=CORES['chip_on'])
-        lbl_dot.pack(side='left', padx=(0, 5))
+        # Badge do código (accent-faded com borda)
+        badge = tk.Frame(inner, bg=CORES['accent_faded'],
+                         highlightbackground=ON_BORDER, highlightthickness=1)
+        badge.pack(side='left')
+        lbl_cod = tk.Label(badge, text=codigo, font=(FONT_MONO, 11, "bold"),
+                           fg=CORES['accent_light'], bg=CORES['accent_faded'],
+                           padx=8, pady=2)
+        lbl_cod.pack()
 
-        lbl_cod = tk.Label(inner, text=codigo, font=(FONT_MONO, 11, "bold"),
-                           fg=CORES['accent_light'], bg=CORES['chip_on'])
-        lbl_cod.pack(side='left')
+        lbl_desc = tk.Label(inner, text=desc, font=(FONT_SANS, 10),
+                            fg=CORES['fg_bright'], bg=ON_BG)
+        lbl_desc.pack(side='left', padx=(10, 0))
 
-        lbl_desc = tk.Label(inner, text=desc, font=(FONT_SANS, 8),
-                            fg=CORES['fg'], bg=CORES['chip_on'])
-        lbl_desc.pack(side='left', padx=(6, 0))
-
-        lbl_badge = None
-        if not tem_qtd:
-            lbl_badge = tk.Label(inner, text="sem qtd", font=(FONT_SANS, 7),
-                                 fg=CORES['warning'], bg=CORES['chip_on'])
-            lbl_badge.pack(side='right')
+        # Pill QTD à direita (accent-faded quando ON+tem_qtd, warning fade se "sem qtd")
+        lbl_qtd = tk.Label(
+            inner,
+            text="QTD" if tem_qtd else "sem qtd",
+            font=(FONT_MONO, 8, "bold"),
+            fg=CORES['accent_light'] if tem_qtd else CORES['warning'],
+            bg=CORES['accent_faded'] if tem_qtd else CORES['bg_input'],
+            padx=6, pady=1,
+        )
+        lbl_qtd.pack(side='right')
 
         self.codigos_update_fns[codigo] = atualizar_visual
 
-        for widget in [chip, inner, lbl_dot, lbl_cod, lbl_desc]:
+        for widget in [chip, inner, badge, lbl_cod, lbl_desc, lbl_qtd]:
             widget.bind('<Button-1>', lambda e: toggle())
-        if lbl_badge:
-            lbl_badge.bind('<Button-1>', lambda e: toggle())
 
     # ------------------------------------------------------------------
     # Lógica de processamento
@@ -2118,11 +2280,13 @@ class App(tk.Tk):
         for var in self.codigos_vars.values():
             var.set(True)
         self._recriar_chips()
+        self._atualizar_header_pills()
 
     def _limpar_selecao(self):
         for var in self.codigos_vars.values():
             var.set(False)
         self._recriar_chips()
+        self._atualizar_header_pills()
 
     def _recriar_chips(self):
         for fn in self.codigos_update_fns.values():
