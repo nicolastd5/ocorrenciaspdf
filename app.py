@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 import os
+import sys
 from datetime import datetime
 import json
 from processador import ProcessadorOcorrencias
@@ -23,6 +24,49 @@ from auto_update import check_and_update
 
 # ── Config local (API keys e preferências — não versionado) ─────────────────
 _CONFIG_PATH = os.path.join(os.path.expanduser('~'), '.ocorrencias_config.json')
+
+
+# ── Carregamento de fontes embutidas (Inter + JetBrains Mono) ────────────────
+def _assets_dir() -> str:
+    """Resolve a pasta `assets/` tanto em dev quanto no exe do PyInstaller."""
+    base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, 'assets')
+
+
+def _carregar_fontes_embutidas() -> tuple[str, str]:
+    """Registra os TTFs Inter + JetBrains Mono no processo via Windows API.
+    Retorna (sans_family, mono_family). Cai em Segoe UI / Consolas se falhar.
+    """
+    sans, mono = 'Segoe UI', 'Consolas'
+    if sys.platform != 'win32':
+        return sans, mono
+    try:
+        import ctypes
+        FR_PRIVATE = 0x10
+        gdi = ctypes.windll.gdi32
+        font_dir = os.path.join(_assets_dir(), 'fonts')
+        if not os.path.isdir(font_dir):
+            return sans, mono
+        ok_any = False
+        for fname in (
+            'Inter-Regular.ttf', 'Inter-Medium.ttf',
+            'Inter-SemiBold.ttf', 'Inter-Bold.ttf',
+            'JetBrainsMono-Regular.ttf', 'JetBrainsMono-Medium.ttf',
+        ):
+            path = os.path.join(font_dir, fname)
+            if not os.path.isfile(path):
+                continue
+            n = gdi.AddFontResourceExW(ctypes.c_wchar_p(path), FR_PRIVATE, 0)
+            if n:
+                ok_any = True
+        if ok_any:
+            sans, mono = 'Inter', 'JetBrains Mono'
+    except Exception:
+        pass
+    return sans, mono
+
+
+FONT_SANS, FONT_MONO = _carregar_fontes_embutidas()
 
 
 def _resolver_licenca(client, result) -> bool:
@@ -95,27 +139,29 @@ VERSION = _LC.APP_VERSION
 # Configurações visuais
 # ============================================================
 CORES = {
-    'bg':              '#1e1e1e',
-    'bg_card':         '#252526',
-    'bg_input':        '#2d2d2d',
-    'fg':              '#cccccc',
-    'fg_dim':          '#6b737f',
-    'fg_bright':       '#ffffff',
-    'accent':          '#007acc',
-    'accent_light':    '#4db8ff',
-    'accent_hover':    '#005f9e',
-    'success':         '#4ec994',
-    'error':           '#f14c4c',
-    'warning':         '#cca700',
-    'border':          '#3c3c3c',
-    'btn_bg':          '#007acc',
+    'bg':              '#0a0b12',
+    'bg_card':         '#14161f',
+    'bg_input':        '#0e1019',
+    'fg':              '#b4b8cc',
+    'fg_dim':          '#6e7591',
+    'fg_bright':       '#e6e8f0',
+    'accent':          '#5b8def',
+    'accent_light':    '#a8c0ff',
+    'accent_hover':    '#4a78d4',
+    'accent_faded':    '#16192a',
+    'success':         '#4ade80',
+    'error':           '#f87171',
+    'warning':         '#fbbf24',
+    'border':          '#262a3a',
+    'border_hover':    '#353a52',
+    'btn_bg':          '#5b8def',
     'btn_fg':          '#ffffff',
-    'btn_hover':       '#005f9e',
-    'chip_on':         '#2d2d2d',
-    'chip_off':        '#252526',
-    'chip_border_on':  '#007acc',
-    'chip_border_off': '#3c3c3c',
-    'table_header':    '#2d2d2d',
+    'btn_hover':       '#7aa3f5',
+    'chip_on':         '#16192a',
+    'chip_off':        '#14161f',
+    'chip_border_on':  '#5b8def',
+    'chip_border_off': '#262a3a',
+    'table_header':    '#1a1d29',
 }
 
 
@@ -230,11 +276,11 @@ class App(tk.Tk):
 
     def _atualizar_indicador_conexao(self, status):
         if status == LicenseStatus.VALID:
-            cor, bg, borda, texto = '#4ec994', '#1a2e24', '#2a4a3a', 'Conectado ao servidor'
+            cor, bg, borda, texto = CORES['success'], '#0f1a14', '#1f3a2a', 'Conectado ao servidor'
         elif status == LicenseStatus.OFFLINE_TOLERATED:
-            cor, bg, borda, texto = '#cca700', '#2a2410', '#4a3e10', 'Offline — uso tolerado'
+            cor, bg, borda, texto = CORES['warning'], '#1a1610', '#3a3220', 'Offline — uso tolerado'
         else:
-            cor, bg, borda, texto = '#f14c4c', '#2e1a1a', '#4a2a2a', 'Sem conexão com servidor'
+            cor, bg, borda, texto = CORES['error'], '#1a0f10', '#3a1f22', 'Sem conexão com servidor'
 
         self._conn_pill.configure(bg=bg, highlightbackground=borda)
         self._conn_dot.configure(fg=cor, bg=bg)
@@ -274,31 +320,32 @@ class App(tk.Tk):
         if hasattr(self, '_banner_update') and self._banner_update.winfo_exists():
             return
 
-        banner = tk.Frame(self, bg='#1a3a1a',
-                          highlightbackground='#4ec994', highlightthickness=1)
+        BANNER_BG = '#0f1a14'
+        banner = tk.Frame(self, bg=BANNER_BG,
+                          highlightbackground=CORES['success'], highlightthickness=1)
         banner.pack(fill='x', padx=20, pady=(4, 0))
         self._banner_update = banner
 
-        inner = tk.Frame(banner, bg='#1a3a1a')
+        inner = tk.Frame(banner, bg=BANNER_BG)
         inner.pack(fill='x', padx=14, pady=8)
 
         tk.Label(inner,
                  text=f"Nova versão disponível: v{nova_versao}",
-                 font=("Segoe UI", 10, "bold"),
-                 fg='#4ec994', bg='#1a3a1a').pack(side='left')
+                 font=(FONT_SANS, 10, "bold"),
+                 fg=CORES['success'], bg=BANNER_BG).pack(side='left')
 
         tk.Button(inner, text="Atualizar agora",
-                  font=("Segoe UI", 9, "bold"),
-                  fg='#1e1e1e', bg='#4ec994',
-                  activeforeground='#1e1e1e', activebackground='#3ab87a',
+                  font=(FONT_SANS, 9, "bold"),
+                  fg=CORES['bg'], bg=CORES['success'],
+                  activeforeground=CORES['bg'], activebackground='#86efac',
                   relief='flat', cursor='hand2', padx=10, pady=2, borderwidth=0,
                   command=lambda: self._aplicar_update(nova_versao)
                   ).pack(side='right', padx=(8, 0))
 
         tk.Button(inner, text="X",
-                  font=("Segoe UI", 9),
-                  fg='#4ec994', bg='#1a3a1a',
-                  activeforeground='#ffffff', activebackground='#1a3a1a',
+                  font=(FONT_SANS, 9),
+                  fg=CORES['success'], bg=BANNER_BG,
+                  activeforeground=CORES['fg_bright'], activebackground=BANNER_BG,
                   relief='flat', cursor='hand2', padx=6, pady=2, borderwidth=0,
                   command=banner.destroy
                   ).pack(side='right')
@@ -346,33 +393,33 @@ class App(tk.Tk):
         widget.bind('<Leave>', on_leave)
 
     def _criar_interface(self):
-        # Barra de acento no topo
-        tk.Frame(self, bg=CORES['accent'], height=3).pack(fill='x', side='top')
+        # Faixa gradiente no topo (signature header band)
+        self._criar_faixa_gradiente_topo()
 
         # Linha 1: título + versão
         titlebar = tk.Frame(self, bg=CORES['bg'])
         titlebar.pack(fill='x', padx=20, pady=(12, 4))
 
         tk.Label(titlebar, text="Processador de Ocorrências",
-                 font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
+                 font=(FONT_SANS, 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
         tk.Label(titlebar, text=f"v{VERSION}",
-                 font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(side='left', padx=(6, 0), pady=(4, 0))
 
         # Indicador de conexão com o servidor
-        self._conn_pill = tk.Frame(titlebar, bg='#2a2a2a',
-                                   highlightbackground='#3c3c3c',
+        self._conn_pill = tk.Frame(titlebar, bg=CORES['bg_card'],
+                                   highlightbackground=CORES['border'],
                                    highlightthickness=1)
         self._conn_pill.pack(side='right', ipadx=10, ipady=4)
         self._conn_dot = tk.Label(self._conn_pill, text="●",
-                                  font=("Segoe UI", 7),
-                                  fg=CORES['fg_dim'], bg='#2a2a2a')
+                                  font=(FONT_SANS, 7),
+                                  fg=CORES['fg_dim'], bg=CORES['bg_card'])
         self._conn_dot.pack(side='left', padx=(0, 4))
         self._conn_label = tk.Label(self._conn_pill, text="Verificando...",
-                                    font=("Segoe UI", 9),
-                                    fg=CORES['fg_dim'], bg='#2a2a2a')
+                                    font=(FONT_SANS, 9),
+                                    fg=CORES['fg_dim'], bg=CORES['bg_card'])
         self._conn_label.pack(side='left')
         self._verificar_conexao_servidor()
 
@@ -384,7 +431,7 @@ class App(tk.Tk):
 
         for tab_id, label in [('processar', '⚙  Processar'), ('historico', '🕘  Histórico'), ('vtcaixa', '💳  VT Caixa'), ('historico_vtc', '🕘  Hist. VT'), ('codigos', '🏷  Códigos'), ('sobre', 'ℹ  Sobre')]:
             btn = tk.Button(tabbar, text=label,
-                            font=("Segoe UI", 10),
+                            font=(FONT_SANS, 10),
                             fg=CORES['fg_dim'], bg=CORES['bg'],
                             relief='flat', cursor='hand2',
                             padx=12, pady=6, borderwidth=0,
@@ -425,27 +472,56 @@ class App(tk.Tk):
 
         self._mostrar_aba('processar')
 
+    def _criar_faixa_gradiente_topo(self):
+        """Faixa 1px no topo: fade-in -> pico azul -> fade-out (signature)."""
+        WIDTH, HEIGHT = 1400, 1
+        canvas = tk.Canvas(self, height=HEIGHT, bg=CORES['bg'],
+                           highlightthickness=0, borderwidth=0)
+        canvas.pack(fill='x', side='top')
+
+        def _interp(c1, c2, t):
+            r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+            r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+            r = int(r1 + (r2 - r1) * t)
+            g = int(g1 + (g2 - g1) * t)
+            b = int(b1 + (b2 - b1) * t)
+            return f'#{r:02x}{g:02x}{b:02x}'
+
+        bg = CORES['bg']
+        peak = CORES['accent_light']
+        for x in range(WIDTH):
+            ratio = x / WIDTH
+            if ratio < 0.30:
+                color = bg
+            elif ratio < 0.50:
+                color = _interp(bg, peak, (ratio - 0.30) / 0.20)
+            elif ratio < 0.70:
+                color = _interp(peak, bg, (ratio - 0.50) / 0.20)
+            else:
+                color = bg
+            canvas.create_line(x, 0, x + 1, 0, fill=color)
+
     def _mostrar_aba(self, tab_id):
         for fid, frame in self._tab_frames.items():
             frame.pack_forget()
             if fid == tab_id:
                 self._tab_btns[fid].configure(
                     fg=CORES['accent_light'], bg=CORES['bg_card'],
-                    font=("Segoe UI", 10, "bold"))
+                    font=(FONT_SANS, 10, "bold"))
             else:
                 self._tab_btns[fid].configure(
                     fg=CORES['fg_dim'], bg=CORES['bg'],
-                    font=("Segoe UI", 10))
+                    font=(FONT_SANS, 10))
         self._tab_frames[tab_id].pack(fill='both', expand=True)
 
     def _criar_aba_processar(self, parent):
         # Botão Processar fixo no rodapé (fora do scroll)
         self.btn_processar = tk.Button(
             parent, text="▶  PROCESSAR ARQUIVOS",
-            font=("Segoe UI", 13, "bold"),
+            font=(FONT_SANS, 14, "bold"),
             fg=CORES['btn_fg'], bg=CORES['btn_bg'],
             activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
-            relief='flat', cursor='hand2', pady=14, borderwidth=0,
+            relief='flat', cursor='hand2', pady=16, borderwidth=0,
             command=self._iniciar_processamento
         )
         self.btn_processar.pack(side='bottom', fill='x', pady=(4, 0))
@@ -546,7 +622,7 @@ class App(tk.Tk):
         for val, label, tooltip in modos:
             btn = tk.Label(
                 modo_row, text=label,
-                font=("Segoe UI", 9, "bold"),
+                font=(FONT_SANS, 9, "bold"),
                 fg=CORES['fg_dim'], bg=CORES['chip_off'],
                 padx=12, pady=5, cursor='hand2',
                 highlightbackground=CORES['chip_border_off'], highlightthickness=1,
@@ -561,10 +637,10 @@ class App(tk.Tk):
         api_linha = tk.Frame(self._verif_api_row, bg=CORES['bg_card'])
         api_linha.pack(fill='x', pady=(0, 4))
         tk.Label(api_linha, text="API Key Gemini:",
-                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 10), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='left', padx=(0, 8))
         tk.Entry(api_linha, textvariable=self.verif_api_key,
-                 font=("Segoe UI", 10), fg=CORES['fg_bright'],
+                 font=(FONT_SANS, 10), fg=CORES['fg_bright'],
                  bg=CORES['bg_input'], insertbackground=CORES['fg'],
                  relief='flat', highlightbackground=CORES['accent'],
                  highlightthickness=1, show='*', width=36).pack(side='left')
@@ -572,11 +648,11 @@ class App(tk.Tk):
         modelo_linha = tk.Frame(self._verif_api_row, bg=CORES['bg_card'])
         modelo_linha.pack(fill='x', pady=(0, 2))
         tk.Label(modelo_linha, text="Modelo:",
-                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 10), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='left', padx=(0, 8))
         self._verif_modelo_combo = ttk.Combobox(
             modelo_linha, textvariable=self.verif_modelo,
-            font=("Segoe UI", 10), width=30, state='readonly')
+            font=(FONT_SANS, 10), width=30, state='readonly')
         self._verif_modelo_combo.pack(side='left')
         self._criar_mini_btn(
             modelo_linha, "Carregar modelos",
@@ -604,12 +680,12 @@ class App(tk.Tk):
         linha_dias = tk.Frame(self._dias_mes_row, bg=CORES['bg_card'])
         linha_dias.pack(fill='x', pady=(2, 6))
         tk.Label(linha_dias, text="Dias do mês:",
-                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 10), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='left', padx=(28, 8))
         vcmd = (self.register(lambda s: s.isdigit() and int(s) <= 31 if s else True), '%P')
         self._entry_dias = tk.Entry(
             linha_dias, textvariable=self.dias_mes,
-            font=("Segoe UI", 11, "bold"), width=5,
+            font=(FONT_SANS, 11, "bold"), width=5,
             fg=CORES['fg_bright'], bg=CORES['bg_input'],
             insertbackground=CORES['fg'], relief='flat',
             highlightbackground=CORES['accent'], highlightthickness=1,
@@ -617,14 +693,14 @@ class App(tk.Tk):
         )
         self._entry_dias.pack(side='left')
         tk.Label(linha_dias, text="dias",
-                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 10), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='left', padx=(6, 0))
 
         # Linha 2: seleção de colunas Qt
         linha_qt = tk.Frame(self._dias_mes_row, bg=CORES['bg_card'])
         linha_qt.pack(fill='x', pady=(0, 4))
         tk.Label(linha_qt, text="Colunas:",
-                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 10), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='left', padx=(28, 12))
 
         for sigla, label, var in [
@@ -642,10 +718,10 @@ class App(tk.Tk):
         header.pack(fill='x', pady=(0, 12))
 
         tk.Label(header, text="🕘  Histórico de Processamentos",
-                 font=("Segoe UI", 14, "bold"), fg=CORES['fg_bright'],
+                 font=(FONT_SANS, 14, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
 
-        tk.Button(header, text="Limpar", font=("Segoe UI", 9),
+        tk.Button(header, text="Limpar", font=(FONT_SANS, 9),
                   fg=CORES['fg_dim'], bg=CORES['bg_input'],
                   activeforeground=CORES['fg'], activebackground=CORES['border'],
                   relief='flat', cursor='hand2', padx=10, pady=3, borderwidth=0,
@@ -657,7 +733,7 @@ class App(tk.Tk):
         self._historico_vazio = tk.Label(
             self._historico_lista,
             text="Nenhum processamento realizado ainda.",
-            font=("Segoe UI", 11), fg=CORES['fg_dim'], bg=CORES['bg'])
+            font=(FONT_SANS, 11), fg=CORES['fg_dim'], bg=CORES['bg'])
         self._historico_vazio.pack(pady=40)
 
     def _limpar_historico(self):
@@ -671,7 +747,7 @@ class App(tk.Tk):
         if not self._historico:
             tk.Label(self._historico_lista,
                      text="Nenhum processamento realizado ainda.",
-                     font=("Segoe UI", 11), fg=CORES['fg_dim'],
+                     font=(FONT_SANS, 11), fg=CORES['fg_dim'],
                      bg=CORES['bg']).pack(pady=40)
             return
 
@@ -696,10 +772,10 @@ class App(tk.Tk):
             top.pack(fill='x', padx=14, pady=(10, 6))
 
             tk.Label(top, text=f"#{len(self._historico) - i}  {entrada['arquivo']}",
-                     font=("Segoe UI", 10, "bold"), fg=CORES['fg_bright'],
+                     font=(FONT_SANS, 10, "bold"), fg=CORES['fg_bright'],
                      bg=CORES['bg_card']).pack(side='left')
             tk.Label(top, text=entrada['data'],
-                     font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                     font=(FONT_SANS, 9), fg=CORES['fg_dim'],
                      bg=CORES['bg_card']).pack(side='right')
 
             # Stats inline
@@ -715,9 +791,9 @@ class App(tk.Tk):
             ]:
                 bloco = tk.Frame(stats_row, bg=CORES['bg_input'])
                 bloco.pack(side='left', padx=(0, 6))
-                tk.Label(bloco, text=valor, font=("Segoe UI", 13, "bold"),
+                tk.Label(bloco, text=valor, font=(FONT_SANS, 13, "bold"),
                          fg=cor, bg=CORES['bg_input']).pack(side='left', padx=(8, 4), pady=4)
-                tk.Label(bloco, text=label, font=("Segoe UI", 8),
+                tk.Label(bloco, text=label, font=(FONT_SANS, 8),
                          fg=CORES['fg_dim'], bg=CORES['bg_input']).pack(side='left', padx=(0, 8))
 
             # Não localizados
@@ -726,13 +802,13 @@ class App(tk.Tk):
                 det.pack(fill='x', padx=14, pady=(0, 10))
 
                 tk.Label(det, text="Não localizados:",
-                         font=("Segoe UI", 9, "bold"), fg=CORES['error'],
+                         font=(FONT_SANS, 9, "bold"), fg=CORES['error'],
                          bg=CORES['bg_card']).pack(anchor='w', pady=(0, 4))
 
                 for p in entrada['lista_nao_encontrados']:
                     tk.Label(det,
                              text=f"  RE {p['re']}  —  {p['nome']}  —  {p['motivo']}",
-                             font=("Consolas", 9), fg=CORES['fg_dim'],
+                             font=(FONT_MONO, 9), fg=CORES['fg_dim'],
                              bg=CORES['bg_card'], anchor='w').pack(fill='x')
 
     def _criar_aba_vtcaixa(self, parent):
@@ -749,11 +825,11 @@ class App(tk.Tk):
         # File picker de saída (salvar como)
         out_row = tk.Frame(files_frame, bg=CORES['bg_card'])
         out_row.pack(fill='x', pady=5)
-        tk.Label(out_row, text="CSV de Saída", font=("Segoe UI", 10),
+        tk.Label(out_row, text="CSV de Saída", font=(FONT_SANS, 10),
                  fg=CORES['fg_dim'], bg=CORES['bg_card'], width=14,
                  anchor='w').pack(side='left')
         out_entry = tk.Entry(out_row, textvariable=self.vtc_output_path,
-                             font=("Consolas", 9), fg=CORES['fg'],
+                             font=(FONT_MONO, 9), fg=CORES['fg'],
                              bg=CORES['bg_input'], insertbackground=CORES['fg'],
                              relief='flat', highlightbackground=CORES['border'],
                              highlightthickness=1)
@@ -772,7 +848,7 @@ class App(tk.Tk):
             if path:
                 self.vtc_output_path.set(path)
 
-        btn_out = tk.Button(out_row, text="Salvar como", font=("Segoe UI", 9),
+        btn_out = tk.Button(out_row, text="Salvar como", font=(FONT_SANS, 9),
                             fg=CORES['accent_light'], bg=CORES['bg_input'],
                             activeforeground=CORES['accent'],
                             activebackground=CORES['bg_card'],
@@ -802,12 +878,12 @@ class App(tk.Tk):
             else:
                 self._vtc_ia_key_frame.pack_forget()
 
-        ia_dot = tk.Label(ia_chk_row, text="☐", font=("Segoe UI", 13),
+        ia_dot = tk.Label(ia_chk_row, text="☐", font=(FONT_SANS, 13),
                           fg=CORES['fg_dim'], bg=CORES['bg_card'], cursor='hand2')
         ia_dot.pack(side='left', padx=(0, 8))
         ia_lbl = tk.Label(ia_chk_row,
                           text="Verificar dados utilizando IA da Google Gemini ou Gemma 4",
-                          font=("Segoe UI", 10), fg=CORES['fg'],
+                          font=(FONT_SANS, 10), fg=CORES['fg'],
                           bg=CORES['bg_card'], cursor='hand2')
         ia_lbl.pack(side='left')
         for w in (ia_dot, ia_lbl, ia_chk_row):
@@ -819,18 +895,18 @@ class App(tk.Tk):
         # Linha 1: API Key + botão Carregar Modelos
         key_row = tk.Frame(self._vtc_ia_key_frame, bg=CORES['bg_card'])
         key_row.pack(fill='x', pady=(2, 4))
-        tk.Label(key_row, text="API Key:", font=("Segoe UI", 10),
+        tk.Label(key_row, text="API Key:", font=(FONT_SANS, 10),
                  fg=CORES['fg_dim'], bg=CORES['bg_card'],
                  width=14, anchor='w').pack(side='left')
         tk.Entry(key_row, textvariable=self.vtc_api_key,
-                 font=("Consolas", 9), fg=CORES['fg'], bg=CORES['bg_input'],
+                 font=(FONT_MONO, 9), fg=CORES['fg'], bg=CORES['bg_input'],
                  insertbackground=CORES['fg'], relief='flat',
                  highlightbackground=CORES['border'], highlightthickness=1,
                  show='*').pack(side='left', fill='x', expand=True, padx=(0, 8), ipady=5)
 
         self._vtc_btn_carregar = tk.Button(
             key_row, text="↻  Carregar modelos",
-            font=("Segoe UI", 9), fg=CORES['accent_light'], bg=CORES['bg_input'],
+            font=(FONT_SANS, 9), fg=CORES['accent_light'], bg=CORES['bg_input'],
             activeforeground=CORES['accent'], activebackground=CORES['bg_card'],
             relief='flat', cursor='hand2', padx=10, pady=5, borderwidth=0,
             command=self._vtc_carregar_modelos,
@@ -842,14 +918,14 @@ class App(tk.Tk):
         # Linha 2: Seleção de modelo
         model_row = tk.Frame(self._vtc_ia_key_frame, bg=CORES['bg_card'])
         model_row.pack(fill='x', pady=(0, 2))
-        tk.Label(model_row, text="Modelo:", font=("Segoe UI", 10),
+        tk.Label(model_row, text="Modelo:", font=(FONT_SANS, 10),
                  fg=CORES['fg_dim'], bg=CORES['bg_card'],
                  width=14, anchor='w').pack(side='left')
 
         # Sem textvariable — vtc_model_id é gerenciado manualmente para
         # garantir que contenha sempre o model_id puro, nunca o texto do display.
         self._vtc_model_combo = ttk.Combobox(
-            model_row, font=("Segoe UI", 9), state='readonly', width=40,
+            model_row, font=(FONT_SANS, 9), state='readonly', width=40,
         )
         self._vtc_model_combo['values'] = ('gemini-2.5-flash — Gemini 2.5 Flash',)
         self._vtc_model_combo.set(f"{self.vtc_model_id.get()} — Gemini 2.5 Flash")
@@ -865,13 +941,13 @@ class App(tk.Tk):
         self._vtc_model_combo.bind('<<ComboboxSelected>>', _on_model_select)
         self._vtc_lbl_modelo_status = tk.Label(
             model_row, text="(clique ↻ para carregar)",
-            font=("Segoe UI", 8), fg=CORES['fg_dim'], bg=CORES['bg_card'])
+            font=(FONT_SANS, 8), fg=CORES['fg_dim'], bg=CORES['bg_card'])
         self._vtc_lbl_modelo_status.pack(side='left', padx=(8, 0))
 
         # ── Botão Gerar CSV ─────────────────────────────────────────────
         self.vtc_btn_gerar = tk.Button(
             parent, text="▶  GERAR CSV VT CAIXA",
-            font=("Segoe UI", 13, "bold"),
+            font=(FONT_SANS, 13, "bold"),
             fg=CORES['btn_fg'], bg=CORES['btn_bg'],
             activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
             relief='flat', cursor='hand2', pady=14, borderwidth=0,
@@ -888,14 +964,14 @@ class App(tk.Tk):
         tk.Frame(log_wrapper, bg=CORES['accent'], width=3).pack(side='left', fill='y')
         log_inner = tk.Frame(log_wrapper, bg=CORES['bg_card'])
         log_inner.pack(side='left', fill='both', expand=True)
-        tk.Label(log_inner, text="Log", font=("Segoe UI", 11, "bold"),
+        tk.Label(log_inner, text="Log", font=(FONT_SANS, 11, "bold"),
                  fg=CORES['fg_bright'], bg=CORES['bg_card']).pack(
                      anchor='w', padx=16, pady=(12, 6))
 
         log_text_frame = tk.Frame(log_inner, bg=CORES['bg_card'])
         log_text_frame.pack(fill='both', expand=True, padx=16, pady=(0, 14))
 
-        self.vtc_log = tk.Text(log_text_frame, font=("Consolas", 9),
+        self.vtc_log = tk.Text(log_text_frame, font=(FONT_MONO, 9),
                                fg=CORES['fg'], bg=CORES['bg_input'],
                                insertbackground=CORES['fg'], relief='flat',
                                highlightthickness=0, state='disabled',
@@ -918,9 +994,9 @@ class App(tk.Tk):
         header.pack(fill='x', pady=(0, 12))
 
         tk.Label(header, text="🕘  Histórico VT Caixa",
-                 font=("Segoe UI", 14, "bold"), fg=CORES['fg_bright'],
+                 font=(FONT_SANS, 14, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(side='left')
-        tk.Button(header, text="Limpar", font=("Segoe UI", 9),
+        tk.Button(header, text="Limpar", font=(FONT_SANS, 9),
                   fg=CORES['fg_dim'], bg=CORES['bg_input'],
                   activeforeground=CORES['fg'], activebackground=CORES['border'],
                   relief='flat', cursor='hand2', padx=10, pady=3, borderwidth=0,
@@ -931,7 +1007,7 @@ class App(tk.Tk):
 
         tk.Label(self._vtc_hist_lista,
                  text="Nenhum processamento realizado ainda.",
-                 font=("Segoe UI", 11), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 11), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(pady=40)
 
     def _vtc_limpar_historico(self):
@@ -945,7 +1021,7 @@ class App(tk.Tk):
         if not self._historico_vtc:
             tk.Label(self._vtc_hist_lista,
                      text="Nenhum processamento realizado ainda.",
-                     font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                     font=(FONT_SANS, 10), fg=CORES['fg_dim'],
                      bg=CORES['bg']).pack(pady=20)
             return
 
@@ -969,11 +1045,11 @@ class App(tk.Tk):
             top = tk.Frame(card, bg=CORES['bg_card'])
             top.pack(fill='x', padx=14, pady=(10, 6))
             tk.Label(top, text=f"#{total - i}  {entrada['arquivo']}",
-                     font=("Segoe UI", 10, "bold"), fg=CORES['fg_bright'],
+                     font=(FONT_SANS, 10, "bold"), fg=CORES['fg_bright'],
                      bg=CORES['bg_card']).pack(side='left')
             tk.Label(top,
                      text=f"{entrada['data']}  •  {entrada['tipo_fonte']}",
-                     font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                     font=(FONT_SANS, 9), fg=CORES['fg_dim'],
                      bg=CORES['bg_card']).pack(side='right')
 
             stats_row = tk.Frame(card, bg=CORES['bg_card'])
@@ -990,9 +1066,9 @@ class App(tk.Tk):
             ]:
                 bloco = tk.Frame(stats_row, bg=CORES['bg_input'])
                 bloco.pack(side='left', padx=(0, 6))
-                tk.Label(bloco, text=valor, font=("Segoe UI", 12, "bold"),
+                tk.Label(bloco, text=valor, font=(FONT_SANS, 12, "bold"),
                          fg=cor, bg=CORES['bg_input']).pack(side='left', padx=(8, 4), pady=4)
-                tk.Label(bloco, text=label, font=("Segoe UI", 8),
+                tk.Label(bloco, text=label, font=(FONT_SANS, 8),
                          fg=CORES['fg_dim'], bg=CORES['bg_input']).pack(side='left', padx=(0, 8))
 
             # Sem cadastro
@@ -1000,11 +1076,11 @@ class App(tk.Tk):
                 det = tk.Frame(card, bg=CORES['bg_card'])
                 det.pack(fill='x', padx=14, pady=(0, 4))
                 tk.Label(det, text="Sem cadastro no Excel:",
-                         font=("Segoe UI", 9, "bold"), fg=CORES['error'],
+                         font=(FONT_SANS, 9, "bold"), fg=CORES['error'],
                          bg=CORES['bg_card']).pack(anchor='w', pady=(0, 3))
                 for item in entrada['nao_encontrados']:
                     tk.Label(det, text=f"  • {item}",
-                             font=("Consolas", 9), fg=CORES['fg_dim'],
+                             font=(FONT_MONO, 9), fg=CORES['fg_dim'],
                              bg=CORES['bg_card'], anchor='w').pack(fill='x')
 
             # Avisos de encoding
@@ -1012,11 +1088,11 @@ class App(tk.Tk):
                 det2 = tk.Frame(card, bg=CORES['bg_card'])
                 det2.pack(fill='x', padx=14, pady=(0, 4))
                 tk.Label(det2, text="Avisos de encoding (latin-1):",
-                         font=("Segoe UI", 9, "bold"), fg=CORES['warning'],
+                         font=(FONT_SANS, 9, "bold"), fg=CORES['warning'],
                          bg=CORES['bg_card']).pack(anchor='w', pady=(0, 3))
                 for av in entrada['avisos_csv']:
                     tk.Label(det2, text=f"  • {av}",
-                             font=("Consolas", 8), fg=CORES['fg_dim'],
+                             font=(FONT_MONO, 8), fg=CORES['fg_dim'],
                              bg=CORES['bg_card'], anchor='w').pack(fill='x')
 
             # Alertas IA
@@ -1024,7 +1100,7 @@ class App(tk.Tk):
                 det3 = tk.Frame(card, bg=CORES['bg_card'])
                 det3.pack(fill='x', padx=14, pady=(0, 8))
                 tk.Label(det3, text=f"Relatório IA:",
-                         font=("Segoe UI", 9, "bold"), fg=CORES['accent_light'],
+                         font=(FONT_SANS, 9, "bold"), fg=CORES['accent_light'],
                          bg=CORES['bg_card']).pack(anchor='w', pady=(0, 3))
                 for linha in entrada['alertas_ia']:
                     ll = linha.lower()
@@ -1034,7 +1110,7 @@ class App(tk.Tk):
                         else CORES['fg_dim']
                     )
                     tk.Label(det3, text=f"  {linha}",
-                             font=("Consolas", 8), fg=cor_ia,
+                             font=(FONT_MONO, 8), fg=cor_ia,
                              bg=CORES['bg_card'], anchor='w').pack(fill='x')
             else:
                 tk.Frame(card, bg=CORES['bg_card']).pack(pady=2)
@@ -1208,11 +1284,11 @@ class App(tk.Tk):
         txt_col.pack(side='left', fill='x', expand=True)
 
         tk.Label(txt_col, text="Gerando CSV VT Caixa",
-                 font=("Segoe UI", 15, "bold"), fg=CORES['fg_bright'],
+                 font=(FONT_SANS, 15, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(anchor='w')
 
         lbl_sub = tk.Label(txt_col, text="Preparando fluxo...",
-                           font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                           font=(FONT_SANS, 9), fg=CORES['fg_dim'],
                            bg=CORES['bg'])
         lbl_sub.pack(anchor='w', pady=(4, 0))
 
@@ -1250,12 +1326,12 @@ class App(tk.Tk):
         progress_inner.pack(fill='x', padx=16, pady=14)
 
         lbl_stage = tk.Label(progress_inner, text="Preparando",
-                             font=("Segoe UI", 10, "bold"), fg=CORES['accent_light'],
+                             font=(FONT_SANS, 10, "bold"), fg=CORES['accent_light'],
                              bg=CORES['bg_card'])
         lbl_stage.pack(anchor='w')
 
         lbl_status = tk.Label(progress_inner, text="Iniciando...",
-                              font=("Segoe UI", 10), fg=CORES['fg'],
+                              font=(FONT_SANS, 10), fg=CORES['fg'],
                               bg=CORES['bg_card'])
         lbl_status.pack(anchor='w', pady=(6, 12))
 
@@ -1277,14 +1353,14 @@ class App(tk.Tk):
         meta_row.pack(fill='x', pady=(8, 0))
 
         lbl_pct = tk.Label(meta_row, text="0%",
-                           font=("Segoe UI", 9, "bold"), fg=CORES['fg'],
+                           font=(FONT_MONO, 10, "bold"), fg=CORES['accent_light'],
                            bg=CORES['bg_card'])
         lbl_pct.pack(side='left')
 
         hint = "Com IA habilitada, a validacao final pode levar um pouco mais." if usar_ia \
             else "Sem IA, a geracao costuma terminar mais rapido."
         tk.Label(meta_row, text=hint,
-                 font=("Segoe UI", 8), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 8), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='right')
 
         steps_frame = tk.Frame(main, bg=CORES['bg'])
@@ -1314,7 +1390,7 @@ class App(tk.Tk):
             dot.pack(side='left', padx=(0, 8), pady=1)
             dot.pack_propagate(False)
 
-            lbl = tk.Label(inner, text=label, font=("Segoe UI", 9),
+            lbl = tk.Label(inner, text=label, font=(FONT_SANS, 9),
                            fg=CORES['fg_dim'], bg=CORES['bg_card'])
             lbl.pack(side='left')
 
@@ -1533,9 +1609,9 @@ class App(tk.Tk):
         inner.pack(fill='both', expand=True, padx=24, pady=20)
 
         # Título
-        tk.Label(inner, text="🤖  Relatório IA", font=("Segoe UI", 14, "bold"),
+        tk.Label(inner, text="🤖  Relatório IA", font=(FONT_SANS, 14, "bold"),
                  fg=CORES['fg_bright'], bg=CORES['bg']).pack(anchor='w')
-        tk.Label(inner, text=f"Modelo: {model_id}", font=("Segoe UI", 9),
+        tk.Label(inner, text=f"Modelo: {model_id}", font=(FONT_SANS, 9),
                  fg=CORES['fg_dim'], bg=CORES['bg']).pack(anchor='w', pady=(2, 12))
 
         # Área de texto com scroll
@@ -1543,7 +1619,7 @@ class App(tk.Tk):
         txt_frame.pack(fill='both', expand=True)
 
         sb = tk.Scrollbar(txt_frame, bg=CORES['bg_card'])
-        txt = tk.Text(txt_frame, font=("Consolas", 10), bg=CORES['bg_card'],
+        txt = tk.Text(txt_frame, font=(FONT_MONO, 10), bg=CORES['bg_card'],
                       fg=CORES['fg'], relief='flat', bd=0, wrap='word',
                       state='normal', yscrollcommand=sb.set, padx=12, pady=10)
         sb.configure(command=txt.yview)
@@ -1554,7 +1630,7 @@ class App(tk.Tk):
         txt.tag_configure('err',     foreground=CORES['error'])
         txt.tag_configure('ok',      foreground=CORES['success'])
         txt.tag_configure('dim',     foreground=CORES['fg_dim'])
-        txt.tag_configure('bold',    font=("Consolas", 10, "bold"))
+        txt.tag_configure('bold',    font=(FONT_MONO, 10, "bold"))
 
         tem_problema = False
         for linha in alertas:
@@ -1580,10 +1656,10 @@ class App(tk.Tk):
 
         resumo_txt = f"{'⚠  Inconsistências encontradas' if tem_problema else '✔  Nenhuma inconsistência encontrada'}"
         resumo_cor = CORES['warning'] if tem_problema else CORES['success']
-        tk.Label(footer, text=resumo_txt, font=("Segoe UI", 10, "bold"),
+        tk.Label(footer, text=resumo_txt, font=(FONT_SANS, 10, "bold"),
                  fg=resumo_cor, bg=CORES['bg']).pack(side='left')
 
-        btn_fechar = tk.Button(footer, text="Fechar", font=("Segoe UI", 10),
+        btn_fechar = tk.Button(footer, text="Fechar", font=(FONT_SANS, 10),
                                bg=CORES['btn_bg'], fg=CORES['btn_fg'],
                                relief='flat', bd=0, padx=20, pady=6,
                                cursor='hand2', command=win.destroy)
@@ -1644,22 +1720,22 @@ class App(tk.Tk):
         tabela_cod.columnconfigure(3, weight=0)
 
         for col, txt in enumerate(["Operadora", "Valor Unitário", "Código", ""]):
-            tk.Label(tabela_cod, text=txt, font=("Segoe UI", 9, "bold"),
+            tk.Label(tabela_cod, text=txt, font=(FONT_SANS, 9, "bold"),
                      fg=CORES['fg_bright'], bg=CORES['bg_input'],
                      anchor='w', padx=8, pady=4).grid(row=0, column=col, sticky='ew', padx=(0, 1))
 
         for i, (operadora, valor, codigo) in enumerate(codigos):
             bg = CORES['bg_card'] if i % 2 == 0 else CORES['bg_input']
             r = i + 1
-            tk.Label(tabela_cod, text=operadora, font=("Consolas", 9),
+            tk.Label(tabela_cod, text=operadora, font=(FONT_MONO, 9),
                      fg=CORES['fg'], bg=bg, anchor='w', padx=8, pady=3).grid(row=r, column=0, sticky='ew', padx=(0, 1))
-            tk.Label(tabela_cod, text=valor if valor else "qualquer", font=("Consolas", 9),
+            tk.Label(tabela_cod, text=valor if valor else "qualquer", font=(FONT_MONO, 9),
                      fg=CORES['fg_dim'] if not valor else CORES['fg'],
                      bg=bg, anchor='w', padx=8).grid(row=r, column=1, sticky='ew', padx=(0, 1))
-            tk.Label(tabela_cod, text=codigo, font=("Consolas", 9, "bold"),
+            tk.Label(tabela_cod, text=codigo, font=(FONT_MONO, 9, "bold"),
                      fg=CORES['accent_light'], bg=bg,
                      anchor='w', padx=8).grid(row=r, column=2, sticky='ew', padx=(0, 1))
-            tk.Button(tabela_cod, text="📋", font=("Segoe UI", 8),
+            tk.Button(tabela_cod, text="📋", font=(FONT_SANS, 8),
                       fg=CORES['fg_dim'], bg=bg, relief='flat', cursor='hand2',
                       borderwidth=0, padx=6, pady=2,
                       command=lambda c=codigo: _copiar(c)).grid(row=r, column=3, sticky='ew', padx=(0, 4))
@@ -1685,21 +1761,21 @@ class App(tk.Tk):
         tabela_dep.columnconfigure(3, weight=0)
 
         for col, txt in enumerate(["Departamento original", "", "Substituto", ""]):
-            tk.Label(tabela_dep, text=txt, font=("Segoe UI", 9, "bold"),
+            tk.Label(tabela_dep, text=txt, font=(FONT_SANS, 9, "bold"),
                      fg=CORES['fg_bright'], bg=CORES['bg_input'],
                      anchor='w', padx=8, pady=4).grid(row=0, column=col, sticky='ew', padx=(0, 1))
 
         for i, (original, substituto) in enumerate(depart_map.items()):
             bg = CORES['bg_card'] if i % 2 == 0 else CORES['bg_input']
             r = i + 1
-            tk.Label(tabela_dep, text=original, font=("Consolas", 9),
+            tk.Label(tabela_dep, text=original, font=(FONT_MONO, 9),
                      fg=CORES['fg'], bg=bg, anchor='w', padx=8, pady=3).grid(row=r, column=0, sticky='ew', padx=(0, 1))
-            tk.Label(tabela_dep, text="→", font=("Segoe UI", 9),
+            tk.Label(tabela_dep, text="→", font=(FONT_SANS, 9),
                      fg=CORES['fg_dim'], bg=bg, anchor='center', padx=6).grid(row=r, column=1, sticky='ew', padx=(0, 1))
-            tk.Label(tabela_dep, text=substituto, font=("Consolas", 9, "bold"),
+            tk.Label(tabela_dep, text=substituto, font=(FONT_MONO, 9, "bold"),
                      fg=CORES['accent_light'], bg=bg,
                      anchor='w', padx=8).grid(row=r, column=2, sticky='ew', padx=(0, 1))
-            tk.Button(tabela_dep, text="📋", font=("Segoe UI", 8),
+            tk.Button(tabela_dep, text="📋", font=(FONT_SANS, 8),
                       fg=CORES['fg_dim'], bg=bg, relief='flat', cursor='hand2',
                       borderwidth=0, padx=6, pady=2,
                       command=lambda s=substituto: _copiar(s)).grid(row=r, column=3, sticky='ew', padx=(0, 4))
@@ -1726,18 +1802,18 @@ class App(tk.Tk):
         inner.pack(padx=60, pady=30, fill='x')
 
         # Cabeçalho
-        tk.Label(inner, text="⚙", font=("Segoe UI", 52),
+        tk.Label(inner, text="⚙", font=(FONT_SANS, 52),
                  fg=CORES['accent'], bg=CORES['bg']).pack()
         tk.Label(inner, text="Processador de Ocorrências",
-                 font=("Segoe UI", 20, "bold"), fg=CORES['fg_bright'],
+                 font=(FONT_SANS, 20, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(pady=(6, 2))
         tk.Label(inner, text=f"Versão {VERSION}",
-                 font=("Segoe UI", 10), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 10), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack()
         tk.Label(inner,
                  text="Extrai ocorrências de PDFs de jornada de trabalho\n"
                       "e preenche automaticamente em planilhas Excel.",
-                 font=("Segoe UI", 10), fg=CORES['fg_dim'], bg=CORES['bg'],
+                 font=(FONT_SANS, 10), fg=CORES['fg_dim'], bg=CORES['bg'],
                  justify='center').pack(pady=(10, 0))
 
         tk.Frame(inner, bg=CORES['border'], height=1).pack(fill='x', pady=20)
@@ -1752,10 +1828,10 @@ class App(tk.Tk):
         ]:
             row = tk.Frame(info_content, bg=CORES['bg_card'])
             row.pack(fill='x', pady=3)
-            tk.Label(row, text=f"{label}:", font=("Segoe UI", 10, "bold"),
+            tk.Label(row, text=f"{label}:", font=(FONT_SANS, 10, "bold"),
                      fg=CORES['fg_dim'], bg=CORES['bg_card'], width=12,
                      anchor='w').pack(side='left')
-            tk.Label(row, text=valor, font=("Segoe UI", 10),
+            tk.Label(row, text=valor, font=(FONT_SANS, 10),
                      fg=CORES['fg'], bg=CORES['bg_card'],
                      anchor='w').pack(side='left')
 
@@ -1766,13 +1842,13 @@ class App(tk.Tk):
 
         self._lbl_update_status = tk.Label(
             update_card, text="Clique no botão para verificar se há uma versão mais recente.",
-            font=("Segoe UI", 10), fg=CORES['fg_dim'], bg=CORES['bg_card'],
+            font=(FONT_SANS, 10), fg=CORES['fg_dim'], bg=CORES['bg_card'],
             wraplength=420, justify='left')
         self._lbl_update_status.pack(anchor='w', pady=(0, 12))
 
         self._btn_buscar_update = tk.Button(
             update_card, text="Buscar Atualizações",
-            font=("Segoe UI", 10, "bold"),
+            font=(FONT_SANS, 10, "bold"),
             fg=CORES['btn_fg'], bg=CORES['accent'],
             activeforeground=CORES['btn_fg'], activebackground=CORES['accent_hover'],
             relief='flat', cursor='hand2', padx=18, pady=8, borderwidth=0,
@@ -1805,7 +1881,7 @@ class App(tk.Tk):
                 self._btn_download_update = tk.Button(
                     self._btn_buscar_update.master,
                     text=f"Atualizar para v{tag}",
-                    font=("Segoe UI", 10),
+                    font=(FONT_SANS, 10),
                     fg=CORES['btn_fg'], bg=CORES['accent'],
                     activeforeground=CORES['btn_fg'], activebackground=CORES['accent_hover'],
                     relief='flat', cursor='hand2', padx=14, pady=6, borderwidth=0,
@@ -1822,35 +1898,52 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
 
     def _criar_card(self, parent, titulo):
-        """Card com borda lateral colorida e título."""
+        """Card layered: borda 1px sutil, sem faixa lateral.
+        Se o título começa com emoji+espaço, o emoji vira badge accent-faded."""
         wrapper = tk.Frame(parent, bg=CORES['bg_card'],
                            highlightbackground=CORES['border'], highlightthickness=1)
-        wrapper.pack(fill='x', pady=(0, 8))
-
-        # Faixa lateral de acento
-        tk.Frame(wrapper, bg=CORES['accent'], width=3).pack(side='left', fill='y')
+        wrapper.pack(fill='x', pady=(0, 10))
 
         card = tk.Frame(wrapper, bg=CORES['bg_card'])
-        card.pack(side='left', fill='both', expand=True)
+        card.pack(fill='both', expand=True)
+
+        # Top highlight 1px (substitui o ::before do CSS)
+        tk.Frame(card, bg=CORES['border_hover'], height=1).pack(fill='x', side='top')
 
         header = tk.Frame(card, bg=CORES['bg_card'])
-        header.pack(fill='x', padx=14, pady=(8, 6))
-        tk.Label(header, text=titulo, font=("Segoe UI", 10, "bold"),
+        header.pack(fill='x', padx=18, pady=(12, 6))
+
+        # Se o título começa com emoji (1 char não-ASCII) + espaço, renderiza
+        # com badge accent-faded à esquerda do texto.
+        emoji = ''
+        texto = titulo
+        if titulo and len(titulo) > 2 and titulo[1] in (' ', ' ') and ord(titulo[0]) > 127:
+            emoji = titulo[0]
+            texto = titulo[2:].lstrip()
+        if emoji:
+            badge = tk.Frame(header, bg=CORES['accent_faded'],
+                             highlightbackground=CORES['border'], highlightthickness=1)
+            badge.pack(side='left', padx=(0, 10))
+            tk.Label(badge, text=emoji, font=(FONT_SANS, 12),
+                     fg=CORES['accent_light'], bg=CORES['accent_faded'],
+                     padx=6, pady=2).pack()
+
+        tk.Label(header, text=texto, font=(FONT_SANS, 11, "bold"),
                  fg=CORES['fg_bright'], bg=CORES['bg_card']).pack(side='left')
 
         content = tk.Frame(card, bg=CORES['bg_card'])
-        content.pack(fill='x', padx=14, pady=(0, 10))
+        content.pack(fill='x', padx=18, pady=(0, 14))
         return content
 
     def _criar_file_picker(self, parent, label, var, filetypes, btn_text):
         row = tk.Frame(parent, bg=CORES['bg_card'])
         row.pack(fill='x', pady=5)
 
-        tk.Label(row, text=label, font=("Segoe UI", 10),
+        tk.Label(row, text=label, font=(FONT_SANS, 10),
                  fg=CORES['fg_dim'], bg=CORES['bg_card'], width=14,
                  anchor='w').pack(side='left')
 
-        entry = tk.Entry(row, textvariable=var, font=("Consolas", 9),
+        entry = tk.Entry(row, textvariable=var, font=(FONT_MONO, 9),
                          fg=CORES['fg'], bg=CORES['bg_input'],
                          insertbackground=CORES['fg'], relief='flat',
                          highlightbackground=CORES['border'], highlightthickness=1)
@@ -1862,7 +1955,7 @@ class App(tk.Tk):
 
         var.trace_add('write', on_change)
 
-        btn = tk.Button(row, text=btn_text, font=("Segoe UI", 9),
+        btn = tk.Button(row, text=btn_text, font=(FONT_SANS, 9),
                         fg=CORES['accent_light'], bg=CORES['bg_input'],
                         activeforeground=CORES['accent'],
                         activebackground=CORES['bg_card'],
@@ -1879,7 +1972,7 @@ class App(tk.Tk):
             var.set(path)
 
     def _criar_mini_btn(self, parent, text, command):
-        btn = tk.Button(parent, text=text, font=("Segoe UI", 9),
+        btn = tk.Button(parent, text=text, font=(FONT_SANS, 9),
                         fg=CORES['fg_dim'], bg=CORES['bg_input'],
                         activeforeground=CORES['fg'],
                         activebackground=CORES['bg_input'],
@@ -1915,18 +2008,18 @@ class App(tk.Tk):
             if on_toggle:
                 on_toggle(on)
 
-        dot = tk.Label(row, text="☐", font=("Segoe UI", 13),
+        dot = tk.Label(row, text="☐", font=(FONT_SANS, 13),
                        fg=CORES['fg_dim'], bg=CORES['bg_card'], cursor='hand2')
         dot.pack(side='left', padx=(0, 8))
 
         text_col = tk.Frame(row, bg=CORES['bg_card'])
         text_col.pack(side='left', fill='x', expand=True)
 
-        lbl = tk.Label(text_col, text=label, font=("Segoe UI", 10),
+        lbl = tk.Label(text_col, text=label, font=(FONT_SANS, 10),
                        fg=CORES['fg'], bg=CORES['bg_card'], anchor='w', cursor='hand2')
         lbl.pack(anchor='w')
 
-        tk.Label(text_col, text=descricao, font=("Segoe UI", 8),
+        tk.Label(text_col, text=descricao, font=(FONT_SANS, 8),
                  fg=CORES['fg_dim'], bg=CORES['bg_card'], anchor='w',
                  wraplength=560, justify='left').pack(anchor='w')
 
@@ -1950,7 +2043,7 @@ class App(tk.Tk):
         btn = tk.Label(
             parent,
             text=f"{sigla}  {label}",
-            font=("Segoe UI", 9, "bold"),
+            font=(FONT_SANS, 9, "bold"),
             fg=CORES['btn_fg'], bg=CORES['accent'],
             padx=12, pady=5, cursor='hand2',
             highlightbackground=CORES['accent'], highlightthickness=1,
@@ -1992,21 +2085,21 @@ class App(tk.Tk):
         inner = tk.Frame(chip, bg=CORES['chip_on'])
         inner.pack(fill='x', padx=10, pady=7)
 
-        lbl_dot = tk.Label(inner, text='●', font=("Segoe UI", 8),
+        lbl_dot = tk.Label(inner, text='●', font=(FONT_SANS, 8),
                            fg=CORES['success'], bg=CORES['chip_on'])
         lbl_dot.pack(side='left', padx=(0, 5))
 
-        lbl_cod = tk.Label(inner, text=codigo, font=("Consolas", 11, "bold"),
+        lbl_cod = tk.Label(inner, text=codigo, font=(FONT_MONO, 11, "bold"),
                            fg=CORES['accent_light'], bg=CORES['chip_on'])
         lbl_cod.pack(side='left')
 
-        lbl_desc = tk.Label(inner, text=desc, font=("Segoe UI", 8),
+        lbl_desc = tk.Label(inner, text=desc, font=(FONT_SANS, 8),
                             fg=CORES['fg'], bg=CORES['chip_on'])
         lbl_desc.pack(side='left', padx=(6, 0))
 
         lbl_badge = None
         if not tem_qtd:
-            lbl_badge = tk.Label(inner, text="sem qtd", font=("Segoe UI", 7),
+            lbl_badge = tk.Label(inner, text="sem qtd", font=(FONT_SANS, 7),
                                  fg=CORES['warning'], bg=CORES['chip_on'])
             lbl_badge.pack(side='right')
 
@@ -2132,11 +2225,11 @@ class App(tk.Tk):
         txt_col.pack(side='left', fill='x', expand=True)
 
         tk.Label(txt_col, text="Processando arquivos",
-                 font=("Segoe UI", 15, "bold"), fg=CORES['fg_bright'],
+                 font=(FONT_SANS, 15, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(anchor='w')
 
         lbl_sub = tk.Label(txt_col, text="Preparando fluxo...",
-                           font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                           font=(FONT_SANS, 9), fg=CORES['fg_dim'],
                            bg=CORES['bg'])
         lbl_sub.pack(anchor='w', pady=(4, 0))
 
@@ -2177,12 +2270,12 @@ class App(tk.Tk):
         progress_inner.pack(fill='x', padx=16, pady=14)
 
         lbl_stage = tk.Label(progress_inner, text="Preparando",
-                             font=("Segoe UI", 10, "bold"), fg=CORES['accent_light'],
+                             font=(FONT_SANS, 10, "bold"), fg=CORES['accent_light'],
                              bg=CORES['bg_card'])
         lbl_stage.pack(anchor='w')
 
         lbl_status = tk.Label(progress_inner, text="Iniciando...",
-                              font=("Segoe UI", 10), fg=CORES['fg'],
+                              font=(FONT_SANS, 10), fg=CORES['fg'],
                               bg=CORES['bg_card'])
         lbl_status.pack(anchor='w', pady=(6, 12))
 
@@ -2204,12 +2297,12 @@ class App(tk.Tk):
         meta_row.pack(fill='x', pady=(8, 0))
 
         lbl_pct = tk.Label(meta_row, text="0%",
-                           font=("Segoe UI", 9, "bold"), fg=CORES['fg'],
+                           font=(FONT_MONO, 10, "bold"), fg=CORES['accent_light'],
                            bg=CORES['bg_card'])
         lbl_pct.pack(side='left')
 
         tk.Label(meta_row, text="Aguarde enquanto os dados sao processados.",
-                 font=("Segoe UI", 8), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 8), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='right')
 
         steps_frame = tk.Frame(main, bg=CORES['bg'])
@@ -2239,7 +2332,7 @@ class App(tk.Tk):
             dot.pack(side='left', padx=(0, 8), pady=1)
             dot.pack_propagate(False)
 
-            lbl = tk.Label(inner, text=label, font=("Segoe UI", 9),
+            lbl = tk.Label(inner, text=label, font=(FONT_SANS, 9),
                            fg=CORES['fg_dim'], bg=CORES['bg_card'])
             lbl.pack(side='left')
 
@@ -2508,10 +2601,10 @@ class App(tk.Tk):
 
         # Título
         tk.Label(main, text="Resumo do Processamento",
-                 font=("Segoe UI", 16, "bold"), fg=CORES['fg_bright'],
+                 font=(FONT_SANS, 16, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(anchor='w')
         tk.Label(main, text=f"Arquivo: {os.path.basename(output_path)}",
-                 font=("Consolas", 9), fg=CORES['fg_dim'],
+                 font=(FONT_MONO, 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(anchor='w', pady=(2, 12))
 
         # Cards de estatísticas
@@ -2530,9 +2623,9 @@ class App(tk.Tk):
             card = tk.Frame(stats_frame, bg=CORES['bg_card'],
                             highlightbackground=color, highlightthickness=1)
             card.pack(side='left', fill='x', expand=True, padx=(0 if i == 0 else 8, 0))
-            tk.Label(card, text=value, font=("Segoe UI", 22, "bold"),
+            tk.Label(card, text=value, font=(FONT_SANS, 22, "bold"),
                      fg=color, bg=CORES['bg_card']).pack(pady=(10, 0))
-            tk.Label(card, text=label, font=("Segoe UI", 9),
+            tk.Label(card, text=label, font=(FONT_SANS, 9),
                      fg=CORES['fg_dim'], bg=CORES['bg_card']).pack(pady=(0, 10))
 
         # Bloco de verificação
@@ -2548,7 +2641,7 @@ class App(tk.Tk):
             modo_labels = {'dupla': 'Dupla varredura', 'ia': 'Dupla + IA (Gemini)'}
             tk.Label(vf_inner,
                      text=f"🔍  {modo_labels.get(modo, modo)}",
-                     font=("Segoe UI", 10, "bold"), fg=CORES['accent_light'],
+                     font=(FONT_SANS, 10, "bold"), fg=CORES['accent_light'],
                      bg=CORES['bg_card']).pack(anchor='w', pady=(0, 6))
 
             stats_v = tk.Frame(vf_inner, bg=CORES['bg_card'])
@@ -2566,9 +2659,9 @@ class App(tk.Tk):
             ]:
                 bloco = tk.Frame(stats_v, bg=CORES['bg_input'])
                 bloco.pack(side='left', padx=(0, 6))
-                tk.Label(bloco, text=valor, font=("Segoe UI", 12, "bold"),
+                tk.Label(bloco, text=valor, font=(FONT_SANS, 12, "bold"),
                          fg=cor, bg=CORES['bg_input']).pack(side='left', padx=(8, 4), pady=4)
-                tk.Label(bloco, text=label, font=("Segoe UI", 8),
+                tk.Label(bloco, text=label, font=(FONT_SANS, 8),
                          fg=CORES['fg_dim'], bg=CORES['bg_input']).pack(side='left', padx=(0, 8))
 
             if modo == 'ia':
@@ -2579,7 +2672,7 @@ class App(tk.Tk):
                 else:
                     ia_txt, ia_cor = "IA não ativada", CORES['fg_dim']
                 tk.Label(vf_inner, text=ia_txt,
-                         font=("Segoe UI", 9), fg=ia_cor,
+                         font=(FONT_SANS, 9), fg=ia_cor,
                          bg=CORES['bg_card']).pack(anchor='w', pady=(6, 0))
 
         # Tabela de não localizados
@@ -2587,7 +2680,7 @@ class App(tk.Tk):
             tk.Frame(main, bg=CORES['border'], height=1).pack(fill='x', pady=(0, 10))
 
             tk.Label(main, text=f"⚠  Pessoas não localizadas na planilha ({nao_enc})",
-                     font=("Segoe UI", 11, "bold"), fg=CORES['error'],
+                     font=(FONT_SANS, 11, "bold"), fg=CORES['error'],
                      bg=CORES['bg'], anchor='w').pack(fill='x', pady=(0, 6))
 
             tree_frame = tk.Frame(main, bg=CORES['bg'])
@@ -2597,10 +2690,10 @@ class App(tk.Tk):
             style.configure("Resumo.Treeview",
                             background=CORES['bg_card'], foreground=CORES['fg'],
                             fieldbackground=CORES['bg_card'], borderwidth=0,
-                            font=("Consolas", 10), rowheight=26)
+                            font=(FONT_MONO, 10), rowheight=26)
             style.configure("Resumo.Treeview.Heading",
                             background=CORES['table_header'], foreground=CORES['fg_dim'],
-                            font=("Segoe UI", 9, "bold"), borderwidth=0, relief='flat')
+                            font=(FONT_SANS, 9, "bold"), borderwidth=0, relief='flat')
             style.map("Resumo.Treeview",
                       background=[('selected', CORES['bg_input'])],
                       foreground=[('selected', CORES['accent_light'])])
@@ -2628,7 +2721,7 @@ class App(tk.Tk):
 
         tk.Button(
             btn_frame, text="📂  Abrir pasta",
-            font=("Segoe UI", 10), fg=CORES['success'],
+            font=(FONT_SANS, 10), fg=CORES['success'],
             bg=CORES['bg_card'], activeforeground=CORES['success'],
             activebackground=CORES['bg_input'],
             relief='flat', cursor='hand2', padx=14, pady=6, borderwidth=0,
@@ -2637,7 +2730,7 @@ class App(tk.Tk):
 
         tk.Button(
             btn_frame, text="Fechar",
-            font=("Segoe UI", 10), fg=CORES['fg_dim'],
+            font=(FONT_SANS, 10), fg=CORES['fg_dim'],
             bg=CORES['bg_card'], activeforeground=CORES['fg'],
             activebackground=CORES['bg_input'],
             relief='flat', cursor='hand2', padx=14, pady=6, borderwidth=0,
@@ -2668,11 +2761,11 @@ class App(tk.Tk):
 
         tk.Label(main,
                  text=f"Conflitos encontrados — {len(conflitos)} item(s) precisam de revisão",
-                 font=("Segoe UI", 13, "bold"), fg=CORES['fg_bright'],
+                 font=(FONT_SANS, 13, "bold"), fg=CORES['fg_bright'],
                  bg=CORES['bg']).pack(anchor='w', pady=(0, 4))
         tk.Label(main,
                  text="Selecione o valor correto para cada conflito. A sugestão já está pré-selecionada.",
-                 font=("Segoe UI", 9), fg=CORES['fg_dim'],
+                 font=(FONT_SANS, 9), fg=CORES['fg_dim'],
                  bg=CORES['bg']).pack(anchor='w', pady=(0, 12))
 
         canvas = tk.Canvas(main, bg=CORES['bg'], highlightthickness=0)
@@ -2702,10 +2795,10 @@ class App(tk.Tk):
             top = tk.Frame(card, bg=CORES['bg_card'])
             top.pack(fill='x', padx=14, pady=(10, 6))
             tk.Label(top, text=f"RE {re_val}  —  {nome}",
-                     font=("Segoe UI", 10, "bold"), fg=CORES['fg_bright'],
+                     font=(FONT_SANS, 10, "bold"), fg=CORES['fg_bright'],
                      bg=CORES['bg_card']).pack(side='left')
             tk.Label(top, text=f"Código: {cod}",
-                     font=("Segoe UI", 9), fg=CORES['accent_light'],
+                     font=(FONT_SANS, 9), fg=CORES['accent_light'],
                      bg=CORES['bg_card']).pack(side='right')
 
             opcoes_row = tk.Frame(card, bg=CORES['bg_card'])
@@ -2730,7 +2823,7 @@ class App(tk.Tk):
                 rb = tk.Radiobutton(
                     opcoes_row, text=texto_btn,
                     variable=var, value=val_opcao,
-                    font=("Segoe UI", 9, "bold" if is_sug else "normal"),
+                    font=(FONT_SANS, 9, "bold" if is_sug else "normal"),
                     fg=CORES['accent_light'] if is_sug else CORES['fg'],
                     bg=CORES['bg_card'],
                     activebackground=CORES['bg_card'],
@@ -2752,14 +2845,14 @@ class App(tk.Tk):
             resultado_queue.put(None)
 
         tk.Button(btn_row, text="Confirmar e gravar",
-                  font=("Segoe UI", 11, "bold"),
+                  font=(FONT_SANS, 11, "bold"),
                   fg=CORES['btn_fg'], bg=CORES['btn_bg'],
                   activeforeground=CORES['btn_fg'], activebackground=CORES['btn_hover'],
                   relief='flat', cursor='hand2', padx=18, pady=8, borderwidth=0,
                   command=confirmar).pack(side='left')
 
         tk.Button(btn_row, text="Cancelar",
-                  font=("Segoe UI", 11),
+                  font=(FONT_SANS, 11),
                   fg=CORES['fg_dim'], bg=CORES['bg_input'],
                   activeforeground=CORES['fg'], activebackground=CORES['border'],
                   relief='flat', cursor='hand2', padx=18, pady=8, borderwidth=0,
@@ -2776,7 +2869,7 @@ class App(tk.Tk):
         card.pack(side='left', fill='both', expand=True)
 
         tk.Label(card, text=f"{titulo} ({len(dados)})",
-                 font=("Segoe UI", 11, "bold"), fg=cor_titulo,
+                 font=(FONT_SANS, 11, "bold"), fg=cor_titulo,
                  bg=CORES['bg_card'], anchor='w').pack(fill='x', padx=14, pady=(12, 6))
 
         tree_frame = tk.Frame(card, bg=CORES['bg_card'])
@@ -2789,12 +2882,12 @@ class App(tk.Tk):
                         foreground=CORES['fg'],
                         fieldbackground=CORES['bg_card'],
                         borderwidth=0,
-                        font=("Consolas", 10),
+                        font=(FONT_MONO, 10),
                         rowheight=26)
         style.configure("Custom.Treeview.Heading",
                         background=CORES['table_header'],
                         foreground=CORES['fg_dim'],
-                        font=("Segoe UI", 9, "bold"),
+                        font=(FONT_SANS, 9, "bold"),
                         borderwidth=0, relief='flat')
         style.map("Custom.Treeview",
                   background=[('selected', CORES['bg_input'])],
@@ -2822,9 +2915,9 @@ class App(tk.Tk):
 class SplashScreen(tk.Tk):
     """Tela de carregamento exibida antes do app principal."""
 
-    _BG      = '#1e1e1e'
-    _ACCENT  = '#007acc'
-    _TRACK   = '#2d2d2d'
+    _BG      = '#0a0b12'
+    _ACCENT  = '#5b8def'
+    _TRACK   = '#1a1d29'
     _SPINNER_R = 18   # raio externo
     _SPINNER_W =  4   # espessura do arco
     _ARC_SPAN  = 90   # graus do arco visível
@@ -2839,17 +2932,17 @@ class SplashScreen(tk.Tk):
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         self.geometry(f"{W}x{H}+{(sw - W) // 2}+{(sh - H) // 2}")
-        self.configure(highlightbackground='#3c3c3c', highlightthickness=1)
+        self.configure(highlightbackground='#262a3a', highlightthickness=1)
 
         tk.Label(self, text="Processador de Ocorrências",
-                 font=("Segoe UI", 14, "bold"),
-                 fg='#ffffff', bg=self._BG).pack(pady=(38, 4))
+                 font=(FONT_SANS, 14, "bold"),
+                 fg='#e6e8f0', bg=self._BG).pack(pady=(38, 4))
 
         tk.Label(self, text=f"v{VERSION}",
-                 font=("Segoe UI", 9),
-                 fg='#6b737f', bg=self._BG).pack()
+                 font=(FONT_MONO, 9),
+                 fg='#6e7591', bg=self._BG).pack()
 
-        tk.Frame(self, bg='#3c3c3c', height=1).pack(fill='x', padx=30, pady=16)
+        tk.Frame(self, bg='#262a3a', height=1).pack(fill='x', padx=30, pady=16)
 
         # linha com spinner + label lado a lado
         row = tk.Frame(self, bg=self._BG)
@@ -2861,8 +2954,8 @@ class SplashScreen(tk.Tk):
         self._canvas.pack(side='left', padx=(0, 10))
 
         self._lbl_status = tk.Label(row, text="Iniciando...",
-                                    font=("Segoe UI", 10),
-                                    fg='#6b737f', bg=self._BG,
+                                    font=(FONT_SANS, 10),
+                                    fg='#6e7591', bg=self._BG,
                                     anchor='w', width=22)
         self._lbl_status.pack(side='left')
 
