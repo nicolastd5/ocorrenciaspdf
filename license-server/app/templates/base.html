@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}License Server{% endblock %}</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+               max-width: 900px; margin: 2em auto; padding: 0 1em; color: #222; }
+        h1 { border-bottom: 2px solid #333; padding-bottom: .3em; }
+        nav { margin-bottom: 1.5em; }
+        nav a { margin-right: 1em; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: .5em; border-bottom: 1px solid #ddd; text-align: left; }
+        th { background: #f5f5f5; }
+        .revoked { color: #b00; }
+        .active { color: #060; }
+        .btn { display: inline-block; padding: .4em .8em; background: #333; color: #fff;
+               text-decoration: none; border: none; cursor: pointer; font-size: 1em; }
+        .btn-danger { background: #b00; }
+        .btn-secondary { background: #888; }
+        .key { font-family: "Courier New", monospace; background: #f0f0f0; padding: .2em .4em; }
+        .error { color: #b00; margin: 1em 0; }
+        .success { color: #060; margin: 1em 0; }
+        form.inline { display: inline; }
+        input[type=text], input[type=password], textarea {
+            font-size: 1em; padding: .4em; width: 100%; max-width: 400px;
+            box-sizing: border-box; }
+        label { display: block; margin-top: 1em; font-weight: bold; }
+    </style>
+</head>
+<body>
+    {% if request.session.get("admin_authenticated") %}
+    <nav>
+        <a href="/admin">Licenças</a>
+        <a href="/admin/new">Nova licença</a>
+        <form method="post" action="/admin/logout" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn btn-secondary">Sair</button>
+        </form>
+    </nav>
+    {% endif %}
+    {% block content %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Login — License Server{% endblock %}
+{% block content %}
+<h1>Login do administrador</h1>
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+<form method="post" action="/admin/login">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Senha:
+        <input type="password" name="password" autofocus required>
+    </label>
+    <p><button type="submit" class="btn">Entrar</button></p>
+</form>
+{% endblock %}

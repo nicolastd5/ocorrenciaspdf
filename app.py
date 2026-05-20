@@ -20,9 +20,47 @@ import json
 import webbrowser
 from processador import ProcessadorOcorrencias
 from vt_caixa_processador import ProcessadorVTCaixa
+from license_client import LicenseClient, LicenseStatus
+from license_ui import show_activation_window, show_error_window
 
 # ── Config local (API keys e preferências — não versionado) ─────────────────
 _CONFIG_PATH = os.path.join(os.path.expanduser('~'), '.ocorrencias_config.json')
+
+
+def bootstrap_license() -> bool:
+    """Valida licença antes de abrir o app. Retorna True se app deve continuar."""
+    client = LicenseClient()
+
+    while True:
+        result = client.validate()
+
+        if result.status == LicenseStatus.VALID:
+            return True
+
+        if result.status == LicenseStatus.OFFLINE_TOLERATED:
+            return True
+
+        if result.status == LicenseStatus.NO_KEY:
+            new_key = show_activation_window("Insira sua chave de licença para começar.")
+        elif result.status == LicenseStatus.INVALID:
+            reason_msg = {
+                "not_found": "Chave não reconhecida.",
+                "revoked": "Esta chave foi revogada. Entre em contato com o suporte.",
+            }.get(result.reason, "Chave inválida.")
+            new_key = show_activation_window(reason_msg)
+        elif result.status == LicenseStatus.OFFLINE_EXPIRED:
+            show_error_window(
+                "Não foi possível validar sua licença com o servidor e o "
+                "período de uso offline expirou. Conecte-se à internet e tente novamente."
+            )
+            return False
+        else:
+            return False
+
+        if new_key is None:
+            return False
+
+        client.save_key(new_key)
 
 
 def _carregar_config():
@@ -2682,6 +2720,9 @@ class App(tk.Tk):
 
 
 def main():
+    import sys
+    if not bootstrap_license():
+        sys.exit(0)
     app = App()
     app.mainloop()
 

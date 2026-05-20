@@ -40,6 +40,20 @@ Códigos marcados como **Sem quantidade** aparecem apenas com o código (ex: `AP
 
 ---
 
+## Ativação de licença
+
+A partir da versão 1.35, o app exige uma chave de licença válida para abrir.
+
+- Na primeira abertura, uma tela pede a chave de licença
+- A chave é validada com o servidor a cada abertura do app
+- Sem internet, o app permite uso por até 24 horas após a última validação bem-sucedida
+- Chaves revogadas pelo administrador bloqueiam o acesso imediatamente
+- Validações registram seu IP no servidor para fins de auditoria
+
+Para obter uma chave, entre em contato com o autor (ver seção Autor abaixo).
+
+---
+
 ## Como usar
 
 1. Abra o programa `ProcessadorOcorrencias.exe`
@@ -100,4 +114,4 @@ A aplicação salva preferências em `~/.ocorrencias_config.json`:
 
 **Nicolas Almeida Hader Dias**
 
-Versão atual: **1.23**
+Versão atual: **1.35**

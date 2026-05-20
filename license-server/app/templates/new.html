@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Nova licença{% endblock %}
+{% block content %}
+<h1>Nova licença</h1>
+<form method="post" action="/admin/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Nome do cliente:
+        <input type="text" name="client_name" required>
+    </label>
+    <label>Notas (opcional):
+        <textarea name="notes" rows="3"></textarea>
+    </label>
+    <p>
+        <button type="submit" class="btn">Gerar chave</button>
+        <a href="/admin" class="btn btn-secondary">Cancelar</a>
+    </p>
+</form>
+{% endblock %}

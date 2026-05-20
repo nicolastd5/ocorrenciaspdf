@@ -1,0 +1,47 @@
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS licenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT UNIQUE NOT NULL,
+    client_name TEXT NOT NULL,
+    notes TEXT,
+    revoked INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    revoked_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS validation_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    license_id INTEGER NOT NULL REFERENCES licenses(id),
+    validated_at TEXT NOT NULL,
+    ip TEXT NOT NULL,
+    app_version TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_validation_log_license_id
+    ON validation_log(license_id);
+"""
+
+def init_db(db_path: str) -> None:
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(SCHEMA)
+        conn.commit()
+
+@contextmanager
+def get_connection(db_path: str) -> Iterator[sqlite3.Connection]:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
