@@ -1,40 +1,72 @@
 {% extends "base.html" %}
-{% block title %}Licenças — License Server{% endblock %}
+{% block title %}Licenças — License Manager{% endblock %}
 {% block content %}
-<h1>Licenças</h1>
-{% if message %}<p class="success">{{ message }}</p>{% endif %}
-<table>
-    <thead>
-        <tr>
-            <th>Chave</th><th>Cliente</th><th>Status</th>
-            <th>Criada em</th><th>Última validação</th><th>Ações</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for row in rows %}
-        <tr>
-            <td><a href="/admin/{{ row.license.id }}"><span class="key">{{ row.license.key }}</span></a></td>
-            <td>{{ row.license.client_name }}</td>
-            <td class="{{ 'revoked' if row.license.revoked else 'active' }}">
-                {{ 'Revogada' if row.license.revoked else 'Ativa' }}
-            </td>
-            <td>{{ row.license.created_at }}</td>
-            <td>{{ row.last_validation or '—' }}</td>
-            <td>
-                {% if row.license.revoked %}
-                <form method="post" action="/admin/{{ row.license.id }}/unrevoke" class="inline">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button class="btn">Reativar</button>
-                </form>
-                {% else %}
-                <form method="post" action="/admin/{{ row.license.id }}/revoke" class="inline">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button class="btn btn-danger">Revogar</button>
-                </form>
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="page-header">
+    <h1>Licenças</h1>
+    <p>Gerencie as chaves de acesso ao aplicativo.</p>
+</div>
+
+{% if message %}
+<div class="alert alert-success">{{ message }}</div>
+{% endif %}
+
+<div style="display:flex; justify-content:flex-end; margin-bottom:1rem;">
+    <a href="/admin/new" class="btn btn-primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Nova licença
+    </a>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Chave</th>
+                <th>Cliente</th>
+                <th>Status</th>
+                <th>Criada em</th>
+                <th>Última validação</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td><a href="/admin/{{ row.license.id }}" style="text-decoration:none;"><span class="key">{{ row.license.key }}</span></a></td>
+                <td>{{ row.license.client_name }}</td>
+                <td>
+                    {% if row.license.revoked %}
+                    <span class="badge badge-revoked">Revogada</span>
+                    {% else %}
+                    <span class="badge badge-active">Ativa</span>
+                    {% endif %}
+                </td>
+                <td style="color:var(--text-muted); font-size:.85rem;">{{ row.license.created_at | brasilia }}</td>
+                <td style="color:var(--text-muted); font-size:.85rem;">{{ row.last_validation | brasilia }}</td>
+                <td>
+                    {% if row.license.revoked %}
+                    <form method="post" action="/admin/{{ row.license.id }}/unrevoke" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button class="btn btn-ghost">Reativar</button>
+                    </form>
+                    {% else %}
+                    <form method="post" action="/admin/{{ row.license.id }}/revoke" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button class="btn btn-danger">Revogar</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" style="text-align:center; color:var(--text-muted); padding:2rem;">
+                    Nenhuma licença criada ainda.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}

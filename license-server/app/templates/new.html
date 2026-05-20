@@ -1,18 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Nova licença{% endblock %}
+{% block title %}Nova licença — License Manager{% endblock %}
 {% block content %}
-<h1>Nova licença</h1>
-<form method="post" action="/admin/new">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Nome do cliente:
-        <input type="text" name="client_name" required>
-    </label>
-    <label>Notas (opcional):
-        <textarea name="notes" rows="3"></textarea>
-    </label>
-    <p>
-        <button type="submit" class="btn">Gerar chave</button>
-        <a href="/admin" class="btn btn-secondary">Cancelar</a>
-    </p>
-</form>
+<div class="page-header">
+    <h1>Nova licença</h1>
+    <p>Gera uma chave nova e a associa a um cliente.</p>
+</div>
+
+<div class="form-card">
+    <form method="post" action="/admin/new">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="client_name">Nome do cliente</label>
+        <input type="text" id="client_name" name="client_name" required autofocus placeholder="Ex: Empresa XYZ">
+        <label for="notes">Notas <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label>
+        <textarea id="notes" name="notes" placeholder="Observações internas..."></textarea>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Gerar chave</button>
+            <a href="/admin" class="btn btn-ghost">Cancelar</a>
+        </div>
+    </form>
+</div>
 {% endblock %}

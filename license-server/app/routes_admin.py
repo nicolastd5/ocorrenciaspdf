@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request, status
@@ -24,6 +25,21 @@ limiter = Limiter(key_func=get_remote_address)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+_BRT = timezone(timedelta(hours=-3))
+
+def _fmt_brasilia(value: str | None) -> str:
+    if not value:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(str(value))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(_BRT).strftime("%d/%m/%Y %H:%M")
+    except (ValueError, TypeError):
+        return str(value)
+
+templates.env.filters["brasilia"] = _fmt_brasilia
 
 _admin_password_hash: str | None = None
 

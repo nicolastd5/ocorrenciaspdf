@@ -1,47 +1,89 @@
 {% extends "base.html" %}
-{% block title %}Licença {{ license.client_name }}{% endblock %}
+{% block title %}{{ license.client_name }} — License Manager{% endblock %}
 {% block content %}
-<h1>Licença — {{ license.client_name }}</h1>
-<p><strong>Chave:</strong> <span class="key">{{ license.key }}</span></p>
-<p><strong>Status:</strong>
-    <span class="{{ 'revoked' if license.revoked else 'active' }}">
-        {{ 'Revogada' if license.revoked else 'Ativa' }}
-    </span>
-</p>
-<p><strong>Criada em:</strong> {{ license.created_at }}</p>
-{% if license.revoked_at %}
-<p><strong>Revogada em:</strong> {{ license.revoked_at }}</p>
-{% endif %}
-{% if license.notes %}
-<p><strong>Notas:</strong> {{ license.notes }}</p>
-{% endif %}
+<div class="page-header">
+    <h1>{{ license.client_name }}</h1>
+    <p>Detalhes e histórico de validações da licença.</p>
+</div>
 
-<h2>Histórico de validações ({{ validations|length }})</h2>
-<table>
-    <thead><tr><th>Data</th><th>IP</th><th>Versão do app</th></tr></thead>
-    <tbody>
-        {% for v in validations %}
-        <tr>
-            <td>{{ v.validated_at }}</td>
-            <td>{{ v.ip }}</td>
-            <td>{{ v.app_version or '—' }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="info-grid">
+    <div class="info-item">
+        <div class="info-label">Chave</div>
+        <div class="info-value"><span class="key">{{ license.key }}</span></div>
+    </div>
+    <div class="info-item">
+        <div class="info-label">Status</div>
+        <div class="info-value">
+            {% if license.revoked %}
+            <span class="badge badge-revoked">Revogada</span>
+            {% else %}
+            <span class="badge badge-active">Ativa</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="info-item">
+        <div class="info-label">Criada em</div>
+        <div class="info-value" style="font-size:.9rem;">{{ license.created_at | brasilia }}</div>
+    </div>
+    {% if license.revoked_at %}
+    <div class="info-item">
+        <div class="info-label">Revogada em</div>
+        <div class="info-value" style="font-size:.9rem;">{{ license.revoked_at | brasilia }}</div>
+    </div>
+    {% endif %}
+    {% if license.notes %}
+    <div class="info-item" style="grid-column: 1 / -1;">
+        <div class="info-label">Notas</div>
+        <div class="info-value" style="font-size:.9rem; color:var(--text-muted);">{{ license.notes }}</div>
+    </div>
+    {% endif %}
+</div>
 
-<p>
+<div style="display:flex; gap:.75rem; margin-bottom:2rem;">
     {% if license.revoked %}
     <form method="post" action="/admin/{{ license.id }}/unrevoke" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="btn">Reativar</button>
+        <button class="btn btn-primary">Reativar</button>
     </form>
     {% else %}
     <form method="post" action="/admin/{{ license.id }}/revoke" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="btn btn-danger">Revogar</button>
+        <button class="btn btn-danger">Revogar licença</button>
     </form>
     {% endif %}
-    <a href="/admin" class="btn btn-secondary">Voltar</a>
-</p>
+    <a href="/admin" class="btn btn-ghost">Voltar</a>
+</div>
+
+<div class="page-header">
+    <h1 style="font-size:1.1rem;">Histórico de validações
+        <span style="font-size:.85rem; font-weight:400; color:var(--text-muted);">({{ validations|length }})</span>
+    </h1>
+</div>
+
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Data</th>
+                <th>IP</th>
+                <th>Versão do app</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in validations %}
+            <tr>
+                <td style="font-size:.85rem; color:var(--text-muted);">{{ v.validated_at | brasilia }}</td>
+                <td style="font-family:monospace; font-size:.85rem;">{{ v.ip }}</td>
+                <td style="font-size:.85rem; color:var(--text-muted);">{{ v.app_version or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3" style="text-align:center; color:var(--text-muted); padding:2rem;">
+                    Nenhuma validação registrada.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}
