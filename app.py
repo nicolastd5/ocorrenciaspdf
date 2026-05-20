@@ -2720,11 +2720,81 @@ class App(tk.Tk):
             tree.insert('', 'end', values=(item['re'], item['nome'], item['motivo']))
 
 
+class SplashScreen(tk.Tk):
+    """Tela de carregamento exibida antes do app principal."""
+
+    def __init__(self):
+        super().__init__()
+        self.overrideredirect(True)
+        self.configure(bg='#1e1e1e')
+        self.attributes('-topmost', True)
+
+        W, H = 380, 200
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        self.geometry(f"{W}x{H}+{(sw - W) // 2}+{(sh - H) // 2}")
+
+        # borda sutil
+        self.configure(highlightbackground='#3c3c3c', highlightthickness=1)
+
+        tk.Label(self, text="Processador de Ocorrencias",
+                 font=("Segoe UI", 14, "bold"),
+                 fg='#ffffff', bg='#1e1e1e').pack(pady=(40, 4))
+
+        tk.Label(self, text=f"v{VERSION}",
+                 font=("Segoe UI", 9),
+                 fg='#6b737f', bg='#1e1e1e').pack()
+
+        tk.Frame(self, bg='#3c3c3c', height=1).pack(fill='x', padx=30, pady=20)
+
+        self._lbl_status = tk.Label(self, text="Iniciando...",
+                                    font=("Segoe UI", 10),
+                                    fg='#6b737f', bg='#1e1e1e')
+        self._lbl_status.pack()
+
+        self._dot_count = 0
+        self._animar()
+
+    def set_status(self, texto: str):
+        self._lbl_status.configure(text=texto)
+        self.update()
+
+    def _animar(self):
+        dots = "." * (self._dot_count % 4)
+        base = self._lbl_status.cget("text").rstrip(".")
+        self._lbl_status.configure(text=base + dots)
+        self._dot_count += 1
+        self._anim_id = self.after(400, self._animar)
+
+    def fechar(self):
+        self.after_cancel(self._anim_id)
+        self.destroy()
+
+
 def main():
     import sys
-    check_and_update()
+
+    splash = SplashScreen()
+    splash.update()
+
+    # 1. Verificar e aplicar atualização
+    splash.set_status("Procurando atualizacoes")
+    splash.update()
+    check_and_update()  # se houver update, faz sys.exit internamente
+
+    # 2. Validar licença
+    splash.set_status("Validando licenca")
+    splash.update()
     if not bootstrap_license():
+        splash.fechar()
         sys.exit(0)
+
+    # 3. Carregando app
+    splash.set_status("Carregando")
+    splash.update()
+
+    splash.fechar()
+
     app = App()
     app.mainloop()
 
