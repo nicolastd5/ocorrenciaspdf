@@ -84,4 +84,7 @@ async def get_config(request: Request) -> dict:
     if lic is None or lic.revoked:
         return {"error": "invalid_key"}
 
-    return {"gemini_api_key": settings.gemini_api_key}
+    from pathlib import Path as _Path
+    key_file = _Path(__file__).parent.parent / "gemini_key.txt"
+    gemini_key = key_file.read_text(encoding="utf-8").strip() if key_file.exists() else settings.gemini_api_key
+    return {"gemini_api_key": gemini_key}

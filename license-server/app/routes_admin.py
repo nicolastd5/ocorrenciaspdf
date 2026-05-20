@@ -112,6 +112,24 @@ def _get_version_info() -> tuple[str | None, str | None]:
     return None, None
 
 
+_GEMINI_KEY_FILE = Path(__file__).parent.parent / "gemini_key.txt"
+
+
+def _read_gemini_key() -> str:
+    if _GEMINI_KEY_FILE.exists():
+        return _GEMINI_KEY_FILE.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def _write_gemini_key(key: str) -> None:
+    _GEMINI_KEY_FILE.write_text(key.strip(), encoding="utf-8")
+
+
+def _delete_gemini_key() -> None:
+    if _GEMINI_KEY_FILE.exists():
+        _GEMINI_KEY_FILE.unlink()
+
+
 @router.get("", response_class=HTMLResponse)
 async def list_view(request: Request):
     redirect = _require_auth_or_redirect(request)
@@ -158,6 +176,44 @@ async def new_post(
     key = generate_key()
     create_license(settings.db_path, key=key, client_name=client_name.strip(), notes=notes.strip() or None)
     return RedirectResponse("/admin", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/config", response_class=HTMLResponse)
+async def config_get(request: Request):
+    redirect = _require_auth_or_redirect(request)
+    if redirect:
+        return redirect
+    csrf = get_or_create_csrf_token(request)
+    return templates.TemplateResponse(
+        request, "config.html",
+        {"csrf_token": csrf, "gemini_key": _read_gemini_key(), "message": None, "error": None},
+    )
+
+
+@router.post("/config")
+async def config_post(
+    request: Request,
+    csrf_token: str = Form(...),
+    gemini_key: str = Form(""),
+    action: str = Form("save"),
+):
+    redirect = _require_auth_or_redirect(request)
+    if redirect:
+        return redirect
+    _check_csrf(request, csrf_token)
+
+    if action == "delete":
+        _delete_gemini_key()
+        msg = "API key removida."
+    else:
+        _write_gemini_key(gemini_key)
+        msg = "API key salva com sucesso."
+
+    csrf = get_or_create_csrf_token(request)
+    return templates.TemplateResponse(
+        request, "config.html",
+        {"csrf_token": csrf, "gemini_key": _read_gemini_key(), "message": msg, "error": None},
+    )
 
 
 @router.get("/{license_id}", response_class=HTMLResponse)
