@@ -2801,32 +2801,44 @@ class SplashScreen(tk.Tk):
         self.destroy()
 
 
+def _splash_wait(splash: SplashScreen, ms: int, min_ms: int = 800):
+    """Mantém o spinner girando por pelo menos min_ms após a etapa concluir."""
+    import time
+    elapsed = ms
+    remaining = max(0, min_ms - elapsed)
+    deadline = time.monotonic() + remaining / 1000
+    while time.monotonic() < deadline:
+        splash.update()
+        splash.after(30)
+
+
 def main():
-    import sys
+    import sys, time
 
     splash = SplashScreen()
     splash.update()
 
     # 1. Verificar e aplicar atualização
     splash.set_status("Procurando atualizacoes")
-    splash.update()
-    check_and_update()  # se houver update, faz sys.exit internamente
+    t0 = time.monotonic()
+    check_and_update()
+    _splash_wait(splash, int((time.monotonic() - t0) * 1000), min_ms=1200)
 
     # 2. Validar licença
     splash.set_status("Validando licenca")
-    splash.update()
-    if not bootstrap_license():
+    t0 = time.monotonic()
+    ok = bootstrap_license()
+    _splash_wait(splash, int((time.monotonic() - t0) * 1000), min_ms=1000)
+    if not ok:
         splash.fechar()
         sys.exit(0)
 
-    # 3. Carregando app
+    # 3. Carregando
     splash.set_status("Carregando")
-    splash.update()
+    _splash_wait(splash, 0, min_ms=600)
 
     splash.fechar()
-
-    app = App()
-    app.mainloop()
+    App().mainloop()
 
 
 if __name__ == '__main__':
