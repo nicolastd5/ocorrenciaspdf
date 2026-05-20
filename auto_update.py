@@ -73,9 +73,21 @@ def _download_and_relaunch(filename: str) -> None:
     log_path = tmp_dir / "updater.log"
     pid = os.getpid()
 
+    # Tenta apagar o exe antigo com retry — o Windows pode demorar alguns ms para
+    # liberar o handle do exe que acabou de fechar (mesmo apos tasklist confirmar).
     delete_old_line = ""
     if target_exe.resolve() != current_exe.resolve():
-        delete_old_line = f'del /Q "{current_exe}" >> "{log_path}" 2>&1\n'
+        delete_old_line = (
+            f'set /a dtries=0\n'
+            f':del_retry\n'
+            f'del /Q "{current_exe}" >> "{log_path}" 2>&1\n'
+            f'if not exist "{current_exe}" goto del_ok\n'
+            f'set /a dtries+=1\n'
+            f'if %dtries% geq 5 (echo aviso: nao foi possivel apagar {current_exe} >> "{log_path}" & goto del_ok)\n'
+            f'timeout /t 1 /nobreak >nul\n'
+            f'goto del_retry\n'
+            f':del_ok\n'
+        )
 
     bat.write_text(
         f'@echo off\n'

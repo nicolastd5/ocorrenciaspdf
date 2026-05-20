@@ -2921,14 +2921,16 @@ def main():
     _splash_wait(splash, int((time.monotonic() - t0) * 1000), min_ms=1000)
 
     # Fecha a splash antes de qualquer diálogo de licença (evita sobreposição)
+    splash_destruida = False
     if result.status not in (LicenseStatus.VALID, LicenseStatus.OFFLINE_TOLERATED):
         splash.fechar()
+        splash_destruida = True
         ok = _resolver_licenca(client, result)
         if not ok:
             sys.exit(0)
 
     # 3. Carregando
-    if splash.winfo_exists():
+    if not splash_destruida:
         splash.set_status("Carregando...")
         _splash_wait(splash, 0, min_ms=600)
         splash.fechar()
