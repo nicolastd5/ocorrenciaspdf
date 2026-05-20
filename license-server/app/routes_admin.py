@@ -100,6 +100,18 @@ async def logout(request: Request, csrf_token: str = Form(...)):
     return RedirectResponse("/admin/login", status_code=status.HTTP_303_SEE_OTHER)
 
 
+def _get_version_info() -> tuple[str | None, str | None]:
+    try:
+        import json as _json
+        vfile = Path(__file__).parent.parent / "version.json"
+        if vfile.exists():
+            data = _json.loads(vfile.read_text(encoding="utf-8"))
+            return data.get("version"), data.get("filename")
+    except Exception:
+        pass
+    return None, None
+
+
 @router.get("", response_class=HTMLResponse)
 async def list_view(request: Request):
     redirect = _require_auth_or_redirect(request)
@@ -113,10 +125,12 @@ async def list_view(request: Request):
         last = validations[0].validated_at if validations else None
         rows.append({"license": lic, "last_validation": last})
     csrf = get_or_create_csrf_token(request)
+    app_version, app_filename = _get_version_info()
     return templates.TemplateResponse(
         request,
         "list.html",
-        {"rows": rows, "csrf_token": csrf, "message": None},
+        {"rows": rows, "csrf_token": csrf, "message": None,
+         "app_version": app_version, "app_filename": app_filename},
     )
 
 

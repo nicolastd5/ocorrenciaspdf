@@ -1618,39 +1618,51 @@ class App(tk.Tk):
                       command=lambda s=substituto: _copiar(s)).grid(row=r, column=3, sticky='ew', padx=(0, 4))
 
     def _criar_aba_sobre(self, parent):
-        frame = tk.Frame(parent, bg=CORES['bg'])
-        frame.pack(fill='both', expand=True, padx=40, pady=30)
+        outer = tk.Frame(parent, bg=CORES['bg'])
+        outer.pack(fill='both', expand=True)
 
-        tk.Label(frame, text="⚙", font=("Segoe UI", 48),
+        canvas = tk.Canvas(outer, bg=CORES['bg'], highlightthickness=0)
+        sb = ttk.Scrollbar(outer, orient='vertical', command=canvas.yview)
+        canvas.configure(yscrollcommand=sb.set)
+        sb.pack(side='right', fill='y')
+        canvas.pack(side='left', fill='both', expand=True)
+
+        frame = tk.Frame(canvas, bg=CORES['bg'])
+        win = canvas.create_window((0, 0), window=frame, anchor='nw')
+
+        def _resize(e):
+            canvas.itemconfig(win, width=e.width)
+        canvas.bind('<Configure>', _resize)
+        frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+
+        inner = tk.Frame(frame, bg=CORES['bg'])
+        inner.pack(padx=60, pady=30, fill='x')
+
+        # Cabeçalho
+        tk.Label(inner, text="⚙", font=("Segoe UI", 52),
                  fg=CORES['accent'], bg=CORES['bg']).pack()
-
-        tk.Label(frame, text="Processador de Ocorrências",
+        tk.Label(inner, text="Processador de Ocorrências",
                  font=("Segoe UI", 20, "bold"), fg=CORES['fg_bright'],
-                 bg=CORES['bg']).pack(pady=(4, 0))
-
-        tk.Label(frame, text=f"Versão {VERSION}",
+                 bg=CORES['bg']).pack(pady=(6, 2))
+        tk.Label(inner, text=f"Versão {VERSION}",
                  font=("Segoe UI", 10), fg=CORES['fg_dim'],
-                 bg=CORES['bg']).pack(pady=(2, 0))
-
-        tk.Frame(frame, bg=CORES['border'], height=1).pack(fill='x', pady=20)
-
-        tk.Label(frame,
+                 bg=CORES['bg']).pack()
+        tk.Label(inner,
                  text="Extrai ocorrências de PDFs de jornada de trabalho\n"
                       "e preenche automaticamente em planilhas Excel.",
-                 font=("Segoe UI", 11), fg=CORES['fg'], bg=CORES['bg'],
-                 justify='center').pack()
+                 font=("Segoe UI", 10), fg=CORES['fg_dim'], bg=CORES['bg'],
+                 justify='center').pack(pady=(10, 0))
 
-        tk.Frame(frame, bg=CORES['border'], height=1).pack(fill='x', pady=20)
+        tk.Frame(inner, bg=CORES['border'], height=1).pack(fill='x', pady=20)
 
-        info_content = self._criar_card(frame, "Informações")
-
-        campos = [
-            ("Autor", "Nicolas Almeida Hader Dias"),
+        # Card de informações
+        info_content = self._criar_card(inner, "Informações")
+        for label, valor in [
+            ("Autor",      "Nicolas Almeida Hader Dias"),
+            ("Versão",     VERSION),
             ("Tecnologia", "Python 3  •  tkinter  •  pdfplumber  •  openpyxl"),
             ("Plataforma", "Windows"),
-        ]
-
-        for label, valor in campos:
+        ]:
             row = tk.Frame(info_content, bg=CORES['bg_card'])
             row.pack(fill='x', pady=3)
             tk.Label(row, text=f"{label}:", font=("Segoe UI", 10, "bold"),
@@ -1660,26 +1672,26 @@ class App(tk.Tk):
                      fg=CORES['fg'], bg=CORES['bg_card'],
                      anchor='w').pack(side='left')
 
-        # Botão de verificar atualizações
-        tk.Frame(frame, bg=CORES['border'], height=1).pack(fill='x', pady=(20, 16))
+        tk.Frame(inner, bg=CORES['border'], height=1).pack(fill='x', pady=20)
 
-        update_row = tk.Frame(frame, bg=CORES['bg'])
-        update_row.pack()
+        # Seção de atualização
+        update_card = self._criar_card(inner, "Atualização")
 
         self._lbl_update_status = tk.Label(
-            update_row, text="",
-            font=("Segoe UI", 10), fg=CORES['fg_dim'], bg=CORES['bg'])
-        self._lbl_update_status.pack(pady=(0, 10))
+            update_card, text="Clique no botão para verificar se há uma versão mais recente.",
+            font=("Segoe UI", 10), fg=CORES['fg_dim'], bg=CORES['bg_card'],
+            wraplength=420, justify='left')
+        self._lbl_update_status.pack(anchor='w', pady=(0, 12))
 
         self._btn_buscar_update = tk.Button(
-            update_row, text="Buscar Atualizações",
+            update_card, text="Buscar Atualizações",
             font=("Segoe UI", 10, "bold"),
             fg=CORES['btn_fg'], bg=CORES['accent'],
             activeforeground=CORES['btn_fg'], activebackground=CORES['accent_hover'],
             relief='flat', cursor='hand2', padx=18, pady=8, borderwidth=0,
             command=self._buscar_update_manual,
         )
-        self._btn_buscar_update.pack()
+        self._btn_buscar_update.pack(anchor='w')
         self._bind_hover(self._btn_buscar_update, CORES['accent'], CORES['accent_hover'])
 
     def _buscar_update_manual(self):

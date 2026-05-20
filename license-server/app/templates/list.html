@@ -10,8 +10,29 @@
 <div class="alert alert-success">{{ message }}</div>
 {% endif %}
 
-<div style="display:flex; justify-content:flex-end; margin-bottom:1rem;">
-    <a href="/admin/new" class="btn btn-primary">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; gap:1rem; flex-wrap:wrap;">
+    {% if app_version %}
+    <div class="card" style="display:flex; align-items:center; gap:1.25rem; padding:.75rem 1.25rem; flex:1; min-width:260px;">
+        <div>
+            <div style="font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:.2rem;">Versão atual do app</div>
+            <div style="font-size:1rem; font-weight:600;">v{{ app_version }}</div>
+        </div>
+        {% if app_filename %}
+        <a href="/api/download/{{ app_filename }}" class="btn btn-ghost" style="margin-left:auto;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Baixar .exe
+        </a>
+        {% else %}
+        <span style="color:var(--text-muted); font-size:.85rem; margin-left:auto;">Nenhum release publicado</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <a href="/admin/new" class="btn btn-primary" style="white-space:nowrap;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
