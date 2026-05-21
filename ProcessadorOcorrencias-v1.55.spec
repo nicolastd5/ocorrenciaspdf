@@ -1,4 +1,4 @@
-# -*- mode: python ; coding: utf-8 -*-
+﻿# -*- mode: python ; coding: utf-8 -*-
 
 
 a = Analysis(
@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='ProcessadorOcorrencias-v1.54',
+    name='ProcessadorOcorrencias-v1.55',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
