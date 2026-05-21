@@ -1207,7 +1207,7 @@ class App(tk.Tk):
         log_wrapper = tk.Frame(parent, bg=CORES['bg_card'],
                                highlightbackground=CORES['border'],
                                highlightthickness=1)
-        log_wrapper.pack(fill='x', pady=(12, 0))
+        log_wrapper.pack(fill='both', expand=True, pady=(12, 0))
         tk.Frame(log_wrapper, bg=CORES['accent'], width=3).pack(side='left', fill='y')
         log_inner = tk.Frame(log_wrapper, bg=CORES['bg_card'])
         log_inner.pack(side='left', fill='both', expand=True)
@@ -1222,7 +1222,7 @@ class App(tk.Tk):
                                fg=CORES['fg'], bg=CORES['bg_input'],
                                insertbackground=CORES['fg'], relief='flat',
                                highlightthickness=0, state='disabled',
-                               wrap='word', height=8)
+                               wrap='word', height=16)
         sb_log = ttk.Scrollbar(log_text_frame, orient='vertical',
                                command=self.vtc_log.yview)
         self.vtc_log.configure(yscrollcommand=sb_log.set)
