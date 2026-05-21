@@ -34,7 +34,7 @@ class LicenseClient:
     SERVER_URL = "https://nicolasapp.duckdns.org"
     OFFLINE_TOLERANCE_HOURS = 24
     TIMEOUT_SECONDS = 10
-    APP_VERSION = "1.50"
+    APP_VERSION = "1.51"
 
     def __init__(self, config_path: Path = DEFAULT_CONFIG_PATH):
         self.config_path = config_path

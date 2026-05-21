@@ -100,6 +100,8 @@ _COL_ALIASES = {
     'Descrição cargo':  ['descricao cargo', 'desc cargo', 'cargo'],
     'Descrição Ccusto': ['descricao ccusto', 'desc ccusto', 'descricao centro de custo',
                          'centro de custo', 'ccusto'],
+    'Descrição Dpto':   ['descricao dpto', 'desc dpto', 'descricao departamento',
+                         'departamento', 'dpto'],
     'Endereço':         ['endereco', 'logradouro', 'end'],
     'Numero':           ['numero', 'num', 'numero end', 'numero endereco', 'nro'],
     'Complemento':      ['complemento', 'compl'],
@@ -673,6 +675,7 @@ class ProcessadorVTCaixa:
             'Data nascimento':  _idx('Data nascimento'),
             'Descrição cargo':  _idx('Descrição cargo'),
             'Descrição Ccusto': _idx('Descrição Ccusto'),
+            'Descrição Dpto':   _idx('Descrição Dpto'),
             'Endereço':         _idx('Endereço'),
             'Numero':           _idx('Numero'),
             'Complemento':      _idx('Complemento'),
@@ -692,6 +695,7 @@ class ProcessadorVTCaixa:
         idx_dt_nasc = mapa_colunas['Data nascimento']
         idx_cargo   = mapa_colunas['Descrição cargo']
         idx_ccusto  = mapa_colunas['Descrição Ccusto']
+        idx_dpto    = mapa_colunas['Descrição Dpto']
         idx_end     = mapa_colunas['Endereço']
         idx_num     = mapa_colunas['Numero']
         idx_comp    = mapa_colunas['Complemento']
@@ -751,6 +755,7 @@ class ProcessadorVTCaixa:
                 'Data nascimento':  self._formatar_data(ws.cell_value(row, idx_dt_nasc) if idx_dt_nasc is not None else None, wb),
                 'Descrição cargo':  _val(idx_cargo),
                 'Descrição Ccusto': _val(idx_ccusto),
+                'Descrição Dpto':   _val(idx_dpto),
                 'Endereço':         _val(idx_end),
                 'Numero':           self._formatar_numero(ws.cell_value(row, idx_num) if idx_num is not None else None),
                 'Complemento':      _val(idx_comp),
@@ -892,7 +897,11 @@ class ProcessadorVTCaixa:
                 'RG':                          ex['RG'] or ex['CPF'],
                 'DATA DE NASCIMENTO':          ex['Data nascimento'],
                 'CARGO':                       self._sanitizar(ex['Descrição cargo']),
-                'DEPARTAMENTO':                self._sanitizar(ex['Descrição Ccusto']),
+                'DEPARTAMENTO':                self._sanitizar(
+                    ex['Descrição Dpto']
+                    if ex.get('Descrição Ccusto', '').strip().upper() == 'DEP POLICIA FEDERAL SP'
+                    else ex['Descrição Ccusto']
+                ),
                 'NOME DA MÃE':                 self._sanitizar(ex['Nome Mae']),
                 'BENEFÍCIO DO FUNCIONÁRIO':    self._sanitizar(linha['administradora']),
                 'VALOR UNITÁRIO':              self._limpar_valor_unitario(linha['valor_unitario']),
