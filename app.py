@@ -1094,36 +1094,20 @@ class App(tk.Tk):
                                 [("Excel", "*.xls *.xlsx"), ("Excel .xls", "*.xls"),
                                  ("Excel .xlsx", "*.xlsx")], "Selecionar")
 
-        # File picker de saída (salvar como)
-        out_row = tk.Frame(files_frame, bg=CORES['bg_card'])
-        out_row.pack(fill='x', pady=5)
-        tk.Label(out_row, text="CSV de Saída", font=(FONT_SANS, 10),
-                 fg=CORES['fg_dim'], bg=CORES['bg_card'], width=14,
-                 anchor='w').pack(side='left')
-        out_entry = tk.Entry(out_row, textvariable=self.vtc_output_path,
-                             font=(FONT_MONO, 9), fg=CORES['fg'],
-                             bg=CORES['bg_input'], insertbackground=CORES['fg'],
-                             relief='flat', highlightbackground=CORES['border'],
-                             highlightthickness=1)
-        out_entry.pack(side='left', fill='x', expand=True, padx=(0, 8), ipady=5)
+        # File saver de saída (salvar como) — mesmo padrão visual dos pickers
+        self._criar_file_saver(files_frame, "CSV de Saída", self.vtc_output_path)
 
-        def _on_out_change(*_):
-            color = CORES['accent'] if self.vtc_output_path.get().strip() else CORES['border']
-            out_entry.configure(highlightbackground=color)
-        self.vtc_output_path.trace_add('write', _on_out_change)
-
-        def _escolher_saida():
-            path = filedialog.asksaveasfilename(
-                defaultextension=".csv",
-                filetypes=[("CSV", "*.csv")],
-                title="Salvar CSV de importação VT Caixa como...")
-            if path:
-                self.vtc_output_path.set(path)
-
-        RoundedButton(out_row, text="Salvar como", variant='ghost', radius=6,
-                      font=(FONT_SANS, 9, "bold"), padx=14, pady=6,
+        # Botão limpar todas as seleções
+        limpar_row = tk.Frame(files_frame, bg=CORES['bg_card'])
+        limpar_row.pack(fill='x', pady=(4, 0))
+        RoundedButton(limpar_row, text="✕  Limpar seleções", variant='ghost', radius=6,
+                      font=(FONT_SANS, 9), padx=14, pady=6,
                       parent_bg=CORES['bg_card'],
-                      command=_escolher_saida).pack(side='right')
+                      command=lambda: [
+                          self.vtc_pdf_path.set(''),
+                          self.vtc_xls_path.set(''),
+                          self.vtc_output_path.set(''),
+                      ]).pack(side='right')
 
         # ── Card: Opções IA ─────────────────────────────────────────────
         ia_card = self._criar_card(parent, "🤖  Verificação com IA (opcional)")
@@ -2410,6 +2394,83 @@ class App(tk.Tk):
                 _criar_btn('Selecionar', 'primary')
 
         # estado inicial: pode já ter valor salvo
+        on_change()
+        var.trace_add('write', on_change)
+
+    def _criar_file_saver(self, parent, label, var):
+        """File saver card-style: badge CSV âmbar + label + caminho em mono + Salvar como/Trocar."""
+        bg_badge, fg_badge = self._EXT_COLORS['csv']
+
+        card = tk.Frame(parent, bg=CORES['bg_card'],
+                        highlightbackground=CORES['border'], highlightthickness=1)
+        card.pack(fill='x', pady=6)
+
+        inner = tk.Frame(card, bg=CORES['bg_card'])
+        inner.pack(fill='x', padx=14, pady=10)
+
+        # Badge CSV
+        badge = tk.Frame(inner, bg=bg_badge,
+                         highlightbackground=fg_badge, highlightthickness=1)
+        badge.pack(side='left')
+        tk.Label(badge, text='CSV',
+                 font=(FONT_MONO, 11, "bold"),
+                 fg=fg_badge, bg=bg_badge,
+                 padx=10, pady=6).pack()
+
+        # Coluna texto: label em cima + caminho em mono embaixo
+        col = tk.Frame(inner, bg=CORES['bg_card'])
+        col.pack(side='left', fill='x', expand=True, padx=(12, 12))
+
+        tk.Label(col, text=label.upper(),
+                 font=(FONT_SANS, 8, "bold"),
+                 fg=CORES['fg_dim'], bg=CORES['bg_card']).pack(anchor='w')
+
+        lbl_file = tk.Label(col, font=(FONT_MONO, 10),
+                            fg=CORES['fg_dim'], bg=CORES['bg_card'],
+                            anchor='w')
+        lbl_file.pack(anchor='w', fill='x')
+
+        # Check verde quando preenchido
+        check_holder = tk.Frame(inner, bg=CORES['bg_card'])
+        check_holder.pack(side='left', padx=(0, 10))
+        lbl_check = tk.Label(check_holder, text='',
+                             font=(FONT_SANS, 14, "bold"),
+                             fg=CORES['success'], bg=CORES['bg_card'])
+        lbl_check.pack()
+
+        btn_holder = tk.Frame(inner, bg=CORES['bg_card'])
+        btn_holder.pack(side='right')
+
+        def _escolher_saida():
+            path = filedialog.asksaveasfilename(
+                defaultextension=".csv",
+                filetypes=[("CSV", "*.csv")],
+                title="Salvar CSV de importação VT Caixa como...")
+            if path:
+                var.set(path)
+
+        def _criar_btn(text, variant):
+            for w in btn_holder.winfo_children():
+                w.destroy()
+            b = RoundedButton(btn_holder, text=text, variant=variant, radius=6,
+                              font=(FONT_SANS, 9, "bold"), padx=14, pady=6,
+                              parent_bg=CORES['bg_card'],
+                              command=_escolher_saida)
+            b.pack()
+
+        def on_change(*_):
+            valor = var.get().strip()
+            if valor:
+                lbl_file.configure(text=os.path.basename(valor), fg=CORES['fg_bright'])
+                lbl_check.configure(text='✓')
+                card.configure(highlightbackground=CORES['border_hover'])
+                _criar_btn('Trocar', 'ghost')
+            else:
+                lbl_file.configure(text='Nenhum destino selecionado', fg=CORES['fg_dim'])
+                lbl_check.configure(text='')
+                card.configure(highlightbackground=CORES['border'])
+                _criar_btn('Salvar como', 'primary')
+
         on_change()
         var.trace_add('write', on_change)
 
