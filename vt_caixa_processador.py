@@ -856,6 +856,9 @@ class ProcessadorVTCaixa:
         ('CARTAO UTB', None, '10568'),
         ('AMAZONIA INTER', None, '14039'),
         ('TAGUATUR AGUAS', None, '10985'),
+        ('TRANSURB BAURU', None, '1858'),
+        ('ANDREENSE', None, '9022'),
+        ('URBAN', None, '1473'),
     ]
 
     def _resolver_codigo_beneficio(self, administradora, valor_unitario):

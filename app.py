@@ -413,14 +413,16 @@ class App(tk.Tk):
 
         def _checar():
             from license_client import LicenseClient
+            from auto_update import _fetch_latest, _parse_version
             client = LicenseClient()
             result = client.validate()
             latest_version = None
             try:
-                from auto_update import _fetch_latest
                 latest = _fetch_latest()
                 if latest:
                     latest_version = latest.get('version')
+                    if latest_version and _parse_version(latest_version) > _parse_version(VERSION):
+                        self.after(0, lambda v=latest_version: self._mostrar_banner_update(v))
             except Exception:
                 pass
             self.after(0, lambda: self._atualizar_indicador_conexao(
@@ -464,7 +466,7 @@ class App(tk.Tk):
             mascara = (key[:6] + '…' + key[-4:]) if len(key) > 12 else 'configurada'
             rows['API GEMINI'].configure(text=mascara, fg=CORES['fg_bright'])
 
-    CONN_REFRESH_INTERVAL = 30  # segundos entre revalidações automáticas
+    CONN_REFRESH_INTERVAL = 60  # segundos entre revalidações automáticas
 
     def _atualizar_indicador_conexao(self, status, latest_version=None):
         if status == LicenseStatus.VALID:
