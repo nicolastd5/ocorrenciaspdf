@@ -883,8 +883,6 @@ class ProcessadorVTCaixa:
                 nao_encontrados.append(f"{codigo} - {linha['colaborador']}")
                 continue
 
-            dias_trab = self._calcular_dias_uteis(linha['periodo'])
-
             registros.append({
                 'CNPJ':                        EMPRESA_CNPJ,
                 'CEP':                         EMPRESA_CEP,
@@ -909,7 +907,7 @@ class ProcessadorVTCaixa:
                 'BENEFÍCIO DO FUNCIONÁRIO':    self._sanitizar(linha['administradora']),
                 'VALOR UNITÁRIO':              self._limpar_valor_unitario(linha['valor_unitario']),
                 'QUANTIDADE DIÁRIA':           '2',
-                'PERÍODO DE DIAS TRABALHADOS': str(dias_trab),
+                'PERÍODO DE DIAS TRABALHADOS': linha.get('quantidade', ''),
                 'TIPO VALOR':                  '',
                 'REDE RECARGA':                '3' if 'RIOCARD' in self._sanitizar(linha['administradora']).upper() else '',
                 'CEP RESIDENCIAL':             ex['Cep'],
