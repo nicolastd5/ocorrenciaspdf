@@ -426,7 +426,7 @@ class App(tk.Tk):
             except Exception:
                 pass
             self.after(0, lambda: self._atualizar_indicador_conexao(
-                result.status, latest_version=latest_version))
+                result.status, latest_version=latest_version, reason=result.reason))
 
             if result.status == LicenseStatus.VALID:
                 key = client.get_saved_key()
@@ -468,16 +468,28 @@ class App(tk.Tk):
 
     CONN_REFRESH_INTERVAL = 60  # segundos entre revalidações automáticas
 
-    def _atualizar_indicador_conexao(self, status, latest_version=None):
+    def _atualizar_indicador_conexao(self, status, latest_version=None, reason=None):
         if status == LicenseStatus.VALID:
             cor, bg, borda, texto = CORES['success'], '#0f1a14', '#1f3a2a', 'Conectado ao servidor'
             card_conn_text, card_conn_cor = 'Conectado', CORES['success']
         elif status == LicenseStatus.OFFLINE_TOLERATED:
-            cor, bg, borda, texto = CORES['warning'], '#1a1610', '#3a3220', 'Offline — uso tolerado'
-            card_conn_text, card_conn_cor = 'Offline (tolerado)', CORES['warning']
+            if reason == 'no_internet':
+                texto = 'Sem internet — uso tolerado'
+                card_conn_text = 'Sem internet (tolerado)'
+            else:
+                texto = 'Servidor indisponível — uso tolerado'
+                card_conn_text = 'Servidor indisponível (tolerado)'
+            cor, bg, borda = CORES['warning'], '#1a1610', '#3a3220'
+            card_conn_cor = CORES['warning']
         else:
-            cor, bg, borda, texto = CORES['error'], '#1a0f10', '#3a1f22', 'Sem conexão com servidor'
-            card_conn_text, card_conn_cor = 'Sem conexão', CORES['error']
+            if reason == 'no_internet':
+                texto = 'Sem conexão com a internet'
+                card_conn_text = 'Sem internet'
+            else:
+                texto = 'Servidor indisponível'
+                card_conn_text = 'Servidor indisponível'
+            cor, bg, borda = CORES['error'], '#1a0f10', '#3a1f22'
+            card_conn_cor = CORES['error']
 
         self._conn_pill.configure(bg=bg, highlightbackground=borda)
         self._conn_dot.configure(fg=cor, bg=bg)
@@ -2352,7 +2364,7 @@ class App(tk.Tk):
                            fg=CORES['fg_dim'], bg=CORES['bg_card'])
         lbl_top.pack(anchor='w')
 
-        lbl_file = tk.Label(col, textvariable=var,
+        lbl_file = tk.Label(col,
                             font=(FONT_MONO, 10),
                             fg=CORES['fg'], bg=CORES['bg_card'],
                             anchor='w')
@@ -2369,6 +2381,9 @@ class App(tk.Tk):
         btn_holder = tk.Frame(inner, bg=CORES['bg_card'])
         btn_holder.pack(side='right')
 
+        clear_holder = tk.Frame(inner, bg=CORES['bg_card'])
+        clear_holder.pack(side='right', padx=(0, 6))
+
         def _criar_btn(text, variant):
             for w in btn_holder.winfo_children():
                 w.destroy()
@@ -2379,6 +2394,9 @@ class App(tk.Tk):
             b.pack()
             return b
 
+        def _limpar():
+            var.set('')
+
         def on_change(*_):
             valor = var.get().strip()
             if valor:
@@ -2386,12 +2404,20 @@ class App(tk.Tk):
                 lbl_check.configure(text='✓')
                 card.configure(highlightbackground=CORES['border_hover'])
                 _criar_btn('Trocar', 'ghost')
+                for w in clear_holder.winfo_children():
+                    w.destroy()
+                RoundedButton(clear_holder, text='✕', variant='danger', radius=6,
+                              font=(FONT_SANS, 9, "bold"), padx=10, pady=6,
+                              parent_bg=CORES['bg_card'],
+                              command=_limpar).pack()
             else:
                 lbl_file.configure(text='Nenhum arquivo selecionado',
                                    fg=CORES['fg_dim'])
                 lbl_check.configure(text='')
                 card.configure(highlightbackground=CORES['border'])
                 _criar_btn('Selecionar', 'primary')
+                for w in clear_holder.winfo_children():
+                    w.destroy()
 
         # estado inicial: pode já ter valor salvo
         on_change()

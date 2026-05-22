@@ -34,7 +34,7 @@ class LicenseClient:
     SERVER_URL = "https://nicolasapp.duckdns.org"
     OFFLINE_TOLERANCE_HOURS = 24
     TIMEOUT_SECONDS = 10
-    APP_VERSION = "1.55"
+    APP_VERSION = "1.56"
 
     def __init__(self, config_path: Path = DEFAULT_CONFIG_PATH):
         self.config_path = config_path
@@ -76,19 +76,22 @@ class LicenseClient:
 
         try:
             resp = requests.post(url, json=payload, timeout=self.TIMEOUT_SECONDS)
+        except (requests.exceptions.ConnectionError, requests.exceptions.ProxyError):
+            logger.info("Sem conexão com a internet ao validar licença")
+            return self._offline_result(offline_reason="no_internet")
         except requests.RequestException as e:
-            logger.info("Erro de rede validando licença: %s", e)
-            return self._offline_result()
+            logger.info("Servidor inacessível ao validar licença: %s", e)
+            return self._offline_result(offline_reason="server_down")
 
         if resp.status_code != 200:
             logger.info("Servidor respondeu %d — tratando como offline", resp.status_code)
-            return self._offline_result()
+            return self._offline_result(offline_reason="server_down")
 
         try:
             data = resp.json()
         except ValueError:
             logger.info("Resposta do servidor não é JSON válido — tratando como offline")
-            return self._offline_result()
+            return self._offline_result(offline_reason="server_down")
 
         if data.get("valid") is True:
             self._update_last_validated()
@@ -107,18 +110,18 @@ class LicenseClient:
         cfg["last_validated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         self._write_config(cfg)
 
-    def _offline_result(self) -> ValidationResult:
+    def _offline_result(self, offline_reason: str = "unknown") -> ValidationResult:
         cfg = self._read_config()
         last_str = cfg.get("last_validated_at")
         if not last_str:
-            return ValidationResult(status=LicenseStatus.OFFLINE_EXPIRED)
+            return ValidationResult(status=LicenseStatus.OFFLINE_EXPIRED, reason=offline_reason)
         try:
             last = datetime.fromisoformat(last_str)
         except ValueError:
-            return ValidationResult(status=LicenseStatus.OFFLINE_EXPIRED)
+            return ValidationResult(status=LicenseStatus.OFFLINE_EXPIRED, reason=offline_reason)
         if last.tzinfo is None:
             last = last.replace(tzinfo=timezone.utc)
         delta = datetime.now(timezone.utc) - last
         if delta < timedelta(hours=self.OFFLINE_TOLERANCE_HOURS):
-            return ValidationResult(status=LicenseStatus.OFFLINE_TOLERATED)
-        return ValidationResult(status=LicenseStatus.OFFLINE_EXPIRED)
+            return ValidationResult(status=LicenseStatus.OFFLINE_TOLERATED, reason=offline_reason)
+        return ValidationResult(status=LicenseStatus.OFFLINE_EXPIRED, reason=offline_reason)
