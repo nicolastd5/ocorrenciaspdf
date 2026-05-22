@@ -937,7 +937,7 @@ class App(tk.Tk):
                  font=(FONT_SANS, 10), fg=CORES['fg_dim'],
                  bg=CORES['bg_card']).pack(side='left', padx=(0, 8))
         self._verif_modelo_combo = ttk.Combobox(
-            modelo_linha, textvariable=self.verif_modelo,
+            modelo_linha,
             font=(FONT_SANS, 10), width=30, state='readonly')
         self._verif_modelo_combo.pack(side='left')
         self._criar_mini_btn(
@@ -1440,23 +1440,38 @@ class App(tk.Tk):
 
         def _buscar():
             try:
-                import google.genai as genai
-                client = genai.Client(api_key=api_key)
-                modelos = [m.name for m in client.models.list()
-                           if 'gemini' in m.name.lower()]
-                modelos = sorted(set(modelos))
-                self.after(0, lambda: self._verif_popular_modelos(modelos))
+                from vt_caixa_processador import ProcessadorVTCaixa
+                modelos = ProcessadorVTCaixa.listar_modelos(api_key)
+                self.after(0, lambda m=modelos: self._verif_popular_modelos(m))
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Erro", f"Falha ao carregar modelos:\n{e}"))
+                self.after(0, lambda err=str(e): messagebox.showerror(
+                    "Erro", f"Falha ao carregar modelos:\n{err}"))
 
         threading.Thread(target=_buscar, daemon=True).start()
 
     def _verif_popular_modelos(self, modelos):
-        self._verif_modelo_combo['values'] = modelos
-        if modelos:
-            atual = self.verif_modelo.get()
-            if atual not in modelos:
-                self.verif_modelo.set(modelos[0])
+        """modelos: lista de (display_name, model_id) vinda de ProcessadorVTCaixa.listar_modelos."""
+        if not modelos:
+            messagebox.showwarning("Aviso", "Nenhum modelo encontrado para esta API Key.")
+            return
+        self._verif_models_map = {f"{d} — {mid}": mid for d, mid in modelos}
+        labels = list(self._verif_models_map.keys())
+        self._verif_modelo_combo['values'] = labels
+
+        atual_id = self.verif_modelo.get().strip()
+        # Tenta selecionar o modelo já salvo
+        match = next((lbl for lbl, mid in self._verif_models_map.items() if mid == atual_id), None)
+        if match:
+            self._verif_modelo_combo.set(match)
+        else:
+            self._verif_modelo_combo.set(labels[0])
+            self.verif_modelo.set(list(self._verif_models_map.values())[0])
+
+        # Ao selecionar no combo, salva só o model_id na variável
+        def _on_select(event):
+            sel = self._verif_modelo_combo.get()
+            self.verif_modelo.set(self._verif_models_map.get(sel, sel.split(' — ')[0]))
+        self._verif_modelo_combo.bind('<<ComboboxSelected>>', _on_select)
 
     def _vtc_log_append(self, msg, tag=None):
         """Adiciona linha ao log da aba VT Caixa (thread-safe via self.after)."""
