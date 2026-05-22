@@ -65,7 +65,7 @@ class ProcessadorOcorrencias:
                             continue
 
                         ocorrencias = {}
-                        for celula in linha[6:34]:
+                        for celula in linha[6:]:
                             if celula is None:
                                 continue
                             cod = str(celula).strip()
