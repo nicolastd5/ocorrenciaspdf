@@ -859,6 +859,7 @@ class ProcessadorVTCaixa:
         ('TRANSURB BAURU', None, '1858'),
         ('ANDREENSE', None, '9022'),
         ('URBAN', None, '1473'),
+        ('SIND CARD', None, '5696'),
     ]
 
     def _resolver_codigo_beneficio(self, administradora, valor_unitario):
@@ -954,6 +955,7 @@ class ProcessadorVTCaixa:
             'B BRASIL RJ 2022.7421.6922':     'BB RJ 89',
             'CEF 14 DF':                      'CEF 14 DF 90',
             'CEF 15 RS 4916':                 'CEF 15 RS',
+            'ELETRONUCLEAR RECEP 4500070400': 'ELETRONUCLEAR RECEP 97',
         }
         for reg in registros:
             depart = reg.get('DEPARTAMENTO', '')
