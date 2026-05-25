@@ -1725,6 +1725,7 @@ class App(tk.Tk):
 
         # Exibe a janela apenas agora que está totalmente montada
         win.deiconify()
+        win.update()  # força renderização completa antes de retornar
         win.grab_set()
         return win
 
@@ -2757,11 +2758,15 @@ class App(tk.Tk):
         verif_key    = self.verif_api_key.get().strip()
         verif_modelo = self.verif_modelo.get().strip()
 
-        thread = threading.Thread(target=self._processar,
-                                  args=(pdf, xlsx, output, codigos, dias_mes, colunas_qt,
-                                        modo_verif, verif_key, verif_modelo))
-        thread.daemon = True
-        thread.start()
+        def _iniciar_thread():
+            thread = threading.Thread(target=self._processar,
+                                      args=(pdf, xlsx, output, codigos, dias_mes, colunas_qt,
+                                            modo_verif, verif_key, verif_modelo))
+            thread.daemon = True
+            thread.start()
+
+        # Pequeno delay para o tkinter terminar de pintar a janela antes de iniciar o processamento
+        self.after(150, _iniciar_thread)
 
     def _abrir_janela_progresso(self):
         win = tk.Toplevel(self)
@@ -2943,6 +2948,7 @@ class App(tk.Tk):
 
         # Exibe a janela apenas agora que está totalmente montada
         win.deiconify()
+        win.update()  # força renderização completa antes de retornar
         win.grab_set()
         return win
 
