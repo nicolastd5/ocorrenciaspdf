@@ -953,6 +953,7 @@ class ProcessadorVTCaixa:
             'POLICIA FED CONGONHAS':          'PF CONGONHAS',
             'B BRASIL RJ 2022.7421.6922':     'BB RJ 89',
             'CEF 14 DF':                      'CEF 14 DF 90',
+            'CEF 15 RS 4916':                 'CEF 15 RS',
         }
         for reg in registros:
             depart = reg.get('DEPARTAMENTO', '')

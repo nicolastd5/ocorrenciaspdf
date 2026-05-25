@@ -1547,11 +1547,11 @@ class App(tk.Tk):
 
     def _vtc_abrir_janela_progresso(self, usar_ia):
         win = tk.Toplevel(self)
+        win.withdraw()  # esconde até estar totalmente pronta
         win.title("Gerando CSV VT Caixa...")
         win.configure(bg=CORES['bg'])
         win.geometry("450x350")
         win.resizable(False, False)
-        win.grab_set()
         win.protocol("WM_DELETE_WINDOW", lambda: None)
 
         win.update_idletasks()
@@ -1722,6 +1722,10 @@ class App(tk.Tk):
 
         win._dots_job = win.after(320, _animar_texto)
         win._pulse_job = win.after(380, _piscar_etapa)
+
+        # Exibe a janela apenas agora que está totalmente montada
+        win.deiconify()
+        win.grab_set()
         return win
 
     def _vtc_inferir_etapa_progresso(self, pct, msg):
@@ -2035,6 +2039,7 @@ class App(tk.Tk):
             'POLICIA FED SHOP FLAMINGO':   'PF SHOPPING FLAMINGO',
             'B BRASIL RJ 2022.7421.6922':  'BB RJ 89',
             'CEF 14 DF':                   'CEF 14 DF 90',
+            'CEF 15 RS 4916':              'CEF 15 RS',
         }
 
         card_dep = self._criar_card(inner, "🏢  Substituições de Departamento (VT Caixa)")
@@ -2760,11 +2765,11 @@ class App(tk.Tk):
 
     def _abrir_janela_progresso(self):
         win = tk.Toplevel(self)
+        win.withdraw()  # esconde até estar totalmente pronta
         win.title("Processando...")
         win.configure(bg=CORES['bg'])
         win.geometry("450x320")
         win.resizable(False, False)
-        win.grab_set()
         win.protocol("WM_DELETE_WINDOW", lambda: None)  # bloquear fechar
 
         win.update_idletasks()
@@ -2935,6 +2940,10 @@ class App(tk.Tk):
 
         win._dots_job = win.after(320, _animar_texto)
         win._pulse_job = win.after(380, _piscar_etapa)
+
+        # Exibe a janela apenas agora que está totalmente montada
+        win.deiconify()
+        win.grab_set()
         return win
 
     def _inferir_etapa_progresso(self, pct, msg):
