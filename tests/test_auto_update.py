@@ -91,3 +91,26 @@ def test_modo_legado_sem_callbacks_chama_sys_exit(monkeypatch, tmp_path):
     import pytest
     with pytest.raises(SystemExit):
         auto_update._download_and_relaunch('novo.exe')
+
+
+def test_check_and_update_repassa_callbacks(monkeypatch):
+    # Força "é frozen" e versão nova disponível
+    monkeypatch.setattr(auto_update, '_is_frozen', lambda: True)
+    monkeypatch.setattr(auto_update, '_fetch_latest',
+                        lambda: {"version": "9.99", "filename": "novo.exe"})
+    monkeypatch.setattr(auto_update, '_current_version', lambda: "1.00")
+
+    recebidos = {}
+    def fake_download(filename, on_progress=None, on_status=None):
+        recebidos['filename'] = filename
+        recebidos['on_progress'] = on_progress
+        recebidos['on_status'] = on_status
+    monkeypatch.setattr(auto_update, '_download_and_relaunch', fake_download)
+
+    prog = lambda b, t: None
+    stat = lambda e: None
+    auto_update.check_and_update(on_progress=prog, on_status=stat)
+
+    assert recebidos['filename'] == "novo.exe"
+    assert recebidos['on_progress'] is prog
+    assert recebidos['on_status'] is stat

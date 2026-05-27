@@ -139,8 +139,12 @@ def _download_and_relaunch(filename: str, on_progress=None, on_status=None) -> N
     sys.exit(0)
 
 
-def check_and_update() -> None:
-    """Verifica e aplica atualização. Chame antes de abrir a janela principal."""
+def check_and_update(on_progress=None, on_status=None) -> None:
+    """Verifica e aplica atualização. Chame antes de abrir a janela principal.
+
+    on_progress(baixado:int, total:int) e on_status(estado:str) são opcionais;
+    sem eles, mantém o comportamento legado (download síncrono + sys.exit).
+    """
     if not _is_frozen():
         logger.debug("Não é executável — auto-update ignorado")
         return
@@ -158,4 +162,4 @@ def check_and_update() -> None:
     current = _current_version()
     if _parse_version(latest_ver) > _parse_version(current):
         logger.info("Atualização disponível: %s → %s", current, latest_ver)
-        _download_and_relaunch(filename)
+        _download_and_relaunch(filename, on_progress=on_progress, on_status=on_status)
