@@ -23,7 +23,7 @@ def _patch_download(monkeypatch, response, tmp_path):
     monkeypatch.setattr(auto_update.requests, 'get', lambda *a, **k: response)
     monkeypatch.setattr(auto_update.tempfile, 'mkdtemp', lambda: str(tmp_path))
     monkeypatch.setattr(auto_update.subprocess, 'Popen', lambda *a, **k: None)
-    # sys.exit som é chamado no modo legado; intercepta para nao matar o teste
+    # sys.exit só é chamado no modo legado; intercepta para nao matar o teste
     def _no_exit(code=0):
         raise SystemExit(code)
     monkeypatch.setattr(auto_update.sys, 'exit', _no_exit)
@@ -48,3 +48,21 @@ def test_download_chama_on_progress_com_baixado_e_total(monkeypatch, tmp_path):
         pass
 
     assert eventos == [(100, 150), (150, 150)]
+
+
+def test_download_sem_content_length_reporta_total_zero(monkeypatch, tmp_path):
+    chunks = [b'a' * 30]
+    resp = FakeResponse(chunks, content_length=None)  # sem header
+    _patch_download(monkeypatch, resp, tmp_path)
+
+    eventos = []
+    try:
+        auto_update._download_and_relaunch(
+            'novo.exe',
+            on_progress=lambda baixado, total: eventos.append((baixado, total)),
+            on_status=lambda estado: None,
+        )
+    except SystemExit:
+        pass
+
+    assert eventos == [(30, 0)]
