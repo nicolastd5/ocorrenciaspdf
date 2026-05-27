@@ -3697,6 +3697,11 @@ def main():
         splash.fechar()
         sys.exit(0)
 
+    if prog["estado"] == "erro":
+        splash.hide_progress()
+        splash.set_status("Não foi possível atualizar, continuando...")
+        _splash_wait(splash, 0, min_ms=1200)
+
     splash.hide_progress()
     _splash_wait(splash, int((time.monotonic() - t0) * 1000), min_ms=1200)
 

@@ -67,6 +67,8 @@ def _download_and_relaunch(filename: str, on_progress=None, on_status=None) -> N
                         on_progress(baixado, total)
     except requests.RequestException as e:
         logger.warning("Falha ao baixar atualização: %s", e)
+        if on_status:
+            on_status("erro")
         return
 
     # Script bat robusto:
