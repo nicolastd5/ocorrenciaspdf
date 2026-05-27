@@ -45,7 +45,7 @@ def _fetch_latest() -> Optional[dict]:
     return None
 
 
-def _download_and_relaunch(filename: str) -> None:
+def _download_and_relaunch(filename: str, on_progress=None, on_status=None) -> None:
     url = f"{SERVER_URL}/api/download/{filename}"
     logger.info("Baixando atualização: %s", url)
 
@@ -57,9 +57,14 @@ def _download_and_relaunch(filename: str) -> None:
     try:
         with requests.get(url, stream=True, timeout=60) as resp:
             resp.raise_for_status()
+            total = int(resp.headers.get("Content-Length", 0) or 0)
+            baixado = 0
             with open(new_exe, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=65536):
                     f.write(chunk)
+                    baixado += len(chunk)
+                    if on_progress:
+                        on_progress(baixado, total)
     except requests.RequestException as e:
         logger.warning("Falha ao baixar atualização: %s", e)
         return
