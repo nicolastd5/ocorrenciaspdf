@@ -3573,6 +3573,16 @@ class SplashScreen(tk.Tk):
                                     anchor='w', width=22)
         self._lbl_status.pack(side='left')
 
+        # Barra de progresso (escondida por padrão; usada só no download de update)
+        self._PROG_W = 320
+        self._PROG_H = 6
+        self._prog_track = tk.Frame(self, bg=self._TRACK,
+                                    width=self._PROG_W, height=self._PROG_H)
+        self._prog_fill = tk.Frame(self._prog_track, bg=self._ACCENT,
+                                   width=0, height=self._PROG_H)
+        self._prog_fill.place(x=0, y=0)
+        self._prog_visivel = False
+
         self._angle = 0
         self._anim_id = None
         self._draw_spinner()
@@ -3601,6 +3611,27 @@ class SplashScreen(tk.Tk):
         self._lbl_status.configure(text=texto)
         self.update()
 
+    def set_progress(self, frac, texto):
+        """Mostra/atualiza a barra de progresso. frac em 0.0–1.0; texto no status.
+        frac=None => modo indeterminado (barra cheia, sem proporção)."""
+        if not self._prog_visivel:
+            self._prog_track.pack(pady=(14, 0))
+            self._prog_track.pack_propagate(False)
+            self._prog_visivel = True
+        if frac is None:
+            largura = self._PROG_W
+        else:
+            frac = max(0.0, min(1.0, frac))
+            largura = int(self._PROG_W * frac)
+        self._prog_fill.configure(width=largura)
+        self._lbl_status.configure(text=texto)
+        self.update()
+
+    def hide_progress(self):
+        if self._prog_visivel:
+            self._prog_track.pack_forget()
+            self._prog_visivel = False
+
     def fechar(self):
         if self._anim_id:
             self.after_cancel(self._anim_id)
@@ -3624,10 +3655,54 @@ def main():
     splash = SplashScreen()
     splash.update()
 
-    # 1. Verificar e aplicar atualização
+    # 1. Verificar e aplicar atualização (download em thread; UI responsiva)
+    import threading
+
     splash.set_status("Procurando atualizações...")
+    prog = {"baixado": 0, "total": 0, "estado": "verificando"}
+
+    def _on_progress(baixado, total):
+        prog["baixado"] = baixado
+        prog["total"] = total
+        prog["estado"] = "baixando"
+
+    def _on_status(estado):
+        prog["estado"] = estado
+
+    th = threading.Thread(
+        target=check_and_update,
+        kwargs={"on_progress": _on_progress, "on_status": _on_status},
+        daemon=True,
+    )
     t0 = time.monotonic()
-    check_and_update()
+    th.start()
+
+    while th.is_alive():
+        if prog["estado"] == "baixando":
+            total = prog["total"]
+            mb_b = prog["baixado"] / (1024 * 1024)
+            if total > 0:
+                frac = prog["baixado"] / total
+                mb_t = total / (1024 * 1024)
+                splash.set_progress(frac, f"Baixando atualização... {int(frac*100)}% — {mb_b:.1f} / {mb_t:.1f} MB")
+            else:
+                splash.set_progress(None, f"Baixando atualização... {mb_b:.1f} MB")
+        splash.update()
+        splash.after(30)
+
+    # Atualização aplicada: a thread sinalizou "reiniciando" — fecha e encerra.
+    if prog["estado"] == "reiniciando":
+        splash.set_progress(1.0, "Atualização concluída — reiniciando...")
+        _splash_wait(splash, 0, min_ms=1000)
+        splash.fechar()
+        sys.exit(0)
+
+    splash.hide_progress()
+
+    if prog["estado"] == "erro":
+        splash.set_status("Não foi possível atualizar, continuando...")
+        _splash_wait(splash, 0, min_ms=1200)
+
     _splash_wait(splash, int((time.monotonic() - t0) * 1000), min_ms=1200)
 
     # 2. Validar licença

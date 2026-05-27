@@ -45,7 +45,7 @@ def _fetch_latest() -> Optional[dict]:
     return None
 
 
-def _download_and_relaunch(filename: str) -> None:
+def _download_and_relaunch(filename: str, on_progress=None, on_status=None) -> None:
     url = f"{SERVER_URL}/api/download/{filename}"
     logger.info("Baixando atualização: %s", url)
 
@@ -57,11 +57,18 @@ def _download_and_relaunch(filename: str) -> None:
     try:
         with requests.get(url, stream=True, timeout=60) as resp:
             resp.raise_for_status()
+            total = int(resp.headers.get("Content-Length", 0) or 0)
+            baixado = 0
             with open(new_exe, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=65536):
                     f.write(chunk)
+                    baixado += len(chunk)
+                    if on_progress:
+                        on_progress(baixado, total)
     except requests.RequestException as e:
         logger.warning("Falha ao baixar atualização: %s", e)
+        if on_status:
+            on_status("erro")
         return
 
     # Script bat robusto:
@@ -125,11 +132,21 @@ def _download_and_relaunch(filename: str) -> None:
 
     logger.info("Relançando via updater.bat -> %s (log: %s)", target_exe, log_path)
     subprocess.Popen(["cmd", "/c", str(bat)], creationflags=subprocess.CREATE_NO_WINDOW)
+    if on_status:
+        # Modo callback: a thread principal cuida de fechar a UI e encerrar o
+        # processo após mostrar "reiniciando". sys.exit numa thread secundária
+        # só encerraria a thread, não o processo.
+        on_status("reiniciando")
+        return
     sys.exit(0)
 
 
-def check_and_update() -> None:
-    """Verifica e aplica atualização. Chame antes de abrir a janela principal."""
+def check_and_update(on_progress=None, on_status=None) -> None:
+    """Verifica e aplica atualização. Chame antes de abrir a janela principal.
+
+    on_progress(baixado:int, total:int) e on_status(estado:str) são opcionais;
+    sem eles, mantém o comportamento legado (download síncrono + sys.exit).
+    """
     if not _is_frozen():
         logger.debug("Não é executável — auto-update ignorado")
         return
@@ -147,4 +164,4 @@ def check_and_update() -> None:
     current = _current_version()
     if _parse_version(latest_ver) > _parse_version(current):
         logger.info("Atualização disponível: %s → %s", current, latest_ver)
-        _download_and_relaunch(filename)
+        _download_and_relaunch(filename, on_progress=on_progress, on_status=on_status)
