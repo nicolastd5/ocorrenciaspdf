@@ -3573,6 +3573,16 @@ class SplashScreen(tk.Tk):
                                     anchor='w', width=22)
         self._lbl_status.pack(side='left')
 
+        # Barra de progresso (escondida por padrão; usada só no download de update)
+        self._PROG_W = 320
+        self._PROG_H = 6
+        self._prog_track = tk.Frame(self, bg=self._TRACK,
+                                    width=self._PROG_W, height=self._PROG_H)
+        self._prog_fill = tk.Frame(self._prog_track, bg=self._ACCENT,
+                                   width=0, height=self._PROG_H)
+        self._prog_fill.place(x=0, y=0)
+        self._prog_visivel = False
+
         self._angle = 0
         self._anim_id = None
         self._draw_spinner()
@@ -3600,6 +3610,27 @@ class SplashScreen(tk.Tk):
     def set_status(self, texto: str):
         self._lbl_status.configure(text=texto)
         self.update()
+
+    def set_progress(self, frac, texto):
+        """Mostra/atualiza a barra de progresso. frac em 0.0–1.0; texto no status.
+        frac=None => modo indeterminado (barra cheia, sem proporção)."""
+        if not self._prog_visivel:
+            self._prog_track.pack(pady=(14, 0))
+            self._prog_track.pack_propagate(False)
+            self._prog_visivel = True
+        if frac is None:
+            largura = self._PROG_W
+        else:
+            frac = max(0.0, min(1.0, frac))
+            largura = int(self._PROG_W * frac)
+        self._prog_fill.configure(width=largura)
+        self._lbl_status.configure(text=texto)
+        self.update()
+
+    def hide_progress(self):
+        if self._prog_visivel:
+            self._prog_track.pack_forget()
+            self._prog_visivel = False
 
     def fechar(self):
         if self._anim_id:
