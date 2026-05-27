@@ -66,3 +66,28 @@ def test_download_sem_content_length_reporta_total_zero(monkeypatch, tmp_path):
         pass
 
     assert eventos == [(30, 0)]
+
+
+def test_modo_callback_nao_chama_sys_exit_e_sinaliza_reiniciando(monkeypatch, tmp_path):
+    resp = FakeResponse([b'z' * 10], content_length=10)
+    _patch_download(monkeypatch, resp, tmp_path)
+
+    estados = []
+    # Se _download_and_relaunch chamar sys.exit, o _no_exit levanta SystemExit
+    # e o teste falha — exatamente o que queremos detectar.
+    auto_update._download_and_relaunch(
+        'novo.exe',
+        on_progress=lambda b, t: None,
+        on_status=lambda estado: estados.append(estado),
+    )
+
+    assert estados == ["reiniciando"]
+
+
+def test_modo_legado_sem_callbacks_chama_sys_exit(monkeypatch, tmp_path):
+    resp = FakeResponse([b'z' * 10], content_length=10)
+    _patch_download(monkeypatch, resp, tmp_path)
+
+    import pytest
+    with pytest.raises(SystemExit):
+        auto_update._download_and_relaunch('novo.exe')

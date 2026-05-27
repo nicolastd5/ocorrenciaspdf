@@ -130,6 +130,12 @@ def _download_and_relaunch(filename: str, on_progress=None, on_status=None) -> N
 
     logger.info("Relançando via updater.bat -> %s (log: %s)", target_exe, log_path)
     subprocess.Popen(["cmd", "/c", str(bat)], creationflags=subprocess.CREATE_NO_WINDOW)
+    if on_status:
+        # Modo callback: a thread principal cuida de fechar a UI e encerrar o
+        # processo após mostrar "reiniciando". sys.exit numa thread secundária
+        # só encerraria a thread, não o processo.
+        on_status("reiniciando")
+        return
     sys.exit(0)
 
 
