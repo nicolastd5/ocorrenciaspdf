@@ -132,6 +132,44 @@ def _salvar_config(dados):
     except Exception as e:
         return str(e)
 
+
+# ── Histórico persistente (Ocorrências + VT Caixa) ──────────────────────────
+_HISTORICO_PATH = os.path.join(os.path.expanduser('~'), '.ocorrencias_historico.json')
+
+
+def _carregar_historico():
+    """Carrega o histórico salvo em disco.
+
+    Retorna sempre {'ocorrencias': [...], 'vtcaixa': [...]}. Em caso de arquivo
+    inexistente (primeira execução) ou corrompido, devolve listas vazias sem
+    quebrar a UI.
+    """
+    vazio = {'ocorrencias': [], 'vtcaixa': []}
+    try:
+        with open(_HISTORICO_PATH, 'r', encoding='utf-8') as f:
+            dados = json.load(f)
+        return {
+            'ocorrencias': list(dados.get('ocorrencias', [])),
+            'vtcaixa': list(dados.get('vtcaixa', [])),
+        }
+    except FileNotFoundError:
+        return vazio
+    except Exception as e:
+        import sys
+        print(f'[historico] Falha ao carregar {_HISTORICO_PATH}: {e}', file=sys.stderr)
+        return vazio
+
+
+def _salvar_historico(ocorrencias, vtcaixa):
+    """Grava o histórico em disco. Retorna mensagem de erro se falhar, ou None."""
+    try:
+        with open(_HISTORICO_PATH, 'w', encoding='utf-8') as f:
+            json.dump({'ocorrencias': list(ocorrencias), 'vtcaixa': list(vtcaixa)},
+                      f, indent=2, ensure_ascii=False)
+        return None
+    except Exception as e:
+        return str(e)
+
 from license_client import LicenseClient as _LC
 VERSION = _LC.APP_VERSION
 
@@ -324,8 +362,9 @@ class App(tk.Tk):
         self.processando = False
         self._anim_job = None
         self._anim_frame = 0
-        self._historico = []
-        self._historico_vtc = []
+        _hist = _carregar_historico()
+        self._historico = _hist['ocorrencias']
+        self._historico_vtc = _hist['vtcaixa']
         self._janela_progresso = None
         self.deduzir_dias = tk.BooleanVar(value=False)
         self.dias_mes = tk.StringVar(value="")
@@ -1020,9 +1059,17 @@ class App(tk.Tk):
             font=(FONT_SANS, 11), fg=CORES['fg_dim'], bg=CORES['bg'])
         self._historico_vazio.pack(pady=40)
 
+    def _persistir_historico(self):
+        """Grava ambos os históricos em disco. Avisa no log se falhar."""
+        erro = _salvar_historico(self._historico, self._historico_vtc)
+        if erro:
+            import sys
+            print(f'[historico] Falha ao salvar: {erro}', file=sys.stderr)
+
     def _limpar_historico(self):
         self._historico.clear()
         self._atualizar_historico()
+        self._persistir_historico()
 
     def _atualizar_historico(self):
         for w in self._historico_lista.winfo_children():
@@ -1270,6 +1317,7 @@ class App(tk.Tk):
     def _vtc_limpar_historico(self):
         self._historico_vtc.clear()
         self._vtc_atualizar_historico()
+        self._persistir_historico()
 
     def _vtc_atualizar_historico(self):
         for w in self._vtc_hist_lista.winfo_children():
@@ -1837,6 +1885,7 @@ class App(tk.Tk):
             'arquivo_cadastral': os.path.basename(cadastral_path) if cadastral_path else '',
         })
         self._vtc_atualizar_historico()
+        self._persistir_historico()
 
         # Persiste apenas o modelo selecionado (não a API key)
         err_cfg = _salvar_config({
@@ -3152,6 +3201,7 @@ class App(tk.Tk):
             'info_verif': resultado.get('info_verif', {'modo': 'unica'}),
         })
         self._atualizar_historico()
+        self._persistir_historico()
         self._abrir_tela_resumo(resultado, output_path)
 
     def _abrir_tela_resumo(self, resultado, output_path):
