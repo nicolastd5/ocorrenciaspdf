@@ -3655,10 +3655,49 @@ def main():
     splash = SplashScreen()
     splash.update()
 
-    # 1. Verificar e aplicar atualização
+    # 1. Verificar e aplicar atualização (download em thread; UI responsiva)
+    import threading
+
     splash.set_status("Procurando atualizações...")
+    prog = {"baixado": 0, "total": 0, "estado": "verificando"}
+
+    def _on_progress(baixado, total):
+        prog["baixado"] = baixado
+        prog["total"] = total
+        prog["estado"] = "baixando"
+
+    def _on_status(estado):
+        prog["estado"] = estado
+
+    th = threading.Thread(
+        target=check_and_update,
+        kwargs={"on_progress": _on_progress, "on_status": _on_status},
+        daemon=True,
+    )
     t0 = time.monotonic()
-    check_and_update()
+    th.start()
+
+    while th.is_alive():
+        if prog["estado"] == "baixando":
+            total = prog["total"]
+            mb_b = prog["baixado"] / (1024 * 1024)
+            if total > 0:
+                frac = prog["baixado"] / total
+                mb_t = total / (1024 * 1024)
+                splash.set_progress(frac, f"Baixando atualização... {int(frac*100)}% — {mb_b:.1f} / {mb_t:.1f} MB")
+            else:
+                splash.set_progress(None, f"Baixando atualização... {mb_b:.1f} MB")
+        splash.update()
+        splash.after(30)
+
+    # Atualização aplicada: a thread sinalizou "reiniciando" — fecha e encerra.
+    if prog["estado"] == "reiniciando":
+        splash.set_progress(1.0, "Atualização concluída — reiniciando...")
+        _splash_wait(splash, 0, min_ms=1000)
+        splash.fechar()
+        sys.exit(0)
+
+    splash.hide_progress()
     _splash_wait(splash, int((time.monotonic() - t0) * 1000), min_ms=1200)
 
     # 2. Validar licença
