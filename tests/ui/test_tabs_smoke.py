@@ -40,8 +40,10 @@ def test_main_window_constructs(qtbot, monkeypatch, tmp_path):
     from ui import settings, history
     monkeypatch.setattr(settings, "_CONFIG_PATH", tmp_path / "cfg.json")
     monkeypatch.setattr(history, "_HISTORY_PATH", tmp_path / "hist.json")
-    from ui.main_window import MainWindow
-    w = MainWindow()
+    import ui.main_window as mw
+    # evita checagem de rede real disparada pelo timer no construtor
+    monkeypatch.setattr(mw.MainWindow, "_checar_conexao", lambda self: None)
+    w = mw.MainWindow()
     qtbot.addWidget(w)
     assert w.windowTitle() == "Processador de Ocorrências"
     assert w._tabs.count() == 4

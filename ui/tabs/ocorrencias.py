@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QThread, Signal, QMutex, QWaitCondition, Qt
 from PySide6.QtWidgets import (
     QButtonGroup, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QRadioButton, QVBoxLayout, QWidget
+    QPushButton, QRadioButton, QVBoxLayout, QWidget
 )
 
 from processador import ProcessadorOcorrencias
@@ -167,10 +167,22 @@ class OcorrenciasTab(QWidget):
         card_opt = SectionCard(3, "Opções", self)
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Códigos:"))
-        self._ed_codigos = QLineEdit(self.DEFAULT_CODIGOS)
+        self._ed_codigos = QLineEdit(settings.load().get("codigos_ocorrencias", self.DEFAULT_CODIGOS))
+        self._ed_codigos.editingFinished.connect(self._salvar_codigos)
         row1.addWidget(self._ed_codigos)
         wrap1 = QWidget(); wrap1.setLayout(row1)
         card_opt.add(wrap1)
+        ajuda = QLabel(
+            "Digite os códigos de ocorrência que devem ser buscados, separados por vírgula "
+            "(ex.: FA, AT, 14). Os códigos ficam salvos para a próxima vez. Para restaurar o "
+            "padrão, use o botão abaixo."
+        )
+        ajuda.setWordWrap(True)
+        ajuda.setStyleSheet("color: #8b949e; font-size: 9pt;")
+        card_opt.add(ajuda)
+        btn_padrao = QPushButton("Restaurar códigos padrão")
+        btn_padrao.clicked.connect(self._restaurar_codigos)
+        card_opt.add(btn_padrao)
         self._modo_group = QButtonGroup(self)
         modos = [("unica", "Varredura única"),
                  ("dupla", "Dupla varredura (V1 tabelas + V2 texto)"),
@@ -203,6 +215,13 @@ class OcorrenciasTab(QWidget):
         btn = self._modo_group.checkedButton()
         return btn.property("modo") if btn else "unica"
 
+    def _salvar_codigos(self):
+        settings.save({"codigos_ocorrencias": self._ed_codigos.text()})
+
+    def _restaurar_codigos(self):
+        self._ed_codigos.setText(self.DEFAULT_CODIGOS)
+        self._salvar_codigos()
+
     def _refresh_state(self):
         self._btn.setEnabled(self._pdf is not None and self._xlsx is not None and self._thread is None)
 
@@ -226,12 +245,18 @@ class OcorrenciasTab(QWidget):
             return
         modo = self._modo_atual()
         cfg = settings.load()
-        api_key = cfg.get("api_key", "")
         gemini_model = cfg.get("gemini_model", "gemini-2.5-flash")
-        if modo == "ia" and not api_key:
-            QMessageBox.warning(self, "API key",
-                                "Modo 'Dupla + IA' exige uma API key do Gemini em Configurações.")
-            return
+        api_key = ""
+        if modo == "ia":
+            from ui.server_config import fetch_gemini_key
+            api_key = fetch_gemini_key()
+            if not api_key:
+                QMessageBox.warning(
+                    self, "API key",
+                    "Modo 'Dupla + IA' precisa da chave do Gemini, que é obtida do servidor. "
+                    "Verifique sua conexão e se sua licença está ativa."
+                )
+                return
 
         default_dir = cfg.get("last_dir") or os.path.dirname(self._xlsx)
         suggested = os.path.join(default_dir, Path(self._xlsx).stem + "_out.xlsx")

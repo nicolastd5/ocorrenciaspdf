@@ -140,10 +140,17 @@ class VTCaixaTab(QWidget):
         settings.save({"last_dir": os.path.dirname(output)})
 
         usar_ia = self._chk_ia.isChecked()
-        api_key = cfg.get("api_key", "") if usar_ia else ""
-        if usar_ia and not api_key:
-            QMessageBox.warning(self, "API key", "IA marcada mas não há API key em Configurações.")
-            return
+        api_key = ""
+        if usar_ia:
+            from ui.server_config import fetch_gemini_key
+            api_key = fetch_gemini_key()
+            if not api_key:
+                QMessageBox.warning(
+                    self, "API key",
+                    "IA marcada, mas não foi possível obter a chave do Gemini do servidor. "
+                    "Verifique sua conexão e se sua licença está ativa."
+                )
+                return
         model = cfg.get("gemini_model", "gemini-2.5-flash")
 
         self._log.clear()

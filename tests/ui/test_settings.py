@@ -13,8 +13,8 @@ def fake_home(tmp_path, monkeypatch):
 def test_load_returns_defaults_when_file_missing(fake_home):
     data = settings.load()
     assert data["theme"] == "dark"
-    assert data["api_key"] == ""
     assert data["gemini_model"] == "gemini-2.5-flash"
+    assert data["codigos_ocorrencias"]
 
 
 def test_save_persists_and_load_returns_it(fake_home):
@@ -25,10 +25,10 @@ def test_save_persists_and_load_returns_it(fake_home):
 
 def test_save_merges_with_existing(fake_home):
     settings.save({"theme": "light"})
-    settings.save({"api_key": "abc"})
+    settings.save({"gemini_model": "gemini-2.5-pro"})
     data = settings.load()
     assert data["theme"] == "light"
-    assert data["api_key"] == "abc"
+    assert data["gemini_model"] == "gemini-2.5-pro"
 
 
 def test_load_returns_defaults_on_corrupt_json(fake_home):

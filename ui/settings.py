@@ -7,10 +7,10 @@ _CONFIG_PATH = Path.home() / ".ocorrencias_config.json"
 
 DEFAULTS = {
     "theme": "dark",
-    "api_key": "",
     "gemini_model": "gemini-2.5-flash",
     "last_dir": "",
     "geometry": None,
+    "codigos_ocorrencias": "FA, AT, A-, SD, LC, AA, AP, LM, FE, 14, 13",
 }
 
 

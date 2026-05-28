@@ -1,6 +1,6 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
     QMessageBox, QPushButton, QRadioButton, QVBoxLayout, QWidget
 )
 
@@ -38,22 +38,19 @@ class ConfiguracoesTab(QWidget):
         ap_layout.addStretch()
         layout.addWidget(g_ap)
 
-        # API Gemini
-        g_ai = QGroupBox("API Gemini", self)
+        # IA Gemini — a chave vem do servidor automaticamente; aqui só escolhe o modelo
+        g_ai = QGroupBox("IA Gemini", self)
         ai_form = QFormLayout(g_ai)
-        self._ed_key = QLineEdit(cfg.get("api_key", ""))
-        self._ed_key.setEchoMode(QLineEdit.Password)
         self._cb_model = QComboBox()
         self._cb_model.addItems(self.GEMINI_MODELS)
         self._cb_model.setCurrentText(cfg.get("gemini_model", "gemini-2.5-flash"))
-        row = QHBoxLayout()
-        self._btn_save_ai = QPushButton("Salvar")
-        self._btn_save_ai.clicked.connect(self._save_ai)
-        row.addWidget(self._btn_save_ai); row.addStretch()
-        ai_form.addRow("Chave:", self._ed_key)
+        self._cb_model.currentTextChanged.connect(self._save_model)
         ai_form.addRow("Modelo:", self._cb_model)
-        wrap = QWidget(); wrap.setLayout(row)
-        ai_form.addRow(wrap)
+        nota = QLabel("A chave da API do Gemini é obtida automaticamente do servidor "
+                      "(vinculada à sua licença) — não precisa configurar.")
+        nota.setWordWrap(True)
+        nota.setStyleSheet("color: #8b949e; font-size: 9pt;")
+        ai_form.addRow(nota)
         layout.addWidget(g_ai)
 
         # Licença
@@ -70,6 +67,17 @@ class ConfiguracoesTab(QWidget):
         btn_change.clicked.connect(self._change_license)
         lic_layout.addWidget(btn_change)
         layout.addWidget(g_lic)
+
+        # Status do servidor
+        g_srv = QGroupBox("Status do servidor", self)
+        srv_form = QFormLayout(g_srv)
+        self._lbl_conexao = QLabel("Verificando…")
+        self._lbl_versao = QLabel("—")
+        self._lbl_gemini = QLabel("—")
+        srv_form.addRow("Conexão:", self._lbl_conexao)
+        srv_form.addRow("Versão mais recente:", self._lbl_versao)
+        srv_form.addRow("API Gemini:", self._lbl_gemini)
+        layout.addWidget(g_srv)
 
         # Atualizações
         g_up = QGroupBox("Atualizações", self)
@@ -91,19 +99,21 @@ class ConfiguracoesTab(QWidget):
 
         layout.addStretch()
 
+    def atualizar_status(self, conexao: str, cor: str, versao: str = None, gemini_ok: bool = None):
+        """Chamado pela MainWindow após cada checagem de conexão."""
+        self._lbl_conexao.setText(conexao)
+        self._lbl_conexao.setStyleSheet(f"color: {cor}; font-weight: 600;")
+        if versao:
+            self._lbl_versao.setText(f"v{versao}")
+        if gemini_ok is not None:
+            self._lbl_gemini.setText("configurada" if gemini_ok else "indisponível")
+
     def _set_theme(self, mode: str):
         settings.save({"theme": mode})
         self.theme_changed.emit(mode)
 
-    def _save_ai(self):
-        err = settings.save({
-            "api_key": self._ed_key.text().strip(),
-            "gemini_model": self._cb_model.currentText(),
-        })
-        if err:
-            QMessageBox.warning(self, "Erro", f"Falha ao salvar: {err}")
-        else:
-            QMessageBox.information(self, "OK", "Configurações de IA salvas.")
+    def _save_model(self, model: str):
+        settings.save({"gemini_model": model})
 
     def _change_license(self):
         from ui.license_dialogs import show_activation_window
