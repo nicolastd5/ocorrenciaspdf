@@ -1,10 +1,10 @@
-# Migração da UI para PySide6 (v2.0) — Implementation Plan
+# Migração da UI para PySide6 (v1.64) — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Substituir toda a camada de UI Tkinter do Processador de Ocorrências por uma implementação em PySide6 modular (pacote `ui/`), preservando intactos os módulos de processamento (`processador.py`, `vt_caixa_processador.py`), o cliente de licença (`license_client.py`) e o auto-update (`auto_update.py`).
 
-**Architecture:** Reescrita big bang em branch isolada (`v2-pyside6`). Entrypoint `app.py` enxuto (~80 linhas) delega tudo pro pacote `ui/` com um módulo por tela (`tabs/`), widgets reusáveis (`widgets/`) e serviços puros (`theme.py`, `settings.py`, `history.py`). Processamentos pesados rodam em `QThread` + worker `QObject` com sinais. Bump `APP_VERSION` 1.60 → 2.0.
+**Architecture:** Reescrita big bang em branch isolada (`feat-pyside6-1.64`). Entrypoint `app.py` enxuto delega tudo pro pacote `ui/` com um módulo por tela (`tabs/`), widgets reusáveis (`widgets/`) e serviços puros (`theme.py`, `settings.py`, `history.py`). Processamentos pesados rodam em `QThread` + worker `QObject` com sinais. Bump `APP_VERSION` 1.63 → 1.64 — segue o fluxo normal de auto-update (a v1.63 em campo detecta a 1.64 e baixa).
 
 **Tech Stack:** Python ≥3.10, PySide6 ≥6.7, openpyxl/pdfplumber/xlrd (existentes), PyInstaller (existente), pytest + pytest-qt (novo).
 
@@ -22,7 +22,8 @@
 | `ui/theme.py` | Tokens dark/light, geração de QSS, carregamento de fontes | ~150 |
 | `ui/settings.py` | I/O atômico de `~/.ocorrencias_config.json` | ~80 |
 | `ui/history.py` | I/O atômico de `~/.ocorrencias_history.json`, cap FIFO 500 | ~100 |
-| `ui/splash.py` | `QSplashScreen` com logo + `showMessage()` | ~40 |
+| `ui/splash.py` | Splash custom (`QWidget` frameless) com spinner animado + barra de progresso show/hide; API `set_status`/`set_progress`/`hide_progress` | ~150 |
+| `ui/update_worker.py` | `QObject` worker que roda `check_and_update` numa `QThread` e emite sinais `progress`/`status` | ~70 |
 | `ui/license_dialogs.py` | `show_activation_window`, `show_error_window` (API igual ao `license_ui.py`) | ~140 |
 | `ui/main_window.py` | `QMainWindow` + `QTabWidget` + status bar; aplica tema; salva/restaura geometria | ~150 |
 | `ui/widgets/__init__.py` | Reexports | ~10 |
@@ -35,22 +36,23 @@
 | `ui/tabs/vt_caixa.py` | Wizard de VT-Caixa + worker `QThread` | ~200 |
 | `ui/tabs/historico.py` | `QTableView` + `QAbstractTableModel` + menu de contexto | ~180 |
 | `ui/tabs/configuracoes.py` | Seções: Aparência, API Gemini, Licença, Atualizações, Sobre | ~180 |
-| `tests/ui/__init__.py` | Marker | ~0 |
+| `tests/ui/` (SEM `__init__.py`) | Dir de testes da UI — **não** criar marker: o repo descobre testes por path (`conftest.py` raiz insere no sys.path) e um marker aqui colide com `tests/` (que não tem marker), quebrando a coleta do pytest | ~0 |
 | `tests/ui/test_settings.py` | I/O atômico, defaults, recover de corrupção | ~80 |
 | `tests/ui/test_history.py` | Append, cap 500 FIFO, remoção por índice | ~80 |
 | `tests/ui/test_theme.py` | QSS gerado contém tokens corretos pra cada modo | ~50 |
 | `tests/ui/test_widgets.py` | Smoke + interação de DropZone | ~120 |
 | `tests/ui/test_tabs_smoke.py` | Smoke: cada aba constrói sem crashar | ~80 |
-| `ProcessadorOcorrencias-v2.0.spec` | PyInstaller spec novo | ~50 |
+| `tests/ui/test_update_worker.py` | Worker repassa callbacks pro `check_and_update` e emite sinais `progress`/`status` | ~70 |
+| `ProcessadorOcorrencias-v1.64.spec` | PyInstaller spec novo | ~50 |
 | `requirements-dev.txt` | `pytest`, `pytest-qt` | ~3 |
 
 **Modificar:**
 
 | Path | O que muda |
 |---|---|
-| `app.py` | Reescrito do zero (~80 linhas: licença → splash → MainWindow → mainloop) |
+| `app.py` | Reescrito do zero (~120 linhas: splash → auto-update via QThread com feedback de progresso → licença → MainWindow → exec) |
 | `requirements.txt` | Adiciona `PySide6>=6.7` |
-| `license_client.py` | `APP_VERSION = "1.60"` → `"2.0"` |
+| `license_client.py` | `APP_VERSION = "1.63"` → `"1.64"` |
 | `deploy.py` | Aponta pro novo `.spec` |
 | `.gitignore` | Já tem `.superpowers/` |
 
@@ -69,12 +71,12 @@
 **Files:**
 - Create: `requirements-dev.txt`
 - Modify: `requirements.txt`
-- Create: `ui/__init__.py`, `ui/widgets/__init__.py`, `ui/tabs/__init__.py`, `tests/ui/__init__.py`
+- Create: `ui/__init__.py`, `ui/widgets/__init__.py`, `ui/tabs/__init__.py` (NÃO criar `tests/ui/__init__.py` — ver nota na File Structure; o dir `tests/ui/` é criado implicitamente pelos arquivos de teste)
 
 - [ ] **Step 1.1: Criar branch isolada**
 
 ```bash
-git checkout -b v2-pyside6
+git checkout -b feat-pyside6-1.64
 ```
 
 - [ ] **Step 1.2: Adicionar PySide6 em `requirements.txt`**
@@ -103,17 +105,18 @@ Expected: instala sem erros; `python -c "import PySide6; print(PySide6.__version
 
 - [ ] **Step 1.5: Criar diretórios e markers vazios**
 
-Criar arquivos vazios:
+Criar arquivos vazios (markers de pacote do código fonte):
 - `ui/__init__.py`
 - `ui/widgets/__init__.py`
 - `ui/tabs/__init__.py`
-- `tests/ui/__init__.py`
+
+NÃO criar `tests/ui/__init__.py`: o repo já descobre testes por path via `conftest.py` na raiz; um marker em `tests/ui/` colide com `tests/` (sem marker) e quebra a coleta do pytest. O diretório `tests/ui/` passa a existir quando o primeiro `tests/ui/test_*.py` é criado (Task 2).
 
 - [ ] **Step 1.6: Commit**
 
 ```bash
 git add requirements.txt requirements-dev.txt ui/ tests/ui/
-git commit -m "chore: branch v2-pyside6 — adiciona PySide6 e esqueleto ui/"
+git commit -m "chore: branch feat-pyside6-1.64 — adiciona PySide6 e esqueleto ui/"
 ```
 
 ---
@@ -1004,7 +1007,7 @@ class MainWindow(QMainWindow):
 `app.py` (apaga todo conteúdo antigo e substitui por):
 
 ```python
-"""Processador de Ocorrências v2.0 — entrypoint."""
+"""Processador de Ocorrências v1.64 — entrypoint."""
 import sys
 
 from PySide6.QtWidgets import QApplication
@@ -1021,9 +1024,9 @@ def main() -> int:
     cfg = settings.load()
     theme.apply_theme(app, cfg.get("theme", "dark"))
 
-    check_and_update()  # noop em dev (sys.frozen)
+    check_and_update()  # noop em dev (sys.frozen). Task 11 troca por splash + worker QThread.
 
-    # TODO Task 11: bootstrap de licença + splash + license_dialogs aqui
+    # TODO Task 11: splash com spinner/progresso + auto-update via QThread + bootstrap de licença
     window = MainWindow()
     window.show()
     return app.exec()
@@ -1036,7 +1039,7 @@ if __name__ == "__main__":
 - [ ] **Step 6.3: Rodar manualmente — janela abre com 4 abas vazias**
 
 Run: `python app.py`
-Expected: janela escura com 4 abas; status bar mostra "v1.60 · licença OK" (até bumpar). Fecha sem crash.
+Expected: janela escura com 4 abas; status bar mostra "v1.63 · licença OK" (até bumpar pra 1.64 na T12). Fecha sem crash.
 
 - [ ] **Step 6.4: Commit**
 
@@ -1047,29 +1050,186 @@ git commit -m "feat(ui): MainWindow com 4 abas placeholder + app.py mínimo"
 
 ---
 
-## Task 7: Aba Ocorrências — Worker, wizard, log
+## Task 7: Aba Ocorrências — Worker (verificação única/dupla/tripla + modal de conflitos), wizard, log
+
+> **REESCRITA (2026-05-28):** a versão original desta task simplificava o processamento para um checkbox "Usar IA" e uma orquestração de IA incorreta. O app Tkinter real tem TRÊS modos de verificação e um modal de resolução de conflitos. Esta task porta esse fluxo com paridade total. Confirmado contra `processador.py` e o `app.py` da v1.63 (commit 060e1bc).
 
 **Files:**
-- Create: `ui/tabs/ocorrencias.py`
+- Create: `ui/widgets/conflict_dialog.py` (modal de resolução de conflitos)
+- Create: `ui/tabs/ocorrencias.py` (worker + aba)
+- Modify: `ui/widgets/__init__.py` (reexport ConflictDialog)
 - Modify: `ui/tabs/__init__.py`
 - Modify: `ui/main_window.py` (trocar placeholder pela aba real)
+- Test: `tests/ui/test_conflict_dialog.py`, `tests/ui/test_ocorrencias_worker.py`
 
-**Worker contract:**
+### Contrato real do `ProcessadorOcorrencias` (NÃO inventar — é isto):
+
 ```python
-class OcorrenciasWorker(QObject):
-    progress = Signal(int, str)
-    log = Signal(str)
-    finished = Signal(dict)
-    error = Signal(str, str)
-
-    def __init__(self, pdf_path, xlsx_path, output_path, codigos, usar_ia, api_key, gemini_model):
-        ...
-
-    def cancel(self): ...
-    def run(self): ...
+extrair_ocorrencias(pdf_path, codigos_alvo) -> dict   # {re: {'nome', 'ocorrencias': {cod: int}}}  (varredura por tabelas, "v1")
+extrair_ocorrencias_texto(pdf_path, codigos_alvo) -> dict  # idem ("v2", texto/regex); pode vir vazio
+verificar_com_ia(pdf_path, codigos_alvo, api_key, modelo) -> dict | None  # "v3" (Gemini Vision); None = falhou/fallback
+reconciliar(resultados: list, codigos_alvo) -> {'concordantes': {re: {...}}, 'conflitos': [{'re','nome','codigo','valores','sugestao'}]}
+    # resultados é uma LISTA: [v1, v2] ou [v1, v2, v3]
+processar(pdf_path, xlsx_path, output_path, codigos, progress_cb=None,
+          dias_mes=None, colunas_qt_sel=None, dados_externos=None)
+    -> {'total_pdf', 'matched', 'atualizados', 'nao_encontrados'}
+    # dados_externos = dict reconciliado {re: {'nome','ocorrencias'}}; None usa extração interna (modo única)
 ```
 
-- [ ] **Step 7.1: Implementar `ui/tabs/ocorrencias.py`**
+`conflito` em `conflitos` tem: `re` (str), `nome` (str), `codigo` (str), `valores` (dict {'v1':int,'v2':int,'ia':int}), `sugestao` (int = max dos valores).
+
+### Os 3 modos de verificação (StringVar 'unica'|'dupla'|'ia' no Tkinter):
+- `unica` — "Varredura única": só `processar(..., dados_externos=None)`.
+- `dupla` — "Dupla varredura": v1 + v2 (texto), reconcilia `[v1,v2]`, resolve conflitos, processa com concordantes.
+- `ia` — "Dupla + IA (Gemini)": v1 + v2 + v3 (IA), reconcilia `[v1,v2,v3]`, resolve conflitos, processa. Se `verificar_com_ia` devolve None, segue só com `[v1,v2]` (fallback) — registrar `ia_fallback=True`.
+
+Para `ia`: a API key e o modelo vêm de `settings.load()` (`api_key`, `gemini_model`), preenchidos na aba Configurações (Task 10).
+
+---
+
+- [ ] **Step 7.1: Implementar o modal de conflitos `ui/widgets/conflict_dialog.py`**
+
+`QDialog` modal que lista os conflitos e, para cada um, oferece radio buttons com os valores únicos (agrupando quais camadas votaram cada valor), com a sugestão pré-selecionada. Retorna lista `[(re, codigo, valor:int), ...]` ou `None` se cancelado.
+
+```python
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QButtonGroup, QDialog, QDialogButtonBox, QFrame, QLabel, QRadioButton,
+    QScrollArea, QVBoxLayout, QHBoxLayout, QWidget
+)
+
+_ROTULOS = {"v1": "V1 (tabelas)", "v2": "V2 (texto)", "ia": "IA (Gemini)"}
+
+
+class ConflictDialog(QDialog):
+    """Modal de resolução de conflitos entre camadas de extração.
+
+    conflitos: list de dicts {re, nome, codigo, valores:{camada:int}, sugestao:int}
+    Use .resultado() após exec(): lista [(re, codigo, valor), ...] ou None se cancelado.
+    """
+
+    def __init__(self, conflitos: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Conflitos encontrados")
+        self.setModal(True)
+        self.resize(760, 540)
+        self._grupos = {}   # (re, codigo) -> QButtonGroup
+        self._resultado = None
+
+        outer = QVBoxLayout(self)
+        outer.addWidget(QLabel(
+            f"<b>Conflitos encontrados — {len(conflitos)} item(s) precisam de revisão</b>"))
+        outer.addWidget(QLabel(
+            "Selecione o valor correto para cada conflito. A sugestão já está pré-selecionada."))
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        scroll.setWidget(body)
+        outer.addWidget(scroll, stretch=1)
+
+        for c in conflitos:
+            re_val, nome, cod = c["re"], c["nome"], c["codigo"]
+            valores, sug = c["valores"], c["sugestao"]
+
+            card = QFrame()
+            card.setObjectName("dropzone")  # reaproveita borda do tema
+            card_l = QVBoxLayout(card)
+            header = QHBoxLayout()
+            header.addWidget(QLabel(f"<b>RE {re_val}  —  {nome}</b>"))
+            header.addStretch()
+            header.addWidget(QLabel(f"Código: {cod}"))
+            card_l.addLayout(header)
+
+            group = QButtonGroup(card)
+            self._grupos[(re_val, cod)] = group
+            # agrupa valores únicos -> quais camadas votaram
+            valores_unicos = {}
+            for camada, val in valores.items():
+                if val is None:
+                    continue
+                valores_unicos.setdefault(val, []).append(_ROTULOS.get(camada, camada))
+            row = QHBoxLayout()
+            for val_opcao in sorted(valores_unicos):
+                camadas_label = ", ".join(valores_unicos[val_opcao])
+                rb = QRadioButton(f"{val_opcao} {cod}  ({camadas_label})")
+                rb.setProperty("valor", int(val_opcao))
+                if val_opcao == sug:
+                    rb.setChecked(True)
+                group.addButton(rb)
+                row.addWidget(rb)
+            row.addStretch()
+            card_l.addLayout(row)
+            body_layout.addWidget(card)
+        body_layout.addStretch()
+
+        btns = QDialogButtonBox(self)
+        b_ok = btns.addButton("Confirmar e gravar", QDialogButtonBox.AcceptRole)
+        b_ok.setObjectName("primary")
+        btns.addButton("Cancelar", QDialogButtonBox.RejectRole)
+        btns.accepted.connect(self._on_accept)
+        btns.rejected.connect(self.reject)
+        outer.addWidget(btns)
+
+    def _on_accept(self):
+        escolhas = []
+        for (re_val, cod), group in self._grupos.items():
+            btn = group.checkedButton()
+            if btn is not None:
+                escolhas.append((re_val, cod, int(btn.property("valor"))))
+        self._resultado = escolhas
+        self.accept()
+
+    def resultado(self):
+        return self._resultado
+```
+
+- [ ] **Step 7.2: Testar o modal (pytest-qt)**
+
+`tests/ui/test_conflict_dialog.py`:
+```python
+from ui.widgets.conflict_dialog import ConflictDialog
+
+
+def _conflito(**o):
+    base = {"re": "123", "nome": "FULANO", "codigo": "FA",
+            "valores": {"v1": 2, "v2": 3, "ia": 3}, "sugestao": 3}
+    base.update(o)
+    return base
+
+
+def test_dialog_preseleciona_sugestao_e_retorna_escolhas(qtbot):
+    dlg = ConflictDialog([_conflito()])
+    qtbot.addWidget(dlg)
+    # sem interação, a sugestão (3) deve estar pré-selecionada
+    dlg._on_accept()
+    assert dlg.resultado() == [("123", "FA", 3)]
+
+
+def test_dialog_agrupa_valores_unicos(qtbot):
+    # v2 e ia concordam em 3 -> uma opção "3"; v1=2 -> outra opção "2" => 2 radios
+    dlg = ConflictDialog([_conflito()])
+    qtbot.addWidget(dlg)
+    group = dlg._grupos[("123", "FA")]
+    assert len(group.buttons()) == 2
+
+
+def test_dialog_multiplos_conflitos(qtbot):
+    dlg = ConflictDialog([_conflito(), _conflito(re="999", codigo="AT",
+                                                  valores={"v1": 1, "v2": 0}, sugestao=1)])
+    qtbot.addWidget(dlg)
+    dlg._on_accept()
+    res = dict(((r, c), v) for r, c, v in dlg.resultado())
+    assert res[("123", "FA")] == 3
+    assert res[("999", "AT")] == 1
+```
+
+Run: `.venv/Scripts/python.exe -m pytest tests/ui/test_conflict_dialog.py -v` → 3 PASS.
+
+- [ ] **Step 7.3: Implementar worker + aba em `ui/tabs/ocorrencias.py`**
+
+O worker roda numa `QThread`. Quando há conflitos, ele **pausa** e pede resolução à thread de UI via sinal + `QWaitCondition`. A aba, ao receber o sinal `conflitos_detectados`, abre o `ConflictDialog` (na thread principal) e devolve as escolhas (ou cancelamento) chamando `worker.fornecer_resolucao(...)`.
 
 ```python
 import os
@@ -1078,36 +1238,63 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal, Qt
+from PySide6.QtCore import QObject, QThread, Signal, QMutex, QWaitCondition, Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QVBoxLayout, QWidget
+    QButtonGroup, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QRadioButton, QVBoxLayout, QWidget
 )
 
 from processador import ProcessadorOcorrencias
 from ui import history, settings
 from ui.widgets import DropZone, LogPanel, PrimaryButton, SectionCard
+from ui.widgets.conflict_dialog import ConflictDialog
+
+
+class _Cancelled(Exception):
+    pass
 
 
 class OcorrenciasWorker(QObject):
     progress = Signal(int, str)
     log = Signal(str)
+    conflitos_detectados = Signal(list)   # emite list de conflitos; espera resolução
     finished = Signal(dict)
     error = Signal(str, str)
 
-    def __init__(self, pdf_path, xlsx_path, output_path, codigos, usar_ia, api_key, gemini_model):
+    def __init__(self, pdf_path, xlsx_path, output_path, codigos,
+                 modo, api_key, gemini_model):
         super().__init__()
         self.pdf_path = pdf_path
         self.xlsx_path = xlsx_path
         self.output_path = output_path
         self.codigos = codigos
-        self.usar_ia = usar_ia
+        self.modo = modo            # 'unica' | 'dupla' | 'ia'
         self.api_key = api_key
         self.gemini_model = gemini_model
         self._cancel = False
+        self._mutex = QMutex()
+        self._cond = QWaitCondition()
+        self._resolucao = None       # list[(re,cod,val)] | None
+        self._resolucao_pronta = False
 
     def cancel(self):
         self._cancel = True
+
+    def fornecer_resolucao(self, escolhas):
+        """Chamado pela thread de UI com a lista de escolhas (ou None se cancelou)."""
+        self._mutex.lock()
+        self._resolucao = escolhas
+        self._resolucao_pronta = True
+        self._cond.wakeAll()
+        self._mutex.unlock()
+
+    def _esperar_resolucao(self):
+        self._mutex.lock()
+        while not self._resolucao_pronta:
+            self._cond.wait(self._mutex)
+        escolhas = self._resolucao
+        self._mutex.unlock()
+        return escolhas
 
     def run(self):
         t0 = time.monotonic()
@@ -1115,53 +1302,75 @@ class OcorrenciasWorker(QObject):
             proc = ProcessadorOcorrencias()
 
             def cb(pct, msg):
-                self.progress.emit(int(pct), msg)
-                self.log.emit(msg)
-                # checagem cooperativa de cancelamento
                 if self._cancel:
                     raise _Cancelled()
+                self.progress.emit(int(pct), msg)
+                self.log.emit(msg)
 
-            if self.usar_ia and self.api_key:
-                self.log.emit("Verificando com IA...")
+            info_verif = {"modo": self.modo, "ia_usada": False, "ia_fallback": False}
+            dados_externos = None
+
+            if self.modo in ("dupla", "ia"):
+                cb(5, "Lendo PDF (varredura 1)...")
                 v1 = proc.extrair_ocorrencias(self.pdf_path, self.codigos)
+                cb(20, "Varredura 2 (texto/regex)...")
                 v2 = proc.extrair_ocorrencias_texto(self.pdf_path, self.codigos)
-                dados = proc.reconciliar(v1, v2, self.codigos)
-                # se houver divergência grave, dispara verificação com IA
-                ai_result = proc.verificar_com_ia(self.pdf_path, self.codigos,
-                                                   self.api_key, self.gemini_model)
-                if ai_result is not None:
-                    dados = ai_result
-                result = proc.processar(self.pdf_path, self.xlsx_path, self.output_path,
-                                        self.codigos, progress_cb=cb, dados_externos=dados)
-            else:
-                result = proc.processar(self.pdf_path, self.xlsx_path, self.output_path,
-                                        self.codigos, progress_cb=cb)
+                camadas = [v1] if not v2 else [v1, v2]
 
-            duration = time.monotonic() - t0
+                if self.modo == "ia":
+                    cb(35, "Verificando com IA (Gemini Vision)...")
+                    v3 = proc.verificar_com_ia(self.pdf_path, self.codigos,
+                                               self.api_key, self.gemini_model)
+                    if v3 is not None:
+                        camadas.append(v3)
+                        info_verif["ia_usada"] = True
+                    else:
+                        info_verif["ia_fallback"] = True
+                        self.log.emit("IA indisponível — seguindo com V1+V2 (fallback).")
+
+                cb(45, "Reconciliando resultados...")
+                rec = proc.reconciliar(camadas, self.codigos)
+                concordantes = rec["concordantes"]
+                conflitos = rec["conflitos"]
+
+                if conflitos:
+                    self.conflitos_detectados.emit(conflitos)
+                    escolhas = self._esperar_resolucao()
+                    if escolhas is None:
+                        self.finished.emit({"status": "cancelled",
+                                            "duration": time.monotonic() - t0})
+                        return
+                    for re_val, cod, val in escolhas:
+                        if re_val not in concordantes:
+                            nome = next((c.get(re_val, {}).get("nome", "")
+                                         for c in camadas if re_val in c), "")
+                            concordantes[re_val] = {"nome": nome, "ocorrencias": {}}
+                        concordantes[re_val]["ocorrencias"][cod] = val
+
+                dados_externos = concordantes
+                info_verif["concordantes"] = len(concordantes)
+                info_verif["conflitos_resolvidos"] = len(conflitos)
+
+            result = proc.processar(self.pdf_path, self.xlsx_path, self.output_path,
+                                    self.codigos, progress_cb=cb,
+                                    dados_externos=dados_externos)
             self.finished.emit({
                 "status": "ok",
                 "output_path": self.output_path,
-                "duration": duration,
+                "duration": time.monotonic() - t0,
                 "matched": result.get("matched", 0),
                 "total_pdf": result.get("total_pdf", 0),
+                "info_verif": info_verif,
             })
         except _Cancelled:
             self.finished.emit({"status": "cancelled", "duration": time.monotonic() - t0})
         except Exception as e:
-            tb = traceback.format_exc()
-            self.error.emit(f"{type(e).__name__}: {e}", tb)
-
-
-class _Cancelled(Exception):
-    pass
+            self.error.emit(f"{type(e).__name__}: {e}", traceback.format_exc())
 
 
 class OcorrenciasTab(QWidget):
-    """Aba principal — wizard vertical."""
-
     DEFAULT_CODIGOS = "FA, AT, A-, SD, LC, AA, AP, LM, FE, 14, 13"
-
-    processed = Signal(dict)  # entry do histórico
+    processed = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1174,27 +1383,22 @@ class OcorrenciasTab(QWidget):
         layout.setSpacing(12)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        # Card 1
         card_pdf = SectionCard(1, "PDF de jornada", self)
         self._dz_pdf = DropZone("Arraste o PDF ou clique para selecionar", (".pdf",))
         self._lbl_pdf = QLabel("nenhum arquivo selecionado", self)
         self._lbl_pdf.setStyleSheet("color: #8b949e;")
         self._dz_pdf.files_selected.connect(self._on_pdf_selected)
-        card_pdf.add(self._dz_pdf)
-        card_pdf.add(self._lbl_pdf)
+        card_pdf.add(self._dz_pdf); card_pdf.add(self._lbl_pdf)
         layout.addWidget(card_pdf)
 
-        # Card 2
         card_xlsx = SectionCard(2, "Planilha de pedido", self)
         self._dz_xlsx = DropZone("Arraste o .xlsx ou clique para selecionar", (".xlsx",))
         self._lbl_xlsx = QLabel("nenhum arquivo selecionado", self)
         self._lbl_xlsx.setStyleSheet("color: #8b949e;")
         self._dz_xlsx.files_selected.connect(self._on_xlsx_selected)
-        card_xlsx.add(self._dz_xlsx)
-        card_xlsx.add(self._lbl_xlsx)
+        card_xlsx.add(self._dz_xlsx); card_xlsx.add(self._lbl_xlsx)
         layout.addWidget(card_xlsx)
 
-        # Card 3 opções
         card_opt = SectionCard(3, "Opções", self)
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Códigos:"))
@@ -1202,13 +1406,25 @@ class OcorrenciasTab(QWidget):
         row1.addWidget(self._ed_codigos)
         wrap1 = QWidget(); wrap1.setLayout(row1)
         card_opt.add(wrap1)
-        self._chk_ia = QCheckBox("Usar IA para refinar (Gemini)")
-        card_opt.add(self._chk_ia)
+        # seletor de modo de verificação
+        self._modo_group = QButtonGroup(self)
+        modos = [("unica", "Varredura única"),
+                 ("dupla", "Dupla varredura (V1 tabelas + V2 texto)"),
+                 ("ia", "Dupla + IA (Gemini)")]
+        modo_row = QVBoxLayout()
+        modo_row.addWidget(QLabel("Verificação:"))
+        for i, (val, label) in enumerate(modos):
+            rb = QRadioButton(label)
+            rb.setProperty("modo", val)
+            if val == "unica":
+                rb.setChecked(True)
+            self._modo_group.addButton(rb, i)
+            modo_row.addWidget(rb)
+        wrap_modo = QWidget(); wrap_modo.setLayout(modo_row)
+        card_opt.add(wrap_modo)
         layout.addWidget(card_opt)
 
-        # Botão Processar
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
+        btn_row = QHBoxLayout(); btn_row.addStretch()
         self._btn = PrimaryButton("▶ Processar")
         self._btn.setEnabled(False)
         self._btn.clicked.connect(self._on_button_clicked)
@@ -1216,31 +1432,24 @@ class OcorrenciasTab(QWidget):
         btn_wrap = QWidget(); btn_wrap.setLayout(btn_row)
         layout.addWidget(btn_wrap)
 
-        # Log
         self._log = LogPanel(self)
         layout.addWidget(self._log, stretch=1)
 
-    # ---------- estado ----------
+    def _modo_atual(self) -> str:
+        btn = self._modo_group.checkedButton()
+        return btn.property("modo") if btn else "unica"
 
     def _refresh_state(self):
-        ready = self._pdf is not None and self._xlsx is not None and self._thread is None
-        self._btn.setEnabled(ready)
+        self._btn.setEnabled(self._pdf is not None and self._xlsx is not None and self._thread is None)
 
     def _on_pdf_selected(self, paths):
-        self._pdf = paths[0]
-        self._lbl_pdf.setText(os.path.basename(self._pdf))
-        self._refresh_state()
+        self._pdf = paths[0]; self._lbl_pdf.setText(os.path.basename(self._pdf)); self._refresh_state()
 
     def _on_xlsx_selected(self, paths):
-        self._xlsx = paths[0]
-        self._lbl_xlsx.setText(os.path.basename(self._xlsx))
-        self._refresh_state()
-
-    # ---------- run ----------
+        self._xlsx = paths[0]; self._lbl_xlsx.setText(os.path.basename(self._xlsx)); self._refresh_state()
 
     def _on_button_clicked(self):
         if self._thread is not None:
-            # botão está em modo cancelar
             self._worker.cancel()
             self._log.append("cancelando...", level="warning")
             return
@@ -1251,35 +1460,39 @@ class OcorrenciasTab(QWidget):
         if not codigos:
             QMessageBox.warning(self, "Códigos", "Informe pelo menos um código de ocorrência.")
             return
-        default_dir = settings.load().get("last_dir") or os.path.dirname(self._xlsx)
+        modo = self._modo_atual()
+        cfg = settings.load()
+        api_key = cfg.get("api_key", "")
+        gemini_model = cfg.get("gemini_model", "gemini-2.5-flash")
+        if modo == "ia" and not api_key:
+            QMessageBox.warning(self, "API key",
+                                "Modo 'Dupla + IA' exige uma API key do Gemini em Configurações.")
+            return
+
+        default_dir = cfg.get("last_dir") or os.path.dirname(self._xlsx)
         suggested = os.path.join(default_dir, Path(self._xlsx).stem + "_out.xlsx")
         output, _ = QFileDialog.getSaveFileName(self, "Salvar planilha como",
-                                                  suggested, "Excel (*.xlsx)")
+                                                 suggested, "Excel (*.xlsx)")
         if not output:
             return
         settings.save({"last_dir": os.path.dirname(output)})
 
-        cfg = settings.load()
-        usar_ia = self._chk_ia.isChecked()
-        api_key = cfg.get("api_key", "") if usar_ia else ""
-        if usar_ia and not api_key:
-            QMessageBox.warning(self, "API key", "IA marcada mas não há API key em Configurações.")
-            return
-        gemini_model = cfg.get("gemini_model", "gemini-2.5-flash")
-
         self._log.clear()
-        self._log.append(f"iniciando ({Path(self._pdf).name} → {Path(output).name})")
+        self._log.append(f"iniciando [{modo}] ({Path(self._pdf).name} → {Path(output).name})")
         self._dz_pdf.setEnabled(False); self._dz_xlsx.setEnabled(False)
-        self._ed_codigos.setEnabled(False); self._chk_ia.setEnabled(False)
+        self._ed_codigos.setEnabled(False)
+        for b in self._modo_group.buttons():
+            b.setEnabled(False)
         self._btn.set_mode("warning"); self._btn.setText("Cancelar")
 
         self._thread = QThread(self)
         self._worker = OcorrenciasWorker(self._pdf, self._xlsx, output, codigos,
-                                          usar_ia, api_key, gemini_model)
+                                         modo, api_key, gemini_model)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(self._on_progress)
         self._worker.log.connect(lambda m: self._log.append(m))
+        self._worker.conflitos_detectados.connect(self._on_conflitos)
         self._worker.finished.connect(self._on_finished)
         self._worker.error.connect(self._on_error)
         self._worker.finished.connect(self._thread.quit)
@@ -1290,13 +1503,27 @@ class OcorrenciasTab(QWidget):
     def _on_progress(self, pct, msg):
         self._log.set_progress(pct, visible=True)
 
+    def _on_conflitos(self, conflitos):
+        # roda na thread de UI; abre modal e devolve a resolução ao worker
+        dlg = ConflictDialog(conflitos, self)
+        dlg.exec()
+        self._worker.fornecer_resolucao(dlg.resultado())
+
     def _on_finished(self, info):
         status = info.get("status", "ok")
         duration = info.get("duration", 0.0)
         if status == "ok":
-            self._log.append(f"concluído em {duration:.1f}s — {info.get('matched',0)}/{info.get('total_pdf',0)} matches", level="success")
+            iv = info.get("info_verif", {})
+            extra = ""
+            if iv.get("ia_fallback"):
+                extra = " (IA em fallback)"
+            elif iv.get("ia_usada"):
+                extra = " (IA usada)"
+            self._log.append(
+                f"concluído em {duration:.1f}s — {info.get('matched',0)}/{info.get('total_pdf',0)} matches{extra}",
+                level="success")
         elif status == "cancelled":
-            self._log.append("cancelado pelo usuário", level="warning")
+            self._log.append("cancelado", level="warning")
         self._log.set_progress(100 if status == "ok" else 0, visible=False)
         self._emit_history(info)
 
@@ -1307,15 +1534,16 @@ class OcorrenciasTab(QWidget):
         self._emit_history({"status": "error", "error": msg, "duration": 0.0})
 
     def _cleanup_thread(self):
-        self._thread = None
-        self._worker = None
+        self._thread = None; self._worker = None
         self._dz_pdf.setEnabled(True); self._dz_xlsx.setEnabled(True)
-        self._ed_codigos.setEnabled(True); self._chk_ia.setEnabled(True)
+        self._ed_codigos.setEnabled(True)
+        for b in self._modo_group.buttons():
+            b.setEnabled(True)
         self._btn.set_mode("primary"); self._btn.setText("▶ Processar")
         self._refresh_state()
 
     def _emit_history(self, info):
-        entry = {
+        self.processed.emit({
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "tipo": "ocorrencias",
             "inputs": [self._pdf, self._xlsx],
@@ -1324,49 +1552,110 @@ class OcorrenciasTab(QWidget):
             "duration_seconds": round(info.get("duration", 0.0), 2),
             "rows_processed": info.get("matched"),
             "error": info.get("error"),
-        }
-        self.processed.emit(entry)
+        })
 ```
 
-- [ ] **Step 7.2: Reexportar em `ui/tabs/__init__.py`**
+- [ ] **Step 7.4: Testar o worker em modo 'unica' (sem Qt event loop pesado)**
 
+O worker pode ser testado com um `ProcessadorOcorrencias` fake injetável? Não — o worker instancia `ProcessadorOcorrencias()` direto. Para teste unitário, faça monkeypatch de `processador.ProcessadorOcorrencias` (ou de `ui.tabs.ocorrencias.ProcessadorOcorrencias`) por um stub que registra as chamadas.
+
+`tests/ui/test_ocorrencias_worker.py`:
+```python
+import ui.tabs.ocorrencias as oco
+
+
+class _FakeProc:
+    def __init__(self):
+        _FakeProc.last = self
+        self.chamadas = []
+    def extrair_ocorrencias(self, pdf, cods):
+        self.chamadas.append("v1"); return {"1": {"nome": "A", "ocorrencias": {"FA": 1}}}
+    def extrair_ocorrencias_texto(self, pdf, cods):
+        self.chamadas.append("v2"); return {"1": {"nome": "A", "ocorrencias": {"FA": 1}}}
+    def verificar_com_ia(self, pdf, cods, key, modelo):
+        self.chamadas.append("ia"); return None
+    def reconciliar(self, camadas, cods):
+        self.chamadas.append(f"rec:{len(camadas)}")
+        return {"concordantes": {"1": {"nome": "A", "ocorrencias": {"FA": 1}}}, "conflitos": []}
+    def processar(self, pdf, xlsx, out, cods, progress_cb=None, dados_externos=None, **kw):
+        self.chamadas.append(f"proc:ext={dados_externos is not None}")
+        if progress_cb: progress_cb(100, "ok")
+        return {"matched": 1, "total_pdf": 1}
+
+
+def test_worker_modo_unica_nao_reconcilia(qtbot, monkeypatch):
+    monkeypatch.setattr(oco, "ProcessadorOcorrencias", _FakeProc)
+    w = oco.OcorrenciasWorker("a.pdf", "b.xlsx", "out.xlsx", ["FA"], "unica", "", "m")
+    with qtbot.waitSignal(w.finished, timeout=3000) as bl:
+        w.run()
+    assert bl.args[0]["status"] == "ok"
+    assert "proc:ext=False" in _FakeProc.last.chamadas
+    assert not any(c.startswith("rec") for c in _FakeProc.last.chamadas)
+
+
+def test_worker_modo_dupla_reconcilia_sem_conflitos(qtbot, monkeypatch):
+    monkeypatch.setattr(oco, "ProcessadorOcorrencias", _FakeProc)
+    w = oco.OcorrenciasWorker("a.pdf", "b.xlsx", "out.xlsx", ["FA"], "dupla", "", "m")
+    with qtbot.waitSignal(w.finished, timeout=3000) as bl:
+        w.run()
+    assert bl.args[0]["status"] == "ok"
+    c = _FakeProc.last.chamadas
+    assert "v1" in c and "v2" in c and "rec:2" in c and "proc:ext=True" in c
+
+
+def test_worker_modo_ia_fallback_quando_ia_none(qtbot, monkeypatch):
+    monkeypatch.setattr(oco, "ProcessadorOcorrencias", _FakeProc)
+    w = oco.OcorrenciasWorker("a.pdf", "b.xlsx", "out.xlsx", ["FA"], "ia", "k", "m")
+    with qtbot.waitSignal(w.finished, timeout=3000) as bl:
+        w.run()
+    assert bl.args[0]["info_verif"]["ia_fallback"] is True
+    # IA retornou None => reconciliou só com [v1, v2]
+    assert "rec:2" in _FakeProc.last.chamadas
+```
+
+Run: `.venv/Scripts/python.exe -m pytest tests/ui/test_ocorrencias_worker.py -v` → 3 PASS.
+
+- [ ] **Step 7.5: Reexports + plug na MainWindow**
+
+`ui/widgets/__init__.py` — adicionar:
+```python
+from ui.widgets.conflict_dialog import ConflictDialog
+```
+e incluir `"ConflictDialog"` no `__all__`.
+
+`ui/tabs/__init__.py`:
 ```python
 from ui.tabs.ocorrencias import OcorrenciasTab
 
 __all__ = ["OcorrenciasTab"]
 ```
 
-- [ ] **Step 7.3: Plug na `MainWindow`**
-
-Edit `ui/main_window.py` — trocar a aba "Ocorrências" pelo widget real:
-
+`ui/main_window.py` — trocar o placeholder de "Ocorrências":
 ```python
-# import no topo:
 from ui import history
 from ui.tabs import OcorrenciasTab
-
-# dentro de __init__, substituir:
-# self._tabs.addTab(self._placeholder("Ocorrências"), "Ocorrências")
-# por:
+# ...
 oco = OcorrenciasTab(self)
 oco.processed.connect(self._on_processed)
 self._tabs.addTab(oco, "Ocorrências")
 
-# novo método:
 def _on_processed(self, entry: dict) -> None:
     history.append(entry)
 ```
 
-- [ ] **Step 7.4: Teste manual com PDF real**
+- [ ] **Step 7.6: Smoke offscreen + (se possível) teste manual**
 
-Run: `python app.py`
-Expected: aba Ocorrências abre; arraste 1 PDF e 1 XLSX; clique Processar; escolhe saída; log enche; processa; aparece "✔ concluído". Fechar app; abrir `~/.ocorrencias_history.json` e ver entrada.
+Smoke (deve construir sem crash):
+```
+QT_QPA_PLATFORM=offscreen .venv/Scripts/python.exe -c "import os; os.environ['QT_QPA_PLATFORM']='offscreen'; from PySide6.QtWidgets import QApplication; import sys; app=QApplication(sys.argv); from ui.main_window import MainWindow; w=MainWindow(); print('tabs', w._tabs.count())"
+```
+Teste manual (se houver display): aba abre; arraste 1 PDF + 1 XLSX; escolha modo; Processar; em modo dupla/ia com divergências, o modal de conflitos abre; resolver; log mostra "concluído".
 
-- [ ] **Step 7.5: Commit**
+- [ ] **Step 7.7: Commit**
 
 ```bash
-git add ui/tabs/ocorrencias.py ui/tabs/__init__.py ui/main_window.py
-git commit -m "feat(ui): aba Ocorrências end-to-end com QThread worker"
+git add ui/widgets/conflict_dialog.py ui/widgets/__init__.py ui/tabs/ocorrencias.py ui/tabs/__init__.py ui/main_window.py tests/ui/test_conflict_dialog.py tests/ui/test_ocorrencias_worker.py
+git commit -m "feat(ui): aba Ocorrências com verificação única/dupla/tripla e modal de conflitos"
 ```
 
 ---
@@ -1997,48 +2286,207 @@ git commit -m "feat(ui): aba Configurações com toggle dark/light em runtime"
 
 ---
 
-## Task 11: Splash + Diálogos de licença + Bootstrap em `app.py`
+## Task 11: Splash + Worker de auto-update + Diálogos de licença + Bootstrap em `app.py`
 
 **Files:**
 - Create: `ui/splash.py`
+- Create: `ui/update_worker.py`
 - Create: `ui/license_dialogs.py`
+- Test: `tests/ui/test_update_worker.py`
 - Modify: `app.py`
 - Delete: `license_ui.py`
 
-- [ ] **Step 11.1: Implementar `ui/splash.py`**
+> **Paridade com v1.63:** o Tkinter atual já mostra spinner animado + barra de progresso durante o download da atualização, dirigida por `check_and_update(on_progress=..., on_status=...)` rodando numa thread. Esta task porta essa experiência pro Qt: splash custom com spinner + barra, e um worker `QThread` que emite sinais `progress`/`status`.
+
+- [ ] **Step 11.1: Implementar `ui/splash.py` (custom widget com spinner + barra)**
+
+Splash custom em vez de `QSplashScreen` porque precisamos de barra de progresso show/hide e spinner animado — paridade com o `SplashScreen(tk.Tk)` da v1.63 (`set_status`, `set_progress(frac, texto)`, `hide_progress`). `frac=None` ⇒ barra indeterminada (download sem `Content-Length`).
 
 ```python
-import os
 from pathlib import Path
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPixmap, QPainter
-from PySide6.QtWidgets import QSplashScreen
+
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtWidgets import (
+    QFrame, QLabel, QProgressBar, QVBoxLayout, QWidget
+)
+
+_BG = "#0d1117"
+_ACCENT = "#58a6ff"
+_FG = "#c9d1d9"
+_FG_DIM = "#6e7591"
 
 
-def create_splash() -> QSplashScreen:
-    # Tenta usar logo se existir; senão gera pixmap simples preto.
-    logo = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
-    if logo.is_file():
-        pix = QPixmap(str(logo))
-    else:
-        pix = QPixmap(420, 220)
-        pix.fill(QColor("#0d1117"))
-        painter = QPainter(pix)
-        painter.setPen(QColor("#f0f6fc"))
-        font = painter.font(); font.setPointSize(16); font.setBold(True)
-        painter.setFont(font)
-        painter.drawText(pix.rect(), Qt.AlignCenter, "Processador de Ocorrências")
-        painter.end()
-    splash = QSplashScreen(pix, Qt.WindowStaysOnTopHint)
-    splash.setStyleSheet("QSplashScreen { background: #0d1117; color: #c9d1d9; }")
-    return splash
+class _Spinner(QWidget):
+    """Arco giratório desenhado com QPainter (substitui o canvas do Tkinter)."""
+
+    def __init__(self, parent=None, diameter: int = 44):
+        super().__init__(parent)
+        self._d = diameter
+        self.setFixedSize(diameter, diameter)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(30)
+
+    def _tick(self):
+        self._angle = (self._angle + 12) % 360
+        self.update()
+
+    def stop(self):
+        self._timer.stop()
+
+    def paintEvent(self, _ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        margin = 4
+        rect = self.rect().adjusted(margin, margin, -margin, -margin)
+        # trilha
+        p.setPen(QPen(QColor("#1a1d29"), 4))
+        p.drawArc(rect, 0, 360 * 16)
+        # arco giratório (90°). Qt usa 1/16 de grau e sentido anti-horário.
+        p.setPen(QPen(QColor(_ACCENT), 4))
+        p.drawArc(rect, -self._angle * 16, 90 * 16)
+        p.end()
 
 
-def show_message(splash: QSplashScreen, text: str) -> None:
-    splash.showMessage(text, Qt.AlignBottom | Qt.AlignHCenter, QColor("#c9d1d9"))
+class Splash(QWidget):
+    def __init__(self, version: str):
+        super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setFixedSize(380, 240)
+        self.setStyleSheet(
+            f"Splash {{ background: {_BG}; border: 1px solid #262a3a; }}"
+        )
+        self._center_on_screen()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+        title = QLabel("Processador de Ocorrências", self)
+        title.setStyleSheet(f"color: #e6e8f0; font-size: 14pt; font-weight: 700;")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        ver = QLabel(f"v{version}", self)
+        ver.setStyleSheet(f"color: {_FG_DIM}; font-family: 'JetBrains Mono', Consolas, monospace; font-size: 9pt;")
+        ver.setAlignment(Qt.AlignCenter)
+        layout.addWidget(ver)
+
+        sep = QFrame(self)
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("color: #262a3a;")
+        layout.addSpacing(8)
+        layout.addWidget(sep)
+        layout.addSpacing(8)
+
+        self._spinner = _Spinner(self)
+        layout.addWidget(self._spinner, alignment=Qt.AlignCenter)
+
+        self._status = QLabel("Iniciando...", self)
+        self._status.setStyleSheet(f"color: {_FG_DIM}; font-size: 10pt;")
+        self._status.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self._status)
+
+        self._progress = QProgressBar(self)
+        self._progress.setFixedHeight(6)
+        self._progress.setTextVisible(False)
+        self._progress.setRange(0, 100)
+        self._progress.setVisible(False)
+        layout.addSpacing(6)
+        layout.addWidget(self._progress)
+
+    def _center_on_screen(self):
+        from PySide6.QtGui import QGuiApplication
+        geo = QGuiApplication.primaryScreen().availableGeometry()
+        self.move((geo.width() - self.width()) // 2,
+                  (geo.height() - self.height()) // 2)
+
+    def set_status(self, texto: str) -> None:
+        self._status.setText(texto)
+
+    def set_progress(self, frac, texto: str) -> None:
+        """frac em 0.0–1.0; frac=None => barra indeterminada."""
+        if not self._progress.isVisible():
+            self._progress.setVisible(True)
+        if frac is None:
+            self._progress.setRange(0, 0)  # busy/indeterminado
+        else:
+            self._progress.setRange(0, 100)
+            self._progress.setValue(int(max(0.0, min(1.0, frac)) * 100))
+        self._status.setText(texto)
+
+    def hide_progress(self) -> None:
+        self._progress.setVisible(False)
+        self._progress.setRange(0, 100)
+
+    def fechar(self) -> None:
+        self._spinner.stop()
+        self.close()
 ```
 
-- [ ] **Step 11.2: Implementar `ui/license_dialogs.py`**
+- [ ] **Step 11.2: Implementar `ui/update_worker.py` (QThread worker)**
+
+Porta o `threading.Thread(target=check_and_update, kwargs={on_progress, on_status})` da v1.63 pro padrão Qt usado nas abas. O worker chama `check_and_update` passando callbacks que **apenas emitem sinais** — toda mexida na UI acontece na thread principal via slots conectados.
+
+```python
+from PySide6.QtCore import QObject, Signal
+
+from auto_update import check_and_update
+
+
+class UpdateWorker(QObject):
+    progress = Signal(int, int)   # (baixado, total) — total=0 ⇒ indeterminado
+    status = Signal(str)          # "verificando" | "baixando" | "reiniciando" | "erro"
+    finished = Signal()
+
+    def run(self) -> None:
+        try:
+            self.status.emit("verificando")
+            check_and_update(
+                on_progress=lambda baixado, total: self.progress.emit(baixado, total),
+                on_status=lambda estado: self.status.emit(estado),
+            )
+        finally:
+            self.finished.emit()
+```
+
+- [ ] **Step 11.3: Escrever teste do worker**
+
+`tests/ui/test_update_worker.py`:
+```python
+import auto_update
+from ui.update_worker import UpdateWorker
+
+
+def test_worker_repassa_callbacks_e_emite_sinais(qtbot, monkeypatch):
+    chamadas = {"progress": [], "status": []}
+
+    def fake_check(on_progress=None, on_status=None):
+        on_status("baixando")
+        on_progress(50, 100)
+        on_progress(100, 100)
+        on_status("reiniciando")
+
+    monkeypatch.setattr(auto_update, "check_and_update", fake_check)
+    # o worker importou o símbolo direto; recarrega a referência
+    monkeypatch.setattr("ui.update_worker.check_and_update", fake_check)
+
+    w = UpdateWorker()
+    w.progress.connect(lambda b, t: chamadas["progress"].append((b, t)))
+    w.status.connect(lambda e: chamadas["status"].append(e))
+
+    with qtbot.waitSignal(w.finished, timeout=2000):
+        w.run()
+
+    assert chamadas["progress"] == [(50, 100), (100, 100)]
+    assert chamadas["status"] == ["verificando", "baixando", "reiniciando"]
+```
+
+Run: `pytest tests/ui/test_update_worker.py -v`
+Expected: PASS.
+
+- [ ] **Step 11.4: Implementar `ui/license_dialogs.py`**
 
 ```python
 from PySide6.QtCore import Qt
@@ -2098,21 +2546,29 @@ def show_error_window(message: str) -> None:
     QMessageBox.critical(None, "Erro de licença", message)
 ```
 
-- [ ] **Step 11.3: Reescrever `app.py` com bootstrap + splash**
+- [ ] **Step 11.5: Reescrever `app.py` com splash + auto-update via QThread + bootstrap**
+
+Fluxo idêntico ao `main()` da v1.63, mas em Qt:
+1. Splash custom aparece com spinner.
+2. `UpdateWorker` roda numa `QThread`; `progress`/`status` atualizam a splash (barra + texto). UI fica responsiva sem `processEvents` manual — o event loop local roda enquanto esperamos o sinal `finished`.
+3. Se o estado final for `reiniciando`, fecha tudo e sai (o `updater.bat` já foi disparado pelo worker).
+4. Se for `erro`, mostra "não foi possível atualizar, continuando..." e segue.
+5. Valida licença (fecha a splash antes de qualquer diálogo, pra não sobrepor).
+6. Abre a `MainWindow`.
 
 ```python
-"""Processador de Ocorrências v2.0 — entrypoint."""
+"""Processador de Ocorrências v1.64 — entrypoint."""
 import sys
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QEventLoop, QThread, QTimer
 from PySide6.QtWidgets import QApplication
 
 from license_client import LicenseClient, LicenseStatus
-from auto_update import check_and_update
 from ui import settings, theme
 from ui import license_dialogs
 from ui.main_window import MainWindow
-from ui.splash import create_splash, show_message
+from ui.splash import Splash
+from ui.update_worker import UpdateWorker
 
 
 def _resolver_licenca(client, result) -> bool:
@@ -2141,9 +2597,40 @@ def _resolver_licenca(client, result) -> bool:
         result = client.validate()
 
 
-def bootstrap_license() -> bool:
-    client = LicenseClient()
-    return _resolver_licenca(client, client.validate())
+def _run_auto_update(splash: Splash) -> str:
+    """Roda check_and_update numa QThread, dirigindo a splash.
+    Retorna o estado final: '' (nada/ok), 'reiniciando' ou 'erro'.
+    Bloqueia num QEventLoop local até o worker terminar (UI responsiva)."""
+    estado = {"valor": ""}
+
+    thread = QThread()
+    worker = UpdateWorker()
+    worker.moveToThread(thread)
+
+    def on_progress(baixado, total):
+        if total > 0:
+            mb_b, mb_t = baixado / 1048576, total / 1048576
+            splash.set_progress(baixado / total,
+                                f"Baixando atualização... {int(baixado / total * 100)}% — {mb_b:.1f} / {mb_t:.1f} MB")
+        else:
+            splash.set_progress(None, f"Baixando atualização... {baixado / 1048576:.1f} MB")
+
+    def on_status(e):
+        estado["valor"] = e
+        if e == "verificando":
+            splash.set_status("Procurando atualizações...")
+
+    worker.progress.connect(on_progress)
+    worker.status.connect(on_status)
+
+    loop = QEventLoop()
+    worker.finished.connect(loop.quit)
+    worker.finished.connect(thread.quit)
+    thread.started.connect(worker.run)
+    thread.start()
+    loop.exec()  # mantém a splash viva e animada até terminar
+    thread.wait()
+    return estado["valor"]
 
 
 def main() -> int:
@@ -2152,22 +2639,34 @@ def main() -> int:
     cfg = settings.load()
     theme.apply_theme(app, cfg.get("theme", "dark"))
 
-    splash = create_splash()
+    splash = Splash(LicenseClient.APP_VERSION)
     splash.show()
-    show_message(splash, "Verificando atualizações...")
-    app.processEvents()
-    check_and_update()
 
-    show_message(splash, "Validando licença...")
-    app.processEvents()
-    if not bootstrap_license():
-        splash.close()
-        return 1
+    estado = _run_auto_update(splash)
+    if estado == "reiniciando":
+        splash.set_progress(1.0, "Atualização concluída — reiniciando...")
+        QTimer.singleShot(1000, app.quit)
+        app.exec()
+        return 0
+    splash.hide_progress()
+    if estado == "erro":
+        splash.set_status("Não foi possível atualizar, continuando...")
 
-    show_message(splash, "Carregando interface...")
-    app.processEvents()
+    splash.set_status("Validando licença...")
+    client = LicenseClient()
+    result = client.validate()
+
+    if result.status not in (LicenseStatus.VALID, LicenseStatus.OFFLINE_TOLERATED):
+        splash.fechar()
+        if not _resolver_licenca(client, result):
+            return 1
+        window = MainWindow()
+        window.show()
+        return app.exec()
+
+    splash.set_status("Carregando...")
     window = MainWindow()
-    QTimer.singleShot(300, lambda: (splash.finish(window), window.show()))
+    QTimer.singleShot(300, lambda: (splash.fechar(), window.show()))
     return app.exec()
 
 
@@ -2175,26 +2674,28 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 11.4: Apagar `license_ui.py`**
+- [ ] **Step 11.6: Apagar `license_ui.py`**
 
 ```bash
 git rm license_ui.py
 ```
 
-- [ ] **Step 11.5: Teste manual end-to-end**
+- [ ] **Step 11.7: Teste manual end-to-end**
 
 Run: `python app.py`
 Expected:
-- Splash aparece com mensagens.
+- Splash aparece com spinner girando.
+- Em dev (`sys.frozen` falso), `check_and_update` é noop — splash passa direto pra licença sem mostrar barra.
 - Se já tem licença válida em `~/.ocorrencias_license.json`, abre direto.
 - Se renomear a licença pra forçar `NO_KEY`, abre o diálogo de ativação.
 - Toggle dark/light na aba Configurações aplica na hora.
+- (Build real) com update disponível no servidor: barra de progresso enche durante o download; ao concluir, mostra "reiniciando..." e fecha.
 
-- [ ] **Step 11.6: Commit**
+- [ ] **Step 11.8: Commit**
 
 ```bash
-git add app.py ui/splash.py ui/license_dialogs.py
-git commit -m "feat(ui): splash + diálogos de licença em Qt; app.py bootstrap completo"
+git add app.py ui/splash.py ui/update_worker.py ui/license_dialogs.py tests/ui/test_update_worker.py
+git commit -m "feat(ui): splash com spinner+progresso, auto-update via QThread e diálogos de licença em Qt"
 ```
 
 ---
@@ -2203,15 +2704,18 @@ git commit -m "feat(ui): splash + diálogos de licença em Qt; app.py bootstrap 
 
 **Files:**
 - Modify: `license_client.py`
-- Create: `ProcessadorOcorrencias-v2.0.spec`
-- Modify: `deploy.py`
+- Create: `ProcessadorOcorrencias-v1.64.spec`
 - Create: `tests/ui/test_tabs_smoke.py`
+
+> **Nota sobre `deploy.py`:** verificado que o `deploy.py` deriva o nome do exe da versão dinamicamente (`f"ProcessadorOcorrencias-v{version}.exe"`) e **não** referencia o `.spec` por nome. Logo, não precisa ser editado para a 1.64. (O plano original assumia uma string `...v1.60.spec` que não existe lá.)
 
 - [ ] **Step 12.1: Bumpar `APP_VERSION`**
 
-Edit `license_client.py`: encontrar a linha `APP_VERSION = "1.60"` (ou similar) e trocar pra `APP_VERSION = "2.0"`.
+Edit `license_client.py`: encontrar a linha `APP_VERSION = "1.63"` e trocar pra `APP_VERSION = "1.64"`.
 
-- [ ] **Step 12.2: Criar `ProcessadorOcorrencias-v2.0.spec`**
+- [ ] **Step 12.2: Criar `ProcessadorOcorrencias-v1.64.spec`**
+
+Use o `ProcessadorOcorrencias-v1.63.spec` existente como referência de estrutura, mas adapte para PySide6 (hooks, excludes tkinter) conforme abaixo.
 
 ```python
 # -*- mode: python ; coding: utf-8 -*-
@@ -2220,7 +2724,7 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 hiddenimports = (
     collect_submodules('PySide6')
-    + ['ui', 'ui.widgets', 'ui.tabs']
+    + ['ui', 'ui.widgets', 'ui.tabs', 'ui.update_worker', 'ui.splash']
 )
 
 datas = [
@@ -2252,7 +2756,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='ProcessadorOcorrencias-v2.0',
+    name='ProcessadorOcorrencias-v1.64',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -2268,15 +2772,10 @@ exe = EXE(
 )
 ```
 
-- [ ] **Step 12.3: Ajustar `deploy.py`**
+- [ ] **Step 12.3: Confirmar que `deploy.py` não precisa de mudança**
 
-Localizar a string `ProcessadorOcorrencias-v1.60.spec` em `deploy.py` e trocar por `ProcessadorOcorrencias-v2.0.spec` (e qualquer referência `v1.60` → `v2.0` se houver).
-
-```bash
-grep -n "v1\.60\|v1.6" deploy.py
-```
-
-Substituir cada ocorrência relevante.
+Run: `grep -n "spec\|v1\." deploy.py`
+Expected: nenhuma referência hard-coded a `.spec` nem à versão antiga. O exe é resolvido por `f"ProcessadorOcorrencias-v{version}.exe"` em `dist/`, e a versão vem do argumento `--release`/`APP_VERSION`. Nenhuma edição necessária. Se aparecer alguma string `v1.63` hard-coded, troque pra `v1.64`.
 
 - [ ] **Step 12.4: Smoke tests das abas (constrói sem crash)**
 
@@ -2340,8 +2839,8 @@ Expected: testes existentes (`test_license_client.py`, `test_processador_verific
 
 - [ ] **Step 12.6: Build do exe localmente**
 
-Run: `pyinstaller ProcessadorOcorrencias-v2.0.spec --clean`
-Expected: `dist/ProcessadorOcorrencias-v2.0.exe` aparece (~80-110 MB).
+Run: `pyinstaller ProcessadorOcorrencias-v1.64.spec --clean`
+Expected: `dist/ProcessadorOcorrencias-v1.64.exe` aparece (~80-110 MB).
 
 - [ ] **Step 12.7: Testar o exe em ambiente limpo**
 
@@ -2357,10 +2856,10 @@ Idealmente em VM Windows sem Python. Mínimo: copiar o exe pra outro diretório 
 - [ ] **Step 12.8: Commit final + merge**
 
 ```bash
-git add license_client.py ProcessadorOcorrencias-v2.0.spec deploy.py tests/ui/test_tabs_smoke.py
-git commit -m "release(v2.0): bump versão, novo .spec PyInstaller, smoke tests das abas"
+git add license_client.py ProcessadorOcorrencias-v1.64.spec tests/ui/test_tabs_smoke.py
+git commit -m "release(1.64): bump versão, novo .spec PyInstaller, smoke tests das abas"
 git checkout main
-git merge --no-ff v2-pyside6 -m "release(v2.0): migração da UI para PySide6"
+git merge --no-ff feat-pyside6-1.64 -m "release(1.64): migração da UI para PySide6"
 ```
 
 (Decide quando fazer push — fora do escopo do plano.)
@@ -2384,13 +2883,14 @@ git merge --no-ff v2-pyside6 -m "release(v2.0): migração da UI para PySide6"
 | Aba Histórico (tabela, ações, menu contexto) | T9 |
 | Aba Configurações (aparência, IA, licença, atualizações, sobre) | T10 |
 | Toggle dark/light em runtime | T10 step 10.2 |
-| Splash QSplashScreen | T11 |
-| `license_dialogs.py` substituindo `license_ui.py` | T11 |
-| Bootstrap de licença em `app.py` | T11 |
+| Splash custom com spinner + barra de progresso (paridade v1.63) | T11 step 11.1 |
+| Auto-update com feedback de progresso via QThread (paridade v1.63) | T11 steps 11.2–11.3, 11.5 |
+| `license_dialogs.py` substituindo `license_ui.py` | T11 step 11.4 |
+| Bootstrap de licença em `app.py` | T11 step 11.5 |
 | Remover "Deduzir dias nas colunas Qt" | Implícito — não codamos a feature em T7 (não está no código novo) |
-| `.spec` PyInstaller v2.0 com PySide6 hooks + excludes tkinter | T12 |
-| Bump APP_VERSION 1.60 → 2.0 | T12 step 12.1 |
-| `deploy.py` ajustado | T12 step 12.3 |
+| `.spec` PyInstaller v1.64 com PySide6 hooks + excludes tkinter | T12 |
+| Bump APP_VERSION 1.63 → 1.64 (segue auto-update normal) | T12 step 12.1 |
+| `deploy.py` — confirmado que não precisa mudar (nome do exe é dinâmico) | T12 step 12.3 |
 | `auto_update.py` intacto | (não há task — confirmado) |
 | Smoke tests + testes de módulos puros | T2, T3, T4, T5, T12 |
 | Verificação manual em VM limpa | T12 step 12.7 |
@@ -2407,4 +2907,12 @@ git merge --no-ff v2-pyside6 -m "release(v2.0): migração da UI para PySide6"
 
 **Issue identificada e corrigida:** em T5 step 5.1 a primeira versão de `PrimaryButton` tinha `self.setCursor(0)` errado. A versão correta abaixo usa `Qt.PointingHandCursor`. Mantive ambas com a nota; ao implementar, usar a segunda versão.
 
-Plano coerente. Pronto pra execução.
+**4. Atualização do plano (2026-05-28) — paridade com funções entradas após a v1.60:**
+
+O plano foi escrito na v1.60. Entre v1.60 e v1.63, o app Tkinter ganhou funções que precisavam ser portadas:
+- **Persistência de histórico** (v1.62): já coberta nativamente por T3 (`history.py`) + T9 (aba). Sem mudança necessária.
+- **Splash com spinner + barra de progresso e auto-update em thread com feedback** (v1.63): a T11 original tinha splash trivial (`QSplashScreen.showMessage`) e `check_and_update()` sem callbacks — **perderia** o feedback de download. Corrigido: T11 agora especifica `ui/splash.py` custom (spinner + barra, API `set_status`/`set_progress`/`hide_progress`), `ui/update_worker.py` (QThread + sinais `progress`/`status`), `app.py` dirigindo a splash via `QEventLoop` local, e `tests/ui/test_update_worker.py`. `.spec` inclui `ui.update_worker`/`ui.splash` em hiddenimports.
+
+O `auto_update.py` continua **intacto** — sua API (`on_progress`/`on_status`) já existia desde a v1.63 e é só consumida pelo novo worker.
+
+Plano coerente e atualizado. Pronto pra execução.
