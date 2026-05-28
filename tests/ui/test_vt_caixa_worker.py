@@ -8,7 +8,9 @@ class _FakeProc:
     def processar(self, fonte, xls, out, progress_cb=None, usar_ia=False, api_key='', model_id='gemini-2.5-flash'):
         self.kwargs = dict(usar_ia=usar_ia, api_key=api_key, model_id=model_id)
         if progress_cb: progress_cb(100, "ok")
-        return {"total_ok": 5, "total_pdf": 7}
+        return {"total_ok": 5, "total_pdf": 7, "total_fonte": 7, "tipo_fonte": "PDF",
+                "nao_encontrados": ["123", "456"], "avisos_csv": ["campo X"],
+                "alertas_ia": ["Nenhuma inconsistência encontrada."]}
 
 
 def test_worker_ok_reporta_totais(qtbot, monkeypatch):
@@ -29,3 +31,14 @@ def test_worker_repassa_flags_ia(qtbot, monkeypatch):
         w.run()
     k = _FakeProc.last.kwargs
     assert k["usar_ia"] is True and k["api_key"] == "KEY" and k["model_id"] == "gemini-2.5-pro"
+
+
+def test_worker_propaga_detalhes(qtbot, monkeypatch):
+    monkeypatch.setattr(vt, "ProcessadorVTCaixa", _FakeProc)
+    w = vt.VTCaixaWorker("f.pdf", "c.xlsx", "out.csv", False, "", "m")
+    with qtbot.waitSignal(w.finished, timeout=3000) as bl:
+        w.run()
+    info = bl.args[0]
+    assert info["nao_encontrados"] == ["123", "456"]
+    assert info["avisos_csv"] == ["campo X"]
+    assert info["alertas_ia"] == ["Nenhuma inconsistência encontrada."]

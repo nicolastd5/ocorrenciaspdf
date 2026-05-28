@@ -26,7 +26,17 @@ class MainWindow(QMainWindow):
         self._cfg_tab = ConfiguracoesTab(self)
         self._cfg_tab.theme_changed.connect(self._apply_theme_runtime)
         self._tabs.addTab(self._cfg_tab, "Configurações")
-        self.setCentralWidget(self._tabs)
+
+        from PySide6.QtWidgets import QVBoxLayout
+        central = QWidget(self)
+        col = QVBoxLayout(central)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(0)
+        self._banner = self._criar_banner_update()
+        self._banner.setVisible(False)
+        col.addWidget(self._banner)
+        col.addWidget(self._tabs)
+        self.setCentralWidget(central)
 
         from license_client import LicenseClient
         sb = QStatusBar(self)
@@ -47,6 +57,36 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QApplication
         theme.apply_theme(QApplication.instance(), mode)
 
+    def _criar_banner_update(self) -> QWidget:
+        from PySide6.QtWidgets import QHBoxLayout, QPushButton
+        w = QWidget(self)
+        w.setStyleSheet("QWidget { background: #0f1a14; }")
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(14, 8, 14, 8)
+        self._banner_lbl = QLabel("Nova versão disponível")
+        self._banner_lbl.setStyleSheet("color: #2ea043; font-weight: 600;")
+        lay.addWidget(self._banner_lbl)
+        lay.addStretch()
+        btn = QPushButton("Atualizar agora")
+        btn.setObjectName("primary")
+        btn.clicked.connect(self._aplicar_update)
+        lay.addWidget(btn)
+        btn_x = QPushButton("✕")
+        btn_x.setFixedWidth(28)
+        btn_x.clicked.connect(lambda: self._banner.setVisible(False))
+        lay.addWidget(btn_x)
+        return w
+
+    def _aplicar_update(self):
+        from auto_update import check_and_update
+        from PySide6.QtWidgets import QMessageBox
+        check_and_update()
+        QMessageBox.information(
+            self, "Atualização",
+            "Se houver uma nova versão, ela será baixada e o app reiniciará. "
+            "Caso nada aconteça, já está atualizado ou o download está em andamento."
+        )
+
     def _checar_conexao(self):
         if self._conn_thread is not None:
             return  # checagem em andamento
@@ -64,6 +104,12 @@ class MainWindow(QMainWindow):
         self._conn_pill.setText(f"●  {texto}")
         self._conn_pill.setStyleSheet(f"color: {cor};")
         self._cfg_tab.atualizar_status(texto, cor, versao=versao or None, gemini_ok=gemini_ok)
+        if versao:
+            from auto_update import _parse_version
+            from license_client import LicenseClient
+            if _parse_version(versao) > _parse_version(LicenseClient.APP_VERSION):
+                self._banner_lbl.setText(f"Nova versão disponível: v{versao}")
+                self._banner.setVisible(True)
 
     def _on_conn_thread_done(self):
         self._conn_thread = None

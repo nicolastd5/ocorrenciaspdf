@@ -130,8 +130,45 @@ class HistoricoTab(QWidget):
         a_open.triggered.connect(lambda: self._open_output(idx))
         a_folder.triggered.connect(lambda: self._open_folder(entry.get("output")))
         a_remove.triggered.connect(lambda: self._remove(idx.row()))
-        menu.addAction(a_open); menu.addAction(a_folder); menu.addSeparator(); menu.addAction(a_remove)
+        menu.addAction(a_open); menu.addAction(a_folder)
+        # Detalhes (não-encontrados / avisos / alertas IA) — só quando houver
+        if entry.get("nao_encontrados") or entry.get("avisos_csv") or entry.get("alertas_ia"):
+            a_det = QAction("Ver detalhes", self)
+            a_det.triggered.connect(lambda: self._ver_detalhes(entry))
+            menu.addAction(a_det)
+        menu.addSeparator(); menu.addAction(a_remove)
         menu.exec(self._view.viewport().mapToGlobal(pos))
+
+    def _ver_detalhes(self, entry):
+        from PySide6.QtWidgets import (
+            QDialog, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout
+        )
+        linhas = []
+        nao_enc = entry.get("nao_encontrados") or []
+        avisos = entry.get("avisos_csv") or []
+        alertas = entry.get("alertas_ia") or []
+        if nao_enc:
+            linhas.append(f"Matrículas sem correspondência ({len(nao_enc)}):")
+            linhas += [f"  • {x}" for x in nao_enc]
+            linhas.append("")
+        if avisos:
+            linhas.append(f"Avisos de CSV ({len(avisos)}):")
+            linhas += [f"  • {x}" for x in avisos]
+            linhas.append("")
+        if alertas:
+            linhas.append("Relatório IA:")
+            linhas += [f"  {x}" for x in alertas]
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Detalhes do processamento")
+        dlg.resize(620, 440)
+        lay = QVBoxLayout(dlg)
+        txt = QPlainTextEdit(dlg); txt.setReadOnly(True); txt.setObjectName("log")
+        txt.setPlainText("\n".join(linhas))
+        lay.addWidget(txt)
+        row = QHBoxLayout(); row.addStretch()
+        b = QPushButton("Fechar"); b.clicked.connect(dlg.accept); row.addWidget(b)
+        lay.addLayout(row)
+        dlg.exec()
 
     def _remove(self, row):
         actual = len(history.load()) - 1 - row  # lista é mostrada invertida

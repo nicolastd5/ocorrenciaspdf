@@ -1,4 +1,4 @@
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, QThread
 from PySide6.QtWidgets import (
     QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
     QMessageBox, QPushButton, QRadioButton, QVBoxLayout, QWidget
@@ -44,14 +44,25 @@ class ConfiguracoesTab(QWidget):
         self._cb_model = QComboBox()
         self._cb_model.addItems(self.GEMINI_MODELS)
         self._cb_model.setCurrentText(cfg.get("gemini_model", "gemini-2.5-flash"))
+        self._cb_model.setEditable(True)  # permite manter um model_id não-listado
         self._cb_model.currentTextChanged.connect(self._save_model)
         ai_form.addRow("Modelo:", self._cb_model)
+        row_btn = QHBoxLayout()
+        self._btn_modelos = QPushButton("↻ Carregar modelos da API")
+        self._btn_modelos.clicked.connect(self._carregar_modelos)
+        self._lbl_modelos = QLabel("")
+        self._lbl_modelos.setStyleSheet("color: #8b949e; font-size: 9pt;")
+        row_btn.addWidget(self._btn_modelos); row_btn.addWidget(self._lbl_modelos); row_btn.addStretch()
+        wrap_btn = QWidget(); wrap_btn.setLayout(row_btn)
+        ai_form.addRow(wrap_btn)
         nota = QLabel("A chave da API do Gemini é obtida automaticamente do servidor "
                       "(vinculada à sua licença) — não precisa configurar.")
         nota.setWordWrap(True)
         nota.setStyleSheet("color: #8b949e; font-size: 9pt;")
         ai_form.addRow(nota)
         layout.addWidget(g_ai)
+        self._modelos_thread = None
+        self._modelos_worker = None
 
         # Licença
         g_lic = QGroupBox("Licença", self)
@@ -114,6 +125,41 @@ class ConfiguracoesTab(QWidget):
 
     def _save_model(self, model: str):
         settings.save({"gemini_model": model})
+
+    def _carregar_modelos(self):
+        if self._modelos_thread is not None:
+            return
+        from ui.server_config import ModelosWorker
+        self._btn_modelos.setEnabled(False)
+        self._lbl_modelos.setText("Buscando modelos…")
+        self._modelos_thread = QThread(self)
+        self._modelos_worker = ModelosWorker()
+        self._modelos_worker.moveToThread(self._modelos_thread)
+        self._modelos_thread.started.connect(self._modelos_worker.run)
+        self._modelos_worker.ok.connect(self._popular_modelos)
+        self._modelos_worker.erro.connect(self._erro_modelos)
+        self._modelos_worker.finished.connect(self._modelos_thread.quit)
+        self._modelos_thread.finished.connect(self._modelos_cleanup)
+        self._modelos_thread.start()
+
+    def _popular_modelos(self, modelos):
+        atual = self._cb_model.currentText()
+        self._cb_model.blockSignals(True)
+        self._cb_model.clear()
+        ids = [model_id for _display, model_id in modelos]
+        self._cb_model.addItems(ids)
+        if atual in ids:
+            self._cb_model.setCurrentText(atual)
+        self._cb_model.blockSignals(False)
+        self._lbl_modelos.setText(f"{len(ids)} modelo(s) carregado(s).")
+
+    def _erro_modelos(self, msg):
+        self._lbl_modelos.setText(f"Erro: {msg[:60]}")
+
+    def _modelos_cleanup(self):
+        self._btn_modelos.setEnabled(True)
+        self._modelos_thread = None
+        self._modelos_worker = None
 
     def _change_license(self):
         from ui.license_dialogs import show_activation_window

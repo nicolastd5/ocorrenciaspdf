@@ -68,3 +68,24 @@ class ConnCheckWorker(QObject):
             self.resultado.emit(texto, cor, latest_version, gemini_ok)
         finally:
             self.finished.emit()
+
+
+class ModelosWorker(QObject):
+    """Busca a key do servidor e lista os modelos disponíveis do Gemini."""
+    ok = Signal(list)      # list[(display, model_id)]
+    erro = Signal(str)
+    finished = Signal()
+
+    def run(self):
+        try:
+            api_key = fetch_gemini_key()
+            if not api_key:
+                self.erro.emit("Não foi possível obter a chave do Gemini do servidor.")
+                return
+            from vt_caixa_processador import ProcessadorVTCaixa
+            modelos = ProcessadorVTCaixa.listar_modelos(api_key)
+            self.ok.emit(modelos)
+        except Exception as e:
+            self.erro.emit(str(e))
+        finally:
+            self.finished.emit()

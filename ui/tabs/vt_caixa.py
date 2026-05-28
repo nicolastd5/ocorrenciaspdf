@@ -56,6 +56,11 @@ class VTCaixaWorker(QObject):
                 "duration": time.monotonic() - t0,
                 "total_ok": result.get("total_ok", 0),
                 "total_pdf": result.get("total_pdf", 0),
+                "total_fonte": result.get("total_fonte", result.get("total_pdf", 0)),
+                "tipo_fonte": result.get("tipo_fonte", "PDF"),
+                "nao_encontrados": list(result.get("nao_encontrados", [])),
+                "avisos_csv": list(result.get("avisos_csv", [])),
+                "alertas_ia": list(result.get("alertas_ia", [])),
             })
         except _Cancelled:
             self.finished.emit({"status": "cancelled", "duration": time.monotonic() - t0})
@@ -174,12 +179,74 @@ class VTCaixaTab(QWidget):
 
     def _on_finished(self, info):
         s = info.get("status", "ok")
-        if s == "ok":
-            self._log.append(f"{info.get('total_ok',0)} ok / {info.get('total_pdf',0)} no PDF", level="success")
-        else:
+        if s != "ok":
             self._log.append("cancelado", level="warning")
+            self._log.set_progress(0, False)
+            self._emit_history(info)
+            return
+
+        ok = info.get("total_ok", 0)
+        total = info.get("total_fonte", info.get("total_pdf", 0))
+        tipo_fonte = info.get("tipo_fonte", "PDF")
+        nao_enc = info.get("nao_encontrados", [])
+        avisos_csv = info.get("avisos_csv", [])
+        alertas = info.get("alertas_ia", [])
+
+        self._log.append("─" * 40)
+        self._log.append(f"{ok} registro(s) processado(s) com sucesso.", level="success")
+        self._log.append(f"Total na fonte ({tipo_fonte}): {total}")
+
+        if nao_enc:
+            self._log.append(f"{len(nao_enc)} matrícula(s) sem correspondência no Excel:", level="warning")
+            for item in nao_enc:
+                self._log.append(f"   • {item}", level="warning")
+        else:
+            self._log.append("Todas as matrículas foram encontradas no Excel.", level="success")
+
+        self._log.append(f"CSV salvo em: {info.get('output_path')}")
+
+        if avisos_csv:
+            self._log.append(
+                f"{len(avisos_csv)} campo(s) com caracteres fora do latin-1 (substituídos por ?):",
+                level="warning")
+            for av in avisos_csv:
+                self._log.append(f"   • {av}", level="warning")
+
+        if alertas:
+            self._log.append(f"Relatório IA ({self._model_atual()}):")
+            for linha in alertas:
+                ll = linha.lower()
+                eh_negacao = "nenhuma" in ll or "tudo ok" in ll or "sem inconsist" in ll
+                nivel = "error" if (not eh_negacao and any(
+                    k in ll for k in ("erro", "inconsistência", "alerta", "vazio", "zerado"))) else "info"
+                self._log.append(f"   {linha}", level=nivel)
+            self._mostrar_janela_ia(alertas)
+
         self._log.set_progress(0, False)
         self._emit_history(info)
+
+    def _model_atual(self):
+        from ui import settings
+        return settings.load().get("gemini_model", "gemini-2.5-flash")
+
+    def _mostrar_janela_ia(self, alertas):
+        from PySide6.QtWidgets import (
+            QDialog, QPlainTextEdit, QPushButton, QVBoxLayout, QHBoxLayout
+        )
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Relatório de Verificação IA")
+        dlg.resize(620, 440)
+        lay = QVBoxLayout(dlg)
+        txt = QPlainTextEdit(dlg)
+        txt.setReadOnly(True)
+        txt.setObjectName("log")
+        txt.setPlainText("\n".join(alertas))
+        lay.addWidget(txt)
+        row = QHBoxLayout(); row.addStretch()
+        b = QPushButton("Fechar"); b.clicked.connect(dlg.accept)
+        row.addWidget(b)
+        lay.addLayout(row)
+        dlg.exec()
 
     def _on_error(self, msg, tb):
         self._log.append(msg, level="error")
@@ -204,4 +271,7 @@ class VTCaixaTab(QWidget):
             "duration_seconds": round(info.get("duration", 0.0), 2),
             "rows_processed": info.get("total_ok"),
             "error": info.get("error"),
+            "nao_encontrados": info.get("nao_encontrados", []),
+            "avisos_csv": info.get("avisos_csv", []),
+            "alertas_ia": info.get("alertas_ia", []),
         })
