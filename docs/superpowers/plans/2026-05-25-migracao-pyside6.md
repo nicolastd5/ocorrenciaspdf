@@ -36,7 +36,7 @@
 | `ui/tabs/vt_caixa.py` | Wizard de VT-Caixa + worker `QThread` | ~200 |
 | `ui/tabs/historico.py` | `QTableView` + `QAbstractTableModel` + menu de contexto | ~180 |
 | `ui/tabs/configuracoes.py` | Seções: Aparência, API Gemini, Licença, Atualizações, Sobre | ~180 |
-| `tests/ui/__init__.py` | Marker | ~0 |
+| `tests/ui/` (SEM `__init__.py`) | Dir de testes da UI — **não** criar marker: o repo descobre testes por path (`conftest.py` raiz insere no sys.path) e um marker aqui colide com `tests/` (que não tem marker), quebrando a coleta do pytest | ~0 |
 | `tests/ui/test_settings.py` | I/O atômico, defaults, recover de corrupção | ~80 |
 | `tests/ui/test_history.py` | Append, cap 500 FIFO, remoção por índice | ~80 |
 | `tests/ui/test_theme.py` | QSS gerado contém tokens corretos pra cada modo | ~50 |
@@ -71,7 +71,7 @@
 **Files:**
 - Create: `requirements-dev.txt`
 - Modify: `requirements.txt`
-- Create: `ui/__init__.py`, `ui/widgets/__init__.py`, `ui/tabs/__init__.py`, `tests/ui/__init__.py`
+- Create: `ui/__init__.py`, `ui/widgets/__init__.py`, `ui/tabs/__init__.py` (NÃO criar `tests/ui/__init__.py` — ver nota na File Structure; o dir `tests/ui/` é criado implicitamente pelos arquivos de teste)
 
 - [ ] **Step 1.1: Criar branch isolada**
 
@@ -105,11 +105,12 @@ Expected: instala sem erros; `python -c "import PySide6; print(PySide6.__version
 
 - [ ] **Step 1.5: Criar diretórios e markers vazios**
 
-Criar arquivos vazios:
+Criar arquivos vazios (markers de pacote do código fonte):
 - `ui/__init__.py`
 - `ui/widgets/__init__.py`
 - `ui/tabs/__init__.py`
-- `tests/ui/__init__.py`
+
+NÃO criar `tests/ui/__init__.py`: o repo já descobre testes por path via `conftest.py` na raiz; um marker em `tests/ui/` colide com `tests/` (sem marker) e quebra a coleta do pytest. O diretório `tests/ui/` passa a existir quando o primeiro `tests/ui/test_*.py` é criado (Task 2).
 
 - [ ] **Step 1.6: Commit**
 
