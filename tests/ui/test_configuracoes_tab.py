@@ -13,6 +13,9 @@ def test_constructs_and_reflects_theme(qtbot, tmp_path, monkeypatch):
 
 def test_save_ai_persists(qtbot, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "_CONFIG_PATH", tmp_path / "cfg.json")
+    # QMessageBox.information é modal e bloquearia o teste — neutraliza
+    monkeypatch.setattr(cfgmod.QMessageBox, "information", lambda *a, **k: None)
+    monkeypatch.setattr(cfgmod.QMessageBox, "warning", lambda *a, **k: None)
     tab = cfgmod.ConfiguracoesTab()
     qtbot.addWidget(tab)
     tab._ed_key.setText("SECRET")
