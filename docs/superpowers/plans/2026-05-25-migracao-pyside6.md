@@ -1,10 +1,10 @@
-# Migração da UI para PySide6 (v2.0) — Implementation Plan
+# Migração da UI para PySide6 (v1.64) — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Substituir toda a camada de UI Tkinter do Processador de Ocorrências por uma implementação em PySide6 modular (pacote `ui/`), preservando intactos os módulos de processamento (`processador.py`, `vt_caixa_processador.py`), o cliente de licença (`license_client.py`) e o auto-update (`auto_update.py`).
 
-**Architecture:** Reescrita big bang em branch isolada (`v2-pyside6`). Entrypoint `app.py` enxuto (~80 linhas) delega tudo pro pacote `ui/` com um módulo por tela (`tabs/`), widgets reusáveis (`widgets/`) e serviços puros (`theme.py`, `settings.py`, `history.py`). Processamentos pesados rodam em `QThread` + worker `QObject` com sinais. Bump `APP_VERSION` 1.60 → 2.0.
+**Architecture:** Reescrita big bang em branch isolada (`feat-pyside6-1.64`). Entrypoint `app.py` enxuto delega tudo pro pacote `ui/` com um módulo por tela (`tabs/`), widgets reusáveis (`widgets/`) e serviços puros (`theme.py`, `settings.py`, `history.py`). Processamentos pesados rodam em `QThread` + worker `QObject` com sinais. Bump `APP_VERSION` 1.63 → 1.64 — segue o fluxo normal de auto-update (a v1.63 em campo detecta a 1.64 e baixa).
 
 **Tech Stack:** Python ≥3.10, PySide6 ≥6.7, openpyxl/pdfplumber/xlrd (existentes), PyInstaller (existente), pytest + pytest-qt (novo).
 
@@ -22,7 +22,8 @@
 | `ui/theme.py` | Tokens dark/light, geração de QSS, carregamento de fontes | ~150 |
 | `ui/settings.py` | I/O atômico de `~/.ocorrencias_config.json` | ~80 |
 | `ui/history.py` | I/O atômico de `~/.ocorrencias_history.json`, cap FIFO 500 | ~100 |
-| `ui/splash.py` | `QSplashScreen` com logo + `showMessage()` | ~40 |
+| `ui/splash.py` | Splash custom (`QWidget` frameless) com spinner animado + barra de progresso show/hide; API `set_status`/`set_progress`/`hide_progress` | ~150 |
+| `ui/update_worker.py` | `QObject` worker que roda `check_and_update` numa `QThread` e emite sinais `progress`/`status` | ~70 |
 | `ui/license_dialogs.py` | `show_activation_window`, `show_error_window` (API igual ao `license_ui.py`) | ~140 |
 | `ui/main_window.py` | `QMainWindow` + `QTabWidget` + status bar; aplica tema; salva/restaura geometria | ~150 |
 | `ui/widgets/__init__.py` | Reexports | ~10 |
@@ -41,16 +42,17 @@
 | `tests/ui/test_theme.py` | QSS gerado contém tokens corretos pra cada modo | ~50 |
 | `tests/ui/test_widgets.py` | Smoke + interação de DropZone | ~120 |
 | `tests/ui/test_tabs_smoke.py` | Smoke: cada aba constrói sem crashar | ~80 |
-| `ProcessadorOcorrencias-v2.0.spec` | PyInstaller spec novo | ~50 |
+| `tests/ui/test_update_worker.py` | Worker repassa callbacks pro `check_and_update` e emite sinais `progress`/`status` | ~70 |
+| `ProcessadorOcorrencias-v1.64.spec` | PyInstaller spec novo | ~50 |
 | `requirements-dev.txt` | `pytest`, `pytest-qt` | ~3 |
 
 **Modificar:**
 
 | Path | O que muda |
 |---|---|
-| `app.py` | Reescrito do zero (~80 linhas: licença → splash → MainWindow → mainloop) |
+| `app.py` | Reescrito do zero (~120 linhas: splash → auto-update via QThread com feedback de progresso → licença → MainWindow → exec) |
 | `requirements.txt` | Adiciona `PySide6>=6.7` |
-| `license_client.py` | `APP_VERSION = "1.60"` → `"2.0"` |
+| `license_client.py` | `APP_VERSION = "1.63"` → `"1.64"` |
 | `deploy.py` | Aponta pro novo `.spec` |
 | `.gitignore` | Já tem `.superpowers/` |
 
@@ -74,7 +76,7 @@
 - [ ] **Step 1.1: Criar branch isolada**
 
 ```bash
-git checkout -b v2-pyside6
+git checkout -b feat-pyside6-1.64
 ```
 
 - [ ] **Step 1.2: Adicionar PySide6 em `requirements.txt`**
@@ -113,7 +115,7 @@ Criar arquivos vazios:
 
 ```bash
 git add requirements.txt requirements-dev.txt ui/ tests/ui/
-git commit -m "chore: branch v2-pyside6 — adiciona PySide6 e esqueleto ui/"
+git commit -m "chore: branch feat-pyside6-1.64 — adiciona PySide6 e esqueleto ui/"
 ```
 
 ---
@@ -1004,7 +1006,7 @@ class MainWindow(QMainWindow):
 `app.py` (apaga todo conteúdo antigo e substitui por):
 
 ```python
-"""Processador de Ocorrências v2.0 — entrypoint."""
+"""Processador de Ocorrências v1.64 — entrypoint."""
 import sys
 
 from PySide6.QtWidgets import QApplication
@@ -1021,9 +1023,9 @@ def main() -> int:
     cfg = settings.load()
     theme.apply_theme(app, cfg.get("theme", "dark"))
 
-    check_and_update()  # noop em dev (sys.frozen)
+    check_and_update()  # noop em dev (sys.frozen). Task 11 troca por splash + worker QThread.
 
-    # TODO Task 11: bootstrap de licença + splash + license_dialogs aqui
+    # TODO Task 11: splash com spinner/progresso + auto-update via QThread + bootstrap de licença
     window = MainWindow()
     window.show()
     return app.exec()
@@ -1036,7 +1038,7 @@ if __name__ == "__main__":
 - [ ] **Step 6.3: Rodar manualmente — janela abre com 4 abas vazias**
 
 Run: `python app.py`
-Expected: janela escura com 4 abas; status bar mostra "v1.60 · licença OK" (até bumpar). Fecha sem crash.
+Expected: janela escura com 4 abas; status bar mostra "v1.63 · licença OK" (até bumpar pra 1.64 na T12). Fecha sem crash.
 
 - [ ] **Step 6.4: Commit**
 
@@ -1997,48 +1999,207 @@ git commit -m "feat(ui): aba Configurações com toggle dark/light em runtime"
 
 ---
 
-## Task 11: Splash + Diálogos de licença + Bootstrap em `app.py`
+## Task 11: Splash + Worker de auto-update + Diálogos de licença + Bootstrap em `app.py`
 
 **Files:**
 - Create: `ui/splash.py`
+- Create: `ui/update_worker.py`
 - Create: `ui/license_dialogs.py`
+- Test: `tests/ui/test_update_worker.py`
 - Modify: `app.py`
 - Delete: `license_ui.py`
 
-- [ ] **Step 11.1: Implementar `ui/splash.py`**
+> **Paridade com v1.63:** o Tkinter atual já mostra spinner animado + barra de progresso durante o download da atualização, dirigida por `check_and_update(on_progress=..., on_status=...)` rodando numa thread. Esta task porta essa experiência pro Qt: splash custom com spinner + barra, e um worker `QThread` que emite sinais `progress`/`status`.
+
+- [ ] **Step 11.1: Implementar `ui/splash.py` (custom widget com spinner + barra)**
+
+Splash custom em vez de `QSplashScreen` porque precisamos de barra de progresso show/hide e spinner animado — paridade com o `SplashScreen(tk.Tk)` da v1.63 (`set_status`, `set_progress(frac, texto)`, `hide_progress`). `frac=None` ⇒ barra indeterminada (download sem `Content-Length`).
 
 ```python
-import os
 from pathlib import Path
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPixmap, QPainter
-from PySide6.QtWidgets import QSplashScreen
+
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtWidgets import (
+    QFrame, QLabel, QProgressBar, QVBoxLayout, QWidget
+)
+
+_BG = "#0d1117"
+_ACCENT = "#58a6ff"
+_FG = "#c9d1d9"
+_FG_DIM = "#6e7591"
 
 
-def create_splash() -> QSplashScreen:
-    # Tenta usar logo se existir; senão gera pixmap simples preto.
-    logo = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
-    if logo.is_file():
-        pix = QPixmap(str(logo))
-    else:
-        pix = QPixmap(420, 220)
-        pix.fill(QColor("#0d1117"))
-        painter = QPainter(pix)
-        painter.setPen(QColor("#f0f6fc"))
-        font = painter.font(); font.setPointSize(16); font.setBold(True)
-        painter.setFont(font)
-        painter.drawText(pix.rect(), Qt.AlignCenter, "Processador de Ocorrências")
-        painter.end()
-    splash = QSplashScreen(pix, Qt.WindowStaysOnTopHint)
-    splash.setStyleSheet("QSplashScreen { background: #0d1117; color: #c9d1d9; }")
-    return splash
+class _Spinner(QWidget):
+    """Arco giratório desenhado com QPainter (substitui o canvas do Tkinter)."""
+
+    def __init__(self, parent=None, diameter: int = 44):
+        super().__init__(parent)
+        self._d = diameter
+        self.setFixedSize(diameter, diameter)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(30)
+
+    def _tick(self):
+        self._angle = (self._angle + 12) % 360
+        self.update()
+
+    def stop(self):
+        self._timer.stop()
+
+    def paintEvent(self, _ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        margin = 4
+        rect = self.rect().adjusted(margin, margin, -margin, -margin)
+        # trilha
+        p.setPen(QPen(QColor("#1a1d29"), 4))
+        p.drawArc(rect, 0, 360 * 16)
+        # arco giratório (90°). Qt usa 1/16 de grau e sentido anti-horário.
+        p.setPen(QPen(QColor(_ACCENT), 4))
+        p.drawArc(rect, -self._angle * 16, 90 * 16)
+        p.end()
 
 
-def show_message(splash: QSplashScreen, text: str) -> None:
-    splash.showMessage(text, Qt.AlignBottom | Qt.AlignHCenter, QColor("#c9d1d9"))
+class Splash(QWidget):
+    def __init__(self, version: str):
+        super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setFixedSize(380, 240)
+        self.setStyleSheet(
+            f"Splash {{ background: {_BG}; border: 1px solid #262a3a; }}"
+        )
+        self._center_on_screen()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+        title = QLabel("Processador de Ocorrências", self)
+        title.setStyleSheet(f"color: #e6e8f0; font-size: 14pt; font-weight: 700;")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        ver = QLabel(f"v{version}", self)
+        ver.setStyleSheet(f"color: {_FG_DIM}; font-family: 'JetBrains Mono', Consolas, monospace; font-size: 9pt;")
+        ver.setAlignment(Qt.AlignCenter)
+        layout.addWidget(ver)
+
+        sep = QFrame(self)
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("color: #262a3a;")
+        layout.addSpacing(8)
+        layout.addWidget(sep)
+        layout.addSpacing(8)
+
+        self._spinner = _Spinner(self)
+        layout.addWidget(self._spinner, alignment=Qt.AlignCenter)
+
+        self._status = QLabel("Iniciando...", self)
+        self._status.setStyleSheet(f"color: {_FG_DIM}; font-size: 10pt;")
+        self._status.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self._status)
+
+        self._progress = QProgressBar(self)
+        self._progress.setFixedHeight(6)
+        self._progress.setTextVisible(False)
+        self._progress.setRange(0, 100)
+        self._progress.setVisible(False)
+        layout.addSpacing(6)
+        layout.addWidget(self._progress)
+
+    def _center_on_screen(self):
+        from PySide6.QtGui import QGuiApplication
+        geo = QGuiApplication.primaryScreen().availableGeometry()
+        self.move((geo.width() - self.width()) // 2,
+                  (geo.height() - self.height()) // 2)
+
+    def set_status(self, texto: str) -> None:
+        self._status.setText(texto)
+
+    def set_progress(self, frac, texto: str) -> None:
+        """frac em 0.0–1.0; frac=None => barra indeterminada."""
+        if not self._progress.isVisible():
+            self._progress.setVisible(True)
+        if frac is None:
+            self._progress.setRange(0, 0)  # busy/indeterminado
+        else:
+            self._progress.setRange(0, 100)
+            self._progress.setValue(int(max(0.0, min(1.0, frac)) * 100))
+        self._status.setText(texto)
+
+    def hide_progress(self) -> None:
+        self._progress.setVisible(False)
+        self._progress.setRange(0, 100)
+
+    def fechar(self) -> None:
+        self._spinner.stop()
+        self.close()
 ```
 
-- [ ] **Step 11.2: Implementar `ui/license_dialogs.py`**
+- [ ] **Step 11.2: Implementar `ui/update_worker.py` (QThread worker)**
+
+Porta o `threading.Thread(target=check_and_update, kwargs={on_progress, on_status})` da v1.63 pro padrão Qt usado nas abas. O worker chama `check_and_update` passando callbacks que **apenas emitem sinais** — toda mexida na UI acontece na thread principal via slots conectados.
+
+```python
+from PySide6.QtCore import QObject, Signal
+
+from auto_update import check_and_update
+
+
+class UpdateWorker(QObject):
+    progress = Signal(int, int)   # (baixado, total) — total=0 ⇒ indeterminado
+    status = Signal(str)          # "verificando" | "baixando" | "reiniciando" | "erro"
+    finished = Signal()
+
+    def run(self) -> None:
+        try:
+            self.status.emit("verificando")
+            check_and_update(
+                on_progress=lambda baixado, total: self.progress.emit(baixado, total),
+                on_status=lambda estado: self.status.emit(estado),
+            )
+        finally:
+            self.finished.emit()
+```
+
+- [ ] **Step 11.3: Escrever teste do worker**
+
+`tests/ui/test_update_worker.py`:
+```python
+import auto_update
+from ui.update_worker import UpdateWorker
+
+
+def test_worker_repassa_callbacks_e_emite_sinais(qtbot, monkeypatch):
+    chamadas = {"progress": [], "status": []}
+
+    def fake_check(on_progress=None, on_status=None):
+        on_status("baixando")
+        on_progress(50, 100)
+        on_progress(100, 100)
+        on_status("reiniciando")
+
+    monkeypatch.setattr(auto_update, "check_and_update", fake_check)
+    # o worker importou o símbolo direto; recarrega a referência
+    monkeypatch.setattr("ui.update_worker.check_and_update", fake_check)
+
+    w = UpdateWorker()
+    w.progress.connect(lambda b, t: chamadas["progress"].append((b, t)))
+    w.status.connect(lambda e: chamadas["status"].append(e))
+
+    with qtbot.waitSignal(w.finished, timeout=2000):
+        w.run()
+
+    assert chamadas["progress"] == [(50, 100), (100, 100)]
+    assert chamadas["status"] == ["verificando", "baixando", "reiniciando"]
+```
+
+Run: `pytest tests/ui/test_update_worker.py -v`
+Expected: PASS.
+
+- [ ] **Step 11.4: Implementar `ui/license_dialogs.py`**
 
 ```python
 from PySide6.QtCore import Qt
@@ -2098,21 +2259,29 @@ def show_error_window(message: str) -> None:
     QMessageBox.critical(None, "Erro de licença", message)
 ```
 
-- [ ] **Step 11.3: Reescrever `app.py` com bootstrap + splash**
+- [ ] **Step 11.5: Reescrever `app.py` com splash + auto-update via QThread + bootstrap**
+
+Fluxo idêntico ao `main()` da v1.63, mas em Qt:
+1. Splash custom aparece com spinner.
+2. `UpdateWorker` roda numa `QThread`; `progress`/`status` atualizam a splash (barra + texto). UI fica responsiva sem `processEvents` manual — o event loop local roda enquanto esperamos o sinal `finished`.
+3. Se o estado final for `reiniciando`, fecha tudo e sai (o `updater.bat` já foi disparado pelo worker).
+4. Se for `erro`, mostra "não foi possível atualizar, continuando..." e segue.
+5. Valida licença (fecha a splash antes de qualquer diálogo, pra não sobrepor).
+6. Abre a `MainWindow`.
 
 ```python
-"""Processador de Ocorrências v2.0 — entrypoint."""
+"""Processador de Ocorrências v1.64 — entrypoint."""
 import sys
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QEventLoop, QThread, QTimer
 from PySide6.QtWidgets import QApplication
 
 from license_client import LicenseClient, LicenseStatus
-from auto_update import check_and_update
 from ui import settings, theme
 from ui import license_dialogs
 from ui.main_window import MainWindow
-from ui.splash import create_splash, show_message
+from ui.splash import Splash
+from ui.update_worker import UpdateWorker
 
 
 def _resolver_licenca(client, result) -> bool:
@@ -2141,9 +2310,40 @@ def _resolver_licenca(client, result) -> bool:
         result = client.validate()
 
 
-def bootstrap_license() -> bool:
-    client = LicenseClient()
-    return _resolver_licenca(client, client.validate())
+def _run_auto_update(splash: Splash) -> str:
+    """Roda check_and_update numa QThread, dirigindo a splash.
+    Retorna o estado final: '' (nada/ok), 'reiniciando' ou 'erro'.
+    Bloqueia num QEventLoop local até o worker terminar (UI responsiva)."""
+    estado = {"valor": ""}
+
+    thread = QThread()
+    worker = UpdateWorker()
+    worker.moveToThread(thread)
+
+    def on_progress(baixado, total):
+        if total > 0:
+            mb_b, mb_t = baixado / 1048576, total / 1048576
+            splash.set_progress(baixado / total,
+                                f"Baixando atualização... {int(baixado / total * 100)}% — {mb_b:.1f} / {mb_t:.1f} MB")
+        else:
+            splash.set_progress(None, f"Baixando atualização... {baixado / 1048576:.1f} MB")
+
+    def on_status(e):
+        estado["valor"] = e
+        if e == "verificando":
+            splash.set_status("Procurando atualizações...")
+
+    worker.progress.connect(on_progress)
+    worker.status.connect(on_status)
+
+    loop = QEventLoop()
+    worker.finished.connect(loop.quit)
+    worker.finished.connect(thread.quit)
+    thread.started.connect(worker.run)
+    thread.start()
+    loop.exec()  # mantém a splash viva e animada até terminar
+    thread.wait()
+    return estado["valor"]
 
 
 def main() -> int:
@@ -2152,22 +2352,34 @@ def main() -> int:
     cfg = settings.load()
     theme.apply_theme(app, cfg.get("theme", "dark"))
 
-    splash = create_splash()
+    splash = Splash(LicenseClient.APP_VERSION)
     splash.show()
-    show_message(splash, "Verificando atualizações...")
-    app.processEvents()
-    check_and_update()
 
-    show_message(splash, "Validando licença...")
-    app.processEvents()
-    if not bootstrap_license():
-        splash.close()
-        return 1
+    estado = _run_auto_update(splash)
+    if estado == "reiniciando":
+        splash.set_progress(1.0, "Atualização concluída — reiniciando...")
+        QTimer.singleShot(1000, app.quit)
+        app.exec()
+        return 0
+    splash.hide_progress()
+    if estado == "erro":
+        splash.set_status("Não foi possível atualizar, continuando...")
 
-    show_message(splash, "Carregando interface...")
-    app.processEvents()
+    splash.set_status("Validando licença...")
+    client = LicenseClient()
+    result = client.validate()
+
+    if result.status not in (LicenseStatus.VALID, LicenseStatus.OFFLINE_TOLERATED):
+        splash.fechar()
+        if not _resolver_licenca(client, result):
+            return 1
+        window = MainWindow()
+        window.show()
+        return app.exec()
+
+    splash.set_status("Carregando...")
     window = MainWindow()
-    QTimer.singleShot(300, lambda: (splash.finish(window), window.show()))
+    QTimer.singleShot(300, lambda: (splash.fechar(), window.show()))
     return app.exec()
 
 
@@ -2175,26 +2387,28 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 11.4: Apagar `license_ui.py`**
+- [ ] **Step 11.6: Apagar `license_ui.py`**
 
 ```bash
 git rm license_ui.py
 ```
 
-- [ ] **Step 11.5: Teste manual end-to-end**
+- [ ] **Step 11.7: Teste manual end-to-end**
 
 Run: `python app.py`
 Expected:
-- Splash aparece com mensagens.
+- Splash aparece com spinner girando.
+- Em dev (`sys.frozen` falso), `check_and_update` é noop — splash passa direto pra licença sem mostrar barra.
 - Se já tem licença válida em `~/.ocorrencias_license.json`, abre direto.
 - Se renomear a licença pra forçar `NO_KEY`, abre o diálogo de ativação.
 - Toggle dark/light na aba Configurações aplica na hora.
+- (Build real) com update disponível no servidor: barra de progresso enche durante o download; ao concluir, mostra "reiniciando..." e fecha.
 
-- [ ] **Step 11.6: Commit**
+- [ ] **Step 11.8: Commit**
 
 ```bash
-git add app.py ui/splash.py ui/license_dialogs.py
-git commit -m "feat(ui): splash + diálogos de licença em Qt; app.py bootstrap completo"
+git add app.py ui/splash.py ui/update_worker.py ui/license_dialogs.py tests/ui/test_update_worker.py
+git commit -m "feat(ui): splash com spinner+progresso, auto-update via QThread e diálogos de licença em Qt"
 ```
 
 ---
@@ -2203,15 +2417,18 @@ git commit -m "feat(ui): splash + diálogos de licença em Qt; app.py bootstrap 
 
 **Files:**
 - Modify: `license_client.py`
-- Create: `ProcessadorOcorrencias-v2.0.spec`
-- Modify: `deploy.py`
+- Create: `ProcessadorOcorrencias-v1.64.spec`
 - Create: `tests/ui/test_tabs_smoke.py`
+
+> **Nota sobre `deploy.py`:** verificado que o `deploy.py` deriva o nome do exe da versão dinamicamente (`f"ProcessadorOcorrencias-v{version}.exe"`) e **não** referencia o `.spec` por nome. Logo, não precisa ser editado para a 1.64. (O plano original assumia uma string `...v1.60.spec` que não existe lá.)
 
 - [ ] **Step 12.1: Bumpar `APP_VERSION`**
 
-Edit `license_client.py`: encontrar a linha `APP_VERSION = "1.60"` (ou similar) e trocar pra `APP_VERSION = "2.0"`.
+Edit `license_client.py`: encontrar a linha `APP_VERSION = "1.63"` e trocar pra `APP_VERSION = "1.64"`.
 
-- [ ] **Step 12.2: Criar `ProcessadorOcorrencias-v2.0.spec`**
+- [ ] **Step 12.2: Criar `ProcessadorOcorrencias-v1.64.spec`**
+
+Use o `ProcessadorOcorrencias-v1.63.spec` existente como referência de estrutura, mas adapte para PySide6 (hooks, excludes tkinter) conforme abaixo.
 
 ```python
 # -*- mode: python ; coding: utf-8 -*-
@@ -2220,7 +2437,7 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 hiddenimports = (
     collect_submodules('PySide6')
-    + ['ui', 'ui.widgets', 'ui.tabs']
+    + ['ui', 'ui.widgets', 'ui.tabs', 'ui.update_worker', 'ui.splash']
 )
 
 datas = [
@@ -2252,7 +2469,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='ProcessadorOcorrencias-v2.0',
+    name='ProcessadorOcorrencias-v1.64',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -2268,15 +2485,10 @@ exe = EXE(
 )
 ```
 
-- [ ] **Step 12.3: Ajustar `deploy.py`**
+- [ ] **Step 12.3: Confirmar que `deploy.py` não precisa de mudança**
 
-Localizar a string `ProcessadorOcorrencias-v1.60.spec` em `deploy.py` e trocar por `ProcessadorOcorrencias-v2.0.spec` (e qualquer referência `v1.60` → `v2.0` se houver).
-
-```bash
-grep -n "v1\.60\|v1.6" deploy.py
-```
-
-Substituir cada ocorrência relevante.
+Run: `grep -n "spec\|v1\." deploy.py`
+Expected: nenhuma referência hard-coded a `.spec` nem à versão antiga. O exe é resolvido por `f"ProcessadorOcorrencias-v{version}.exe"` em `dist/`, e a versão vem do argumento `--release`/`APP_VERSION`. Nenhuma edição necessária. Se aparecer alguma string `v1.63` hard-coded, troque pra `v1.64`.
 
 - [ ] **Step 12.4: Smoke tests das abas (constrói sem crash)**
 
@@ -2340,8 +2552,8 @@ Expected: testes existentes (`test_license_client.py`, `test_processador_verific
 
 - [ ] **Step 12.6: Build do exe localmente**
 
-Run: `pyinstaller ProcessadorOcorrencias-v2.0.spec --clean`
-Expected: `dist/ProcessadorOcorrencias-v2.0.exe` aparece (~80-110 MB).
+Run: `pyinstaller ProcessadorOcorrencias-v1.64.spec --clean`
+Expected: `dist/ProcessadorOcorrencias-v1.64.exe` aparece (~80-110 MB).
 
 - [ ] **Step 12.7: Testar o exe em ambiente limpo**
 
@@ -2357,10 +2569,10 @@ Idealmente em VM Windows sem Python. Mínimo: copiar o exe pra outro diretório 
 - [ ] **Step 12.8: Commit final + merge**
 
 ```bash
-git add license_client.py ProcessadorOcorrencias-v2.0.spec deploy.py tests/ui/test_tabs_smoke.py
-git commit -m "release(v2.0): bump versão, novo .spec PyInstaller, smoke tests das abas"
+git add license_client.py ProcessadorOcorrencias-v1.64.spec tests/ui/test_tabs_smoke.py
+git commit -m "release(1.64): bump versão, novo .spec PyInstaller, smoke tests das abas"
 git checkout main
-git merge --no-ff v2-pyside6 -m "release(v2.0): migração da UI para PySide6"
+git merge --no-ff feat-pyside6-1.64 -m "release(1.64): migração da UI para PySide6"
 ```
 
 (Decide quando fazer push — fora do escopo do plano.)
@@ -2384,13 +2596,14 @@ git merge --no-ff v2-pyside6 -m "release(v2.0): migração da UI para PySide6"
 | Aba Histórico (tabela, ações, menu contexto) | T9 |
 | Aba Configurações (aparência, IA, licença, atualizações, sobre) | T10 |
 | Toggle dark/light em runtime | T10 step 10.2 |
-| Splash QSplashScreen | T11 |
-| `license_dialogs.py` substituindo `license_ui.py` | T11 |
-| Bootstrap de licença em `app.py` | T11 |
+| Splash custom com spinner + barra de progresso (paridade v1.63) | T11 step 11.1 |
+| Auto-update com feedback de progresso via QThread (paridade v1.63) | T11 steps 11.2–11.3, 11.5 |
+| `license_dialogs.py` substituindo `license_ui.py` | T11 step 11.4 |
+| Bootstrap de licença em `app.py` | T11 step 11.5 |
 | Remover "Deduzir dias nas colunas Qt" | Implícito — não codamos a feature em T7 (não está no código novo) |
-| `.spec` PyInstaller v2.0 com PySide6 hooks + excludes tkinter | T12 |
-| Bump APP_VERSION 1.60 → 2.0 | T12 step 12.1 |
-| `deploy.py` ajustado | T12 step 12.3 |
+| `.spec` PyInstaller v1.64 com PySide6 hooks + excludes tkinter | T12 |
+| Bump APP_VERSION 1.63 → 1.64 (segue auto-update normal) | T12 step 12.1 |
+| `deploy.py` — confirmado que não precisa mudar (nome do exe é dinâmico) | T12 step 12.3 |
 | `auto_update.py` intacto | (não há task — confirmado) |
 | Smoke tests + testes de módulos puros | T2, T3, T4, T5, T12 |
 | Verificação manual em VM limpa | T12 step 12.7 |
@@ -2407,4 +2620,12 @@ git merge --no-ff v2-pyside6 -m "release(v2.0): migração da UI para PySide6"
 
 **Issue identificada e corrigida:** em T5 step 5.1 a primeira versão de `PrimaryButton` tinha `self.setCursor(0)` errado. A versão correta abaixo usa `Qt.PointingHandCursor`. Mantive ambas com a nota; ao implementar, usar a segunda versão.
 
-Plano coerente. Pronto pra execução.
+**4. Atualização do plano (2026-05-28) — paridade com funções entradas após a v1.60:**
+
+O plano foi escrito na v1.60. Entre v1.60 e v1.63, o app Tkinter ganhou funções que precisavam ser portadas:
+- **Persistência de histórico** (v1.62): já coberta nativamente por T3 (`history.py`) + T9 (aba). Sem mudança necessária.
+- **Splash com spinner + barra de progresso e auto-update em thread com feedback** (v1.63): a T11 original tinha splash trivial (`QSplashScreen.showMessage`) e `check_and_update()` sem callbacks — **perderia** o feedback de download. Corrigido: T11 agora especifica `ui/splash.py` custom (spinner + barra, API `set_status`/`set_progress`/`hide_progress`), `ui/update_worker.py` (QThread + sinais `progress`/`status`), `app.py` dirigindo a splash via `QEventLoop` local, e `tests/ui/test_update_worker.py`. `.spec` inclui `ui.update_worker`/`ui.splash` em hiddenimports.
+
+O `auto_update.py` continua **intacto** — sua API (`on_progress`/`on_status`) já existia desde a v1.63 e é só consumida pelo novo worker.
+
+Plano coerente e atualizado. Pronto pra execução.
