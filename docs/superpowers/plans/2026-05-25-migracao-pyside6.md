@@ -1050,29 +1050,186 @@ git commit -m "feat(ui): MainWindow com 4 abas placeholder + app.py mínimo"
 
 ---
 
-## Task 7: Aba Ocorrências — Worker, wizard, log
+## Task 7: Aba Ocorrências — Worker (verificação única/dupla/tripla + modal de conflitos), wizard, log
+
+> **REESCRITA (2026-05-28):** a versão original desta task simplificava o processamento para um checkbox "Usar IA" e uma orquestração de IA incorreta. O app Tkinter real tem TRÊS modos de verificação e um modal de resolução de conflitos. Esta task porta esse fluxo com paridade total. Confirmado contra `processador.py` e o `app.py` da v1.63 (commit 060e1bc).
 
 **Files:**
-- Create: `ui/tabs/ocorrencias.py`
+- Create: `ui/widgets/conflict_dialog.py` (modal de resolução de conflitos)
+- Create: `ui/tabs/ocorrencias.py` (worker + aba)
+- Modify: `ui/widgets/__init__.py` (reexport ConflictDialog)
 - Modify: `ui/tabs/__init__.py`
 - Modify: `ui/main_window.py` (trocar placeholder pela aba real)
+- Test: `tests/ui/test_conflict_dialog.py`, `tests/ui/test_ocorrencias_worker.py`
 
-**Worker contract:**
+### Contrato real do `ProcessadorOcorrencias` (NÃO inventar — é isto):
+
 ```python
-class OcorrenciasWorker(QObject):
-    progress = Signal(int, str)
-    log = Signal(str)
-    finished = Signal(dict)
-    error = Signal(str, str)
-
-    def __init__(self, pdf_path, xlsx_path, output_path, codigos, usar_ia, api_key, gemini_model):
-        ...
-
-    def cancel(self): ...
-    def run(self): ...
+extrair_ocorrencias(pdf_path, codigos_alvo) -> dict   # {re: {'nome', 'ocorrencias': {cod: int}}}  (varredura por tabelas, "v1")
+extrair_ocorrencias_texto(pdf_path, codigos_alvo) -> dict  # idem ("v2", texto/regex); pode vir vazio
+verificar_com_ia(pdf_path, codigos_alvo, api_key, modelo) -> dict | None  # "v3" (Gemini Vision); None = falhou/fallback
+reconciliar(resultados: list, codigos_alvo) -> {'concordantes': {re: {...}}, 'conflitos': [{'re','nome','codigo','valores','sugestao'}]}
+    # resultados é uma LISTA: [v1, v2] ou [v1, v2, v3]
+processar(pdf_path, xlsx_path, output_path, codigos, progress_cb=None,
+          dias_mes=None, colunas_qt_sel=None, dados_externos=None)
+    -> {'total_pdf', 'matched', 'atualizados', 'nao_encontrados'}
+    # dados_externos = dict reconciliado {re: {'nome','ocorrencias'}}; None usa extração interna (modo única)
 ```
 
-- [ ] **Step 7.1: Implementar `ui/tabs/ocorrencias.py`**
+`conflito` em `conflitos` tem: `re` (str), `nome` (str), `codigo` (str), `valores` (dict {'v1':int,'v2':int,'ia':int}), `sugestao` (int = max dos valores).
+
+### Os 3 modos de verificação (StringVar 'unica'|'dupla'|'ia' no Tkinter):
+- `unica` — "Varredura única": só `processar(..., dados_externos=None)`.
+- `dupla` — "Dupla varredura": v1 + v2 (texto), reconcilia `[v1,v2]`, resolve conflitos, processa com concordantes.
+- `ia` — "Dupla + IA (Gemini)": v1 + v2 + v3 (IA), reconcilia `[v1,v2,v3]`, resolve conflitos, processa. Se `verificar_com_ia` devolve None, segue só com `[v1,v2]` (fallback) — registrar `ia_fallback=True`.
+
+Para `ia`: a API key e o modelo vêm de `settings.load()` (`api_key`, `gemini_model`), preenchidos na aba Configurações (Task 10).
+
+---
+
+- [ ] **Step 7.1: Implementar o modal de conflitos `ui/widgets/conflict_dialog.py`**
+
+`QDialog` modal que lista os conflitos e, para cada um, oferece radio buttons com os valores únicos (agrupando quais camadas votaram cada valor), com a sugestão pré-selecionada. Retorna lista `[(re, codigo, valor:int), ...]` ou `None` se cancelado.
+
+```python
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QButtonGroup, QDialog, QDialogButtonBox, QFrame, QLabel, QRadioButton,
+    QScrollArea, QVBoxLayout, QHBoxLayout, QWidget
+)
+
+_ROTULOS = {"v1": "V1 (tabelas)", "v2": "V2 (texto)", "ia": "IA (Gemini)"}
+
+
+class ConflictDialog(QDialog):
+    """Modal de resolução de conflitos entre camadas de extração.
+
+    conflitos: list de dicts {re, nome, codigo, valores:{camada:int}, sugestao:int}
+    Use .resultado() após exec(): lista [(re, codigo, valor), ...] ou None se cancelado.
+    """
+
+    def __init__(self, conflitos: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Conflitos encontrados")
+        self.setModal(True)
+        self.resize(760, 540)
+        self._grupos = {}   # (re, codigo) -> QButtonGroup
+        self._resultado = None
+
+        outer = QVBoxLayout(self)
+        outer.addWidget(QLabel(
+            f"<b>Conflitos encontrados — {len(conflitos)} item(s) precisam de revisão</b>"))
+        outer.addWidget(QLabel(
+            "Selecione o valor correto para cada conflito. A sugestão já está pré-selecionada."))
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        scroll.setWidget(body)
+        outer.addWidget(scroll, stretch=1)
+
+        for c in conflitos:
+            re_val, nome, cod = c["re"], c["nome"], c["codigo"]
+            valores, sug = c["valores"], c["sugestao"]
+
+            card = QFrame()
+            card.setObjectName("dropzone")  # reaproveita borda do tema
+            card_l = QVBoxLayout(card)
+            header = QHBoxLayout()
+            header.addWidget(QLabel(f"<b>RE {re_val}  —  {nome}</b>"))
+            header.addStretch()
+            header.addWidget(QLabel(f"Código: {cod}"))
+            card_l.addLayout(header)
+
+            group = QButtonGroup(card)
+            self._grupos[(re_val, cod)] = group
+            # agrupa valores únicos -> quais camadas votaram
+            valores_unicos = {}
+            for camada, val in valores.items():
+                if val is None:
+                    continue
+                valores_unicos.setdefault(val, []).append(_ROTULOS.get(camada, camada))
+            row = QHBoxLayout()
+            for val_opcao in sorted(valores_unicos):
+                camadas_label = ", ".join(valores_unicos[val_opcao])
+                rb = QRadioButton(f"{val_opcao} {cod}  ({camadas_label})")
+                rb.setProperty("valor", int(val_opcao))
+                if val_opcao == sug:
+                    rb.setChecked(True)
+                group.addButton(rb)
+                row.addWidget(rb)
+            row.addStretch()
+            card_l.addLayout(row)
+            body_layout.addWidget(card)
+        body_layout.addStretch()
+
+        btns = QDialogButtonBox(self)
+        b_ok = btns.addButton("Confirmar e gravar", QDialogButtonBox.AcceptRole)
+        b_ok.setObjectName("primary")
+        btns.addButton("Cancelar", QDialogButtonBox.RejectRole)
+        btns.accepted.connect(self._on_accept)
+        btns.rejected.connect(self.reject)
+        outer.addWidget(btns)
+
+    def _on_accept(self):
+        escolhas = []
+        for (re_val, cod), group in self._grupos.items():
+            btn = group.checkedButton()
+            if btn is not None:
+                escolhas.append((re_val, cod, int(btn.property("valor"))))
+        self._resultado = escolhas
+        self.accept()
+
+    def resultado(self):
+        return self._resultado
+```
+
+- [ ] **Step 7.2: Testar o modal (pytest-qt)**
+
+`tests/ui/test_conflict_dialog.py`:
+```python
+from ui.widgets.conflict_dialog import ConflictDialog
+
+
+def _conflito(**o):
+    base = {"re": "123", "nome": "FULANO", "codigo": "FA",
+            "valores": {"v1": 2, "v2": 3, "ia": 3}, "sugestao": 3}
+    base.update(o)
+    return base
+
+
+def test_dialog_preseleciona_sugestao_e_retorna_escolhas(qtbot):
+    dlg = ConflictDialog([_conflito()])
+    qtbot.addWidget(dlg)
+    # sem interação, a sugestão (3) deve estar pré-selecionada
+    dlg._on_accept()
+    assert dlg.resultado() == [("123", "FA", 3)]
+
+
+def test_dialog_agrupa_valores_unicos(qtbot):
+    # v2 e ia concordam em 3 -> uma opção "3"; v1=2 -> outra opção "2" => 2 radios
+    dlg = ConflictDialog([_conflito()])
+    qtbot.addWidget(dlg)
+    group = dlg._grupos[("123", "FA")]
+    assert len(group.buttons()) == 2
+
+
+def test_dialog_multiplos_conflitos(qtbot):
+    dlg = ConflictDialog([_conflito(), _conflito(re="999", codigo="AT",
+                                                  valores={"v1": 1, "v2": 0}, sugestao=1)])
+    qtbot.addWidget(dlg)
+    dlg._on_accept()
+    res = dict(((r, c), v) for r, c, v in dlg.resultado())
+    assert res[("123", "FA")] == 3
+    assert res[("999", "AT")] == 1
+```
+
+Run: `.venv/Scripts/python.exe -m pytest tests/ui/test_conflict_dialog.py -v` → 3 PASS.
+
+- [ ] **Step 7.3: Implementar worker + aba em `ui/tabs/ocorrencias.py`**
+
+O worker roda numa `QThread`. Quando há conflitos, ele **pausa** e pede resolução à thread de UI via sinal + `QWaitCondition`. A aba, ao receber o sinal `conflitos_detectados`, abre o `ConflictDialog` (na thread principal) e devolve as escolhas (ou cancelamento) chamando `worker.fornecer_resolucao(...)`.
 
 ```python
 import os
@@ -1081,36 +1238,63 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal, Qt
+from PySide6.QtCore import QObject, QThread, Signal, QMutex, QWaitCondition, Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QVBoxLayout, QWidget
+    QButtonGroup, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QRadioButton, QVBoxLayout, QWidget
 )
 
 from processador import ProcessadorOcorrencias
 from ui import history, settings
 from ui.widgets import DropZone, LogPanel, PrimaryButton, SectionCard
+from ui.widgets.conflict_dialog import ConflictDialog
+
+
+class _Cancelled(Exception):
+    pass
 
 
 class OcorrenciasWorker(QObject):
     progress = Signal(int, str)
     log = Signal(str)
+    conflitos_detectados = Signal(list)   # emite list de conflitos; espera resolução
     finished = Signal(dict)
     error = Signal(str, str)
 
-    def __init__(self, pdf_path, xlsx_path, output_path, codigos, usar_ia, api_key, gemini_model):
+    def __init__(self, pdf_path, xlsx_path, output_path, codigos,
+                 modo, api_key, gemini_model):
         super().__init__()
         self.pdf_path = pdf_path
         self.xlsx_path = xlsx_path
         self.output_path = output_path
         self.codigos = codigos
-        self.usar_ia = usar_ia
+        self.modo = modo            # 'unica' | 'dupla' | 'ia'
         self.api_key = api_key
         self.gemini_model = gemini_model
         self._cancel = False
+        self._mutex = QMutex()
+        self._cond = QWaitCondition()
+        self._resolucao = None       # list[(re,cod,val)] | None
+        self._resolucao_pronta = False
 
     def cancel(self):
         self._cancel = True
+
+    def fornecer_resolucao(self, escolhas):
+        """Chamado pela thread de UI com a lista de escolhas (ou None se cancelou)."""
+        self._mutex.lock()
+        self._resolucao = escolhas
+        self._resolucao_pronta = True
+        self._cond.wakeAll()
+        self._mutex.unlock()
+
+    def _esperar_resolucao(self):
+        self._mutex.lock()
+        while not self._resolucao_pronta:
+            self._cond.wait(self._mutex)
+        escolhas = self._resolucao
+        self._mutex.unlock()
+        return escolhas
 
     def run(self):
         t0 = time.monotonic()
@@ -1118,53 +1302,75 @@ class OcorrenciasWorker(QObject):
             proc = ProcessadorOcorrencias()
 
             def cb(pct, msg):
-                self.progress.emit(int(pct), msg)
-                self.log.emit(msg)
-                # checagem cooperativa de cancelamento
                 if self._cancel:
                     raise _Cancelled()
+                self.progress.emit(int(pct), msg)
+                self.log.emit(msg)
 
-            if self.usar_ia and self.api_key:
-                self.log.emit("Verificando com IA...")
+            info_verif = {"modo": self.modo, "ia_usada": False, "ia_fallback": False}
+            dados_externos = None
+
+            if self.modo in ("dupla", "ia"):
+                cb(5, "Lendo PDF (varredura 1)...")
                 v1 = proc.extrair_ocorrencias(self.pdf_path, self.codigos)
+                cb(20, "Varredura 2 (texto/regex)...")
                 v2 = proc.extrair_ocorrencias_texto(self.pdf_path, self.codigos)
-                dados = proc.reconciliar(v1, v2, self.codigos)
-                # se houver divergência grave, dispara verificação com IA
-                ai_result = proc.verificar_com_ia(self.pdf_path, self.codigos,
-                                                   self.api_key, self.gemini_model)
-                if ai_result is not None:
-                    dados = ai_result
-                result = proc.processar(self.pdf_path, self.xlsx_path, self.output_path,
-                                        self.codigos, progress_cb=cb, dados_externos=dados)
-            else:
-                result = proc.processar(self.pdf_path, self.xlsx_path, self.output_path,
-                                        self.codigos, progress_cb=cb)
+                camadas = [v1] if not v2 else [v1, v2]
 
-            duration = time.monotonic() - t0
+                if self.modo == "ia":
+                    cb(35, "Verificando com IA (Gemini Vision)...")
+                    v3 = proc.verificar_com_ia(self.pdf_path, self.codigos,
+                                               self.api_key, self.gemini_model)
+                    if v3 is not None:
+                        camadas.append(v3)
+                        info_verif["ia_usada"] = True
+                    else:
+                        info_verif["ia_fallback"] = True
+                        self.log.emit("IA indisponível — seguindo com V1+V2 (fallback).")
+
+                cb(45, "Reconciliando resultados...")
+                rec = proc.reconciliar(camadas, self.codigos)
+                concordantes = rec["concordantes"]
+                conflitos = rec["conflitos"]
+
+                if conflitos:
+                    self.conflitos_detectados.emit(conflitos)
+                    escolhas = self._esperar_resolucao()
+                    if escolhas is None:
+                        self.finished.emit({"status": "cancelled",
+                                            "duration": time.monotonic() - t0})
+                        return
+                    for re_val, cod, val in escolhas:
+                        if re_val not in concordantes:
+                            nome = next((c.get(re_val, {}).get("nome", "")
+                                         for c in camadas if re_val in c), "")
+                            concordantes[re_val] = {"nome": nome, "ocorrencias": {}}
+                        concordantes[re_val]["ocorrencias"][cod] = val
+
+                dados_externos = concordantes
+                info_verif["concordantes"] = len(concordantes)
+                info_verif["conflitos_resolvidos"] = len(conflitos)
+
+            result = proc.processar(self.pdf_path, self.xlsx_path, self.output_path,
+                                    self.codigos, progress_cb=cb,
+                                    dados_externos=dados_externos)
             self.finished.emit({
                 "status": "ok",
                 "output_path": self.output_path,
-                "duration": duration,
+                "duration": time.monotonic() - t0,
                 "matched": result.get("matched", 0),
                 "total_pdf": result.get("total_pdf", 0),
+                "info_verif": info_verif,
             })
         except _Cancelled:
             self.finished.emit({"status": "cancelled", "duration": time.monotonic() - t0})
         except Exception as e:
-            tb = traceback.format_exc()
-            self.error.emit(f"{type(e).__name__}: {e}", tb)
-
-
-class _Cancelled(Exception):
-    pass
+            self.error.emit(f"{type(e).__name__}: {e}", traceback.format_exc())
 
 
 class OcorrenciasTab(QWidget):
-    """Aba principal — wizard vertical."""
-
     DEFAULT_CODIGOS = "FA, AT, A-, SD, LC, AA, AP, LM, FE, 14, 13"
-
-    processed = Signal(dict)  # entry do histórico
+    processed = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1177,27 +1383,22 @@ class OcorrenciasTab(QWidget):
         layout.setSpacing(12)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        # Card 1
         card_pdf = SectionCard(1, "PDF de jornada", self)
         self._dz_pdf = DropZone("Arraste o PDF ou clique para selecionar", (".pdf",))
         self._lbl_pdf = QLabel("nenhum arquivo selecionado", self)
         self._lbl_pdf.setStyleSheet("color: #8b949e;")
         self._dz_pdf.files_selected.connect(self._on_pdf_selected)
-        card_pdf.add(self._dz_pdf)
-        card_pdf.add(self._lbl_pdf)
+        card_pdf.add(self._dz_pdf); card_pdf.add(self._lbl_pdf)
         layout.addWidget(card_pdf)
 
-        # Card 2
         card_xlsx = SectionCard(2, "Planilha de pedido", self)
         self._dz_xlsx = DropZone("Arraste o .xlsx ou clique para selecionar", (".xlsx",))
         self._lbl_xlsx = QLabel("nenhum arquivo selecionado", self)
         self._lbl_xlsx.setStyleSheet("color: #8b949e;")
         self._dz_xlsx.files_selected.connect(self._on_xlsx_selected)
-        card_xlsx.add(self._dz_xlsx)
-        card_xlsx.add(self._lbl_xlsx)
+        card_xlsx.add(self._dz_xlsx); card_xlsx.add(self._lbl_xlsx)
         layout.addWidget(card_xlsx)
 
-        # Card 3 opções
         card_opt = SectionCard(3, "Opções", self)
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Códigos:"))
@@ -1205,13 +1406,25 @@ class OcorrenciasTab(QWidget):
         row1.addWidget(self._ed_codigos)
         wrap1 = QWidget(); wrap1.setLayout(row1)
         card_opt.add(wrap1)
-        self._chk_ia = QCheckBox("Usar IA para refinar (Gemini)")
-        card_opt.add(self._chk_ia)
+        # seletor de modo de verificação
+        self._modo_group = QButtonGroup(self)
+        modos = [("unica", "Varredura única"),
+                 ("dupla", "Dupla varredura (V1 tabelas + V2 texto)"),
+                 ("ia", "Dupla + IA (Gemini)")]
+        modo_row = QVBoxLayout()
+        modo_row.addWidget(QLabel("Verificação:"))
+        for i, (val, label) in enumerate(modos):
+            rb = QRadioButton(label)
+            rb.setProperty("modo", val)
+            if val == "unica":
+                rb.setChecked(True)
+            self._modo_group.addButton(rb, i)
+            modo_row.addWidget(rb)
+        wrap_modo = QWidget(); wrap_modo.setLayout(modo_row)
+        card_opt.add(wrap_modo)
         layout.addWidget(card_opt)
 
-        # Botão Processar
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
+        btn_row = QHBoxLayout(); btn_row.addStretch()
         self._btn = PrimaryButton("▶ Processar")
         self._btn.setEnabled(False)
         self._btn.clicked.connect(self._on_button_clicked)
@@ -1219,31 +1432,24 @@ class OcorrenciasTab(QWidget):
         btn_wrap = QWidget(); btn_wrap.setLayout(btn_row)
         layout.addWidget(btn_wrap)
 
-        # Log
         self._log = LogPanel(self)
         layout.addWidget(self._log, stretch=1)
 
-    # ---------- estado ----------
+    def _modo_atual(self) -> str:
+        btn = self._modo_group.checkedButton()
+        return btn.property("modo") if btn else "unica"
 
     def _refresh_state(self):
-        ready = self._pdf is not None and self._xlsx is not None and self._thread is None
-        self._btn.setEnabled(ready)
+        self._btn.setEnabled(self._pdf is not None and self._xlsx is not None and self._thread is None)
 
     def _on_pdf_selected(self, paths):
-        self._pdf = paths[0]
-        self._lbl_pdf.setText(os.path.basename(self._pdf))
-        self._refresh_state()
+        self._pdf = paths[0]; self._lbl_pdf.setText(os.path.basename(self._pdf)); self._refresh_state()
 
     def _on_xlsx_selected(self, paths):
-        self._xlsx = paths[0]
-        self._lbl_xlsx.setText(os.path.basename(self._xlsx))
-        self._refresh_state()
-
-    # ---------- run ----------
+        self._xlsx = paths[0]; self._lbl_xlsx.setText(os.path.basename(self._xlsx)); self._refresh_state()
 
     def _on_button_clicked(self):
         if self._thread is not None:
-            # botão está em modo cancelar
             self._worker.cancel()
             self._log.append("cancelando...", level="warning")
             return
@@ -1254,35 +1460,39 @@ class OcorrenciasTab(QWidget):
         if not codigos:
             QMessageBox.warning(self, "Códigos", "Informe pelo menos um código de ocorrência.")
             return
-        default_dir = settings.load().get("last_dir") or os.path.dirname(self._xlsx)
+        modo = self._modo_atual()
+        cfg = settings.load()
+        api_key = cfg.get("api_key", "")
+        gemini_model = cfg.get("gemini_model", "gemini-2.5-flash")
+        if modo == "ia" and not api_key:
+            QMessageBox.warning(self, "API key",
+                                "Modo 'Dupla + IA' exige uma API key do Gemini em Configurações.")
+            return
+
+        default_dir = cfg.get("last_dir") or os.path.dirname(self._xlsx)
         suggested = os.path.join(default_dir, Path(self._xlsx).stem + "_out.xlsx")
         output, _ = QFileDialog.getSaveFileName(self, "Salvar planilha como",
-                                                  suggested, "Excel (*.xlsx)")
+                                                 suggested, "Excel (*.xlsx)")
         if not output:
             return
         settings.save({"last_dir": os.path.dirname(output)})
 
-        cfg = settings.load()
-        usar_ia = self._chk_ia.isChecked()
-        api_key = cfg.get("api_key", "") if usar_ia else ""
-        if usar_ia and not api_key:
-            QMessageBox.warning(self, "API key", "IA marcada mas não há API key em Configurações.")
-            return
-        gemini_model = cfg.get("gemini_model", "gemini-2.5-flash")
-
         self._log.clear()
-        self._log.append(f"iniciando ({Path(self._pdf).name} → {Path(output).name})")
+        self._log.append(f"iniciando [{modo}] ({Path(self._pdf).name} → {Path(output).name})")
         self._dz_pdf.setEnabled(False); self._dz_xlsx.setEnabled(False)
-        self._ed_codigos.setEnabled(False); self._chk_ia.setEnabled(False)
+        self._ed_codigos.setEnabled(False)
+        for b in self._modo_group.buttons():
+            b.setEnabled(False)
         self._btn.set_mode("warning"); self._btn.setText("Cancelar")
 
         self._thread = QThread(self)
         self._worker = OcorrenciasWorker(self._pdf, self._xlsx, output, codigos,
-                                          usar_ia, api_key, gemini_model)
+                                         modo, api_key, gemini_model)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(self._on_progress)
         self._worker.log.connect(lambda m: self._log.append(m))
+        self._worker.conflitos_detectados.connect(self._on_conflitos)
         self._worker.finished.connect(self._on_finished)
         self._worker.error.connect(self._on_error)
         self._worker.finished.connect(self._thread.quit)
@@ -1293,13 +1503,27 @@ class OcorrenciasTab(QWidget):
     def _on_progress(self, pct, msg):
         self._log.set_progress(pct, visible=True)
 
+    def _on_conflitos(self, conflitos):
+        # roda na thread de UI; abre modal e devolve a resolução ao worker
+        dlg = ConflictDialog(conflitos, self)
+        dlg.exec()
+        self._worker.fornecer_resolucao(dlg.resultado())
+
     def _on_finished(self, info):
         status = info.get("status", "ok")
         duration = info.get("duration", 0.0)
         if status == "ok":
-            self._log.append(f"concluído em {duration:.1f}s — {info.get('matched',0)}/{info.get('total_pdf',0)} matches", level="success")
+            iv = info.get("info_verif", {})
+            extra = ""
+            if iv.get("ia_fallback"):
+                extra = " (IA em fallback)"
+            elif iv.get("ia_usada"):
+                extra = " (IA usada)"
+            self._log.append(
+                f"concluído em {duration:.1f}s — {info.get('matched',0)}/{info.get('total_pdf',0)} matches{extra}",
+                level="success")
         elif status == "cancelled":
-            self._log.append("cancelado pelo usuário", level="warning")
+            self._log.append("cancelado", level="warning")
         self._log.set_progress(100 if status == "ok" else 0, visible=False)
         self._emit_history(info)
 
@@ -1310,15 +1534,16 @@ class OcorrenciasTab(QWidget):
         self._emit_history({"status": "error", "error": msg, "duration": 0.0})
 
     def _cleanup_thread(self):
-        self._thread = None
-        self._worker = None
+        self._thread = None; self._worker = None
         self._dz_pdf.setEnabled(True); self._dz_xlsx.setEnabled(True)
-        self._ed_codigos.setEnabled(True); self._chk_ia.setEnabled(True)
+        self._ed_codigos.setEnabled(True)
+        for b in self._modo_group.buttons():
+            b.setEnabled(True)
         self._btn.set_mode("primary"); self._btn.setText("▶ Processar")
         self._refresh_state()
 
     def _emit_history(self, info):
-        entry = {
+        self.processed.emit({
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "tipo": "ocorrencias",
             "inputs": [self._pdf, self._xlsx],
@@ -1327,49 +1552,110 @@ class OcorrenciasTab(QWidget):
             "duration_seconds": round(info.get("duration", 0.0), 2),
             "rows_processed": info.get("matched"),
             "error": info.get("error"),
-        }
-        self.processed.emit(entry)
+        })
 ```
 
-- [ ] **Step 7.2: Reexportar em `ui/tabs/__init__.py`**
+- [ ] **Step 7.4: Testar o worker em modo 'unica' (sem Qt event loop pesado)**
 
+O worker pode ser testado com um `ProcessadorOcorrencias` fake injetável? Não — o worker instancia `ProcessadorOcorrencias()` direto. Para teste unitário, faça monkeypatch de `processador.ProcessadorOcorrencias` (ou de `ui.tabs.ocorrencias.ProcessadorOcorrencias`) por um stub que registra as chamadas.
+
+`tests/ui/test_ocorrencias_worker.py`:
+```python
+import ui.tabs.ocorrencias as oco
+
+
+class _FakeProc:
+    def __init__(self):
+        _FakeProc.last = self
+        self.chamadas = []
+    def extrair_ocorrencias(self, pdf, cods):
+        self.chamadas.append("v1"); return {"1": {"nome": "A", "ocorrencias": {"FA": 1}}}
+    def extrair_ocorrencias_texto(self, pdf, cods):
+        self.chamadas.append("v2"); return {"1": {"nome": "A", "ocorrencias": {"FA": 1}}}
+    def verificar_com_ia(self, pdf, cods, key, modelo):
+        self.chamadas.append("ia"); return None
+    def reconciliar(self, camadas, cods):
+        self.chamadas.append(f"rec:{len(camadas)}")
+        return {"concordantes": {"1": {"nome": "A", "ocorrencias": {"FA": 1}}}, "conflitos": []}
+    def processar(self, pdf, xlsx, out, cods, progress_cb=None, dados_externos=None, **kw):
+        self.chamadas.append(f"proc:ext={dados_externos is not None}")
+        if progress_cb: progress_cb(100, "ok")
+        return {"matched": 1, "total_pdf": 1}
+
+
+def test_worker_modo_unica_nao_reconcilia(qtbot, monkeypatch):
+    monkeypatch.setattr(oco, "ProcessadorOcorrencias", _FakeProc)
+    w = oco.OcorrenciasWorker("a.pdf", "b.xlsx", "out.xlsx", ["FA"], "unica", "", "m")
+    with qtbot.waitSignal(w.finished, timeout=3000) as bl:
+        w.run()
+    assert bl.args[0]["status"] == "ok"
+    assert "proc:ext=False" in _FakeProc.last.chamadas
+    assert not any(c.startswith("rec") for c in _FakeProc.last.chamadas)
+
+
+def test_worker_modo_dupla_reconcilia_sem_conflitos(qtbot, monkeypatch):
+    monkeypatch.setattr(oco, "ProcessadorOcorrencias", _FakeProc)
+    w = oco.OcorrenciasWorker("a.pdf", "b.xlsx", "out.xlsx", ["FA"], "dupla", "", "m")
+    with qtbot.waitSignal(w.finished, timeout=3000) as bl:
+        w.run()
+    assert bl.args[0]["status"] == "ok"
+    c = _FakeProc.last.chamadas
+    assert "v1" in c and "v2" in c and "rec:2" in c and "proc:ext=True" in c
+
+
+def test_worker_modo_ia_fallback_quando_ia_none(qtbot, monkeypatch):
+    monkeypatch.setattr(oco, "ProcessadorOcorrencias", _FakeProc)
+    w = oco.OcorrenciasWorker("a.pdf", "b.xlsx", "out.xlsx", ["FA"], "ia", "k", "m")
+    with qtbot.waitSignal(w.finished, timeout=3000) as bl:
+        w.run()
+    assert bl.args[0]["info_verif"]["ia_fallback"] is True
+    # IA retornou None => reconciliou só com [v1, v2]
+    assert "rec:2" in _FakeProc.last.chamadas
+```
+
+Run: `.venv/Scripts/python.exe -m pytest tests/ui/test_ocorrencias_worker.py -v` → 3 PASS.
+
+- [ ] **Step 7.5: Reexports + plug na MainWindow**
+
+`ui/widgets/__init__.py` — adicionar:
+```python
+from ui.widgets.conflict_dialog import ConflictDialog
+```
+e incluir `"ConflictDialog"` no `__all__`.
+
+`ui/tabs/__init__.py`:
 ```python
 from ui.tabs.ocorrencias import OcorrenciasTab
 
 __all__ = ["OcorrenciasTab"]
 ```
 
-- [ ] **Step 7.3: Plug na `MainWindow`**
-
-Edit `ui/main_window.py` — trocar a aba "Ocorrências" pelo widget real:
-
+`ui/main_window.py` — trocar o placeholder de "Ocorrências":
 ```python
-# import no topo:
 from ui import history
 from ui.tabs import OcorrenciasTab
-
-# dentro de __init__, substituir:
-# self._tabs.addTab(self._placeholder("Ocorrências"), "Ocorrências")
-# por:
+# ...
 oco = OcorrenciasTab(self)
 oco.processed.connect(self._on_processed)
 self._tabs.addTab(oco, "Ocorrências")
 
-# novo método:
 def _on_processed(self, entry: dict) -> None:
     history.append(entry)
 ```
 
-- [ ] **Step 7.4: Teste manual com PDF real**
+- [ ] **Step 7.6: Smoke offscreen + (se possível) teste manual**
 
-Run: `python app.py`
-Expected: aba Ocorrências abre; arraste 1 PDF e 1 XLSX; clique Processar; escolhe saída; log enche; processa; aparece "✔ concluído". Fechar app; abrir `~/.ocorrencias_history.json` e ver entrada.
+Smoke (deve construir sem crash):
+```
+QT_QPA_PLATFORM=offscreen .venv/Scripts/python.exe -c "import os; os.environ['QT_QPA_PLATFORM']='offscreen'; from PySide6.QtWidgets import QApplication; import sys; app=QApplication(sys.argv); from ui.main_window import MainWindow; w=MainWindow(); print('tabs', w._tabs.count())"
+```
+Teste manual (se houver display): aba abre; arraste 1 PDF + 1 XLSX; escolha modo; Processar; em modo dupla/ia com divergências, o modal de conflitos abre; resolver; log mostra "concluído".
 
-- [ ] **Step 7.5: Commit**
+- [ ] **Step 7.7: Commit**
 
 ```bash
-git add ui/tabs/ocorrencias.py ui/tabs/__init__.py ui/main_window.py
-git commit -m "feat(ui): aba Ocorrências end-to-end com QThread worker"
+git add ui/widgets/conflict_dialog.py ui/widgets/__init__.py ui/tabs/ocorrencias.py ui/tabs/__init__.py ui/main_window.py tests/ui/test_conflict_dialog.py tests/ui/test_ocorrencias_worker.py
+git commit -m "feat(ui): aba Ocorrências com verificação única/dupla/tripla e modal de conflitos"
 ```
 
 ---
