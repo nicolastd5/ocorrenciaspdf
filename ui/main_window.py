@@ -2,7 +2,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QLabel, QMainWindow, QStatusBar, QTabWidget, QWidget
 
-from ui import settings, theme
+from ui import history, settings, theme
+from ui.tabs import OcorrenciasTab
 
 
 class MainWindow(QMainWindow):
@@ -13,7 +14,9 @@ class MainWindow(QMainWindow):
         self._restore_geometry()
 
         self._tabs = QTabWidget(self)
-        self._tabs.addTab(self._placeholder("Ocorrências"), "Ocorrências")
+        oco = OcorrenciasTab(self)
+        oco.processed.connect(self._on_processed)
+        self._tabs.addTab(oco, "Ocorrências")
         self._tabs.addTab(self._placeholder("VT-Caixa"), "VT-Caixa")
         self._tabs.addTab(self._placeholder("Histórico"), "Histórico")
         self._tabs.addTab(self._placeholder("Configurações"), "Configurações")
@@ -23,6 +26,9 @@ class MainWindow(QMainWindow):
         self.setStatusBar(sb)
         from license_client import LicenseClient
         sb.showMessage(f"v{LicenseClient.APP_VERSION}  ·  licença OK")
+
+    def _on_processed(self, entry: dict) -> None:
+        history.append(entry)
 
     def _placeholder(self, name: str) -> QWidget:
         from PySide6.QtWidgets import QVBoxLayout
