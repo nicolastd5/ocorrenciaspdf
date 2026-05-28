@@ -3,7 +3,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QLabel, QMainWindow, QStatusBar, QTabWidget, QWidget
 
 from ui import history, settings, theme
-from ui.tabs import OcorrenciasTab, VTCaixaTab, HistoricoTab
+from ui.tabs import OcorrenciasTab, VTCaixaTab, HistoricoTab, ConfiguracoesTab
 
 
 class MainWindow(QMainWindow):
@@ -22,13 +22,19 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(vtc, "VT-Caixa")
         self._historico = HistoricoTab(self)
         self._tabs.addTab(self._historico, "Histórico")
-        self._tabs.addTab(self._placeholder("Configurações"), "Configurações")
+        cfg_tab = ConfiguracoesTab(self)
+        cfg_tab.theme_changed.connect(self._apply_theme_runtime)
+        self._tabs.addTab(cfg_tab, "Configurações")
         self.setCentralWidget(self._tabs)
 
         sb = QStatusBar(self)
         self.setStatusBar(sb)
         from license_client import LicenseClient
         sb.showMessage(f"v{LicenseClient.APP_VERSION}  ·  licença OK")
+
+    def _apply_theme_runtime(self, mode: str) -> None:
+        from PySide6.QtWidgets import QApplication
+        theme.apply_theme(QApplication.instance(), mode)
 
     def _on_processed(self, entry: dict) -> None:
         history.append(entry)
