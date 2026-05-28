@@ -3,7 +3,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QLabel, QMainWindow, QStatusBar, QTabWidget, QWidget
 
 from ui import history, settings, theme
-from ui.tabs import OcorrenciasTab, VTCaixaTab
+from ui.tabs import OcorrenciasTab, VTCaixaTab, HistoricoTab
 
 
 class MainWindow(QMainWindow):
@@ -20,7 +20,8 @@ class MainWindow(QMainWindow):
         vtc = VTCaixaTab(self)
         vtc.processed.connect(self._on_processed)
         self._tabs.addTab(vtc, "VT-Caixa")
-        self._tabs.addTab(self._placeholder("Histórico"), "Histórico")
+        self._historico = HistoricoTab(self)
+        self._tabs.addTab(self._historico, "Histórico")
         self._tabs.addTab(self._placeholder("Configurações"), "Configurações")
         self.setCentralWidget(self._tabs)
 
@@ -31,6 +32,7 @@ class MainWindow(QMainWindow):
 
     def _on_processed(self, entry: dict) -> None:
         history.append(entry)
+        self._historico.refresh()
 
     def _placeholder(self, name: str) -> QWidget:
         from PySide6.QtWidgets import QVBoxLayout
