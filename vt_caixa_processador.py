@@ -862,6 +862,31 @@ class ProcessadorVTCaixa:
         ('SIND CARD', None, '5696'),
     ]
 
+    # Substituições de departamento (original -> substituto) aplicadas no processamento.
+    _DEPART_MAP = {
+        'CEF LESTE 10 SP 4719/2022': 'CEF 10 84',
+        'CEF 17 CONTRATO 477/2026':  'CEF 17 LIMPEZA',
+        'CEF 12 AMAZONAS - AM e RR': 'CEF 12 87',
+        'CEF BAIXADA 11 SP 4820/2022': 'CEF 11 85',
+        'POLICIA FED SHOP FLAMINGO':      'PF SHOPPING FLAMINGO',
+        'DPF - SUPERINT POLICIA FEDERAL': 'PF SAO PAULO',
+        'SP - DPF CAMPINAS':              'PF CAMPINAS',
+        'SP - DPF SANTOS':                'PF SANTOS',
+        'SP - DPF SAO JOSE DOS CAMPOS':   'PF SAO JOSE DOS CAMPOS',
+        'SP - DPF SOROCABA':              'PF SOROCABA',
+        'POLIC FED AEROPORTO GUARULHOS':  'PF GUARULHOS',
+        'SP - DPF MARILIA':               'PF MARILIA',
+        'SP - DPF RIBEIRAO PRETO':        'PF RIBEIRAO PRETO',
+        'SP - DPF PIRACICABA':            'PF PIRACICABA',
+        'SP - DPF BAURU':                 'PF BAURU',
+        'SP - DPF COMPLEXO AGUA BRANCA':  'PF AGUA BRANCA',
+        'POLICIA FED CONGONHAS':          'PF CONGONHAS',
+        'B BRASIL RJ 2022.7421.6922':     'BB RJ 89',
+        'CEF 14 DF':                      'CEF 14 DF 90',
+        'CEF 15 RS 4916':                 'CEF 15 RS',
+        'ELETRONUCLEAR RECEP 4500070400': 'ELETRONUCLEAR RECEP 97',
+    }
+
     def _resolver_codigo_beneficio(self, administradora, valor_unitario):
         """Retorna o código de benefício quando a operadora+valor bate uma regra, ou None."""
         adm_up = administradora.upper()
@@ -933,34 +958,11 @@ class ProcessadorVTCaixa:
             if adm_forn:
                 reg[chave_benef] = self._sanitizar(adm_forn)
 
-        # Substituições de departamento
-        _DEPART_MAP = {
-            'CEF LESTE 10 SP 4719/2022': 'CEF 10 84',
-            'CEF 17 CONTRATO 477/2026':  'CEF 17 LIMPEZA',
-            'CEF 12 AMAZONAS - AM e RR': 'CEF 12 87',
-            'CEF BAIXADA 11 SP 4820/2022': 'CEF 11 85',
-            'POLICIA FED SHOP FLAMINGO':      'PF SHOPPING FLAMINGO',
-            'DPF - SUPERINT POLICIA FEDERAL': 'PF SAO PAULO',
-            'SP - DPF CAMPINAS':              'PF CAMPINAS',
-            'SP - DPF SANTOS':                'PF SANTOS',
-            'SP - DPF SAO JOSE DOS CAMPOS':   'PF SAO JOSE DOS CAMPOS',
-            'SP - DPF SOROCABA':              'PF SOROCABA',
-            'POLIC FED AEROPORTO GUARULHOS':  'PF GUARULHOS',
-            'SP - DPF MARILIA':               'PF MARILIA',
-            'SP - DPF RIBEIRAO PRETO':        'PF RIBEIRAO PRETO',
-            'SP - DPF PIRACICABA':            'PF PIRACICABA',
-            'SP - DPF BAURU':                 'PF BAURU',
-            'SP - DPF COMPLEXO AGUA BRANCA':  'PF AGUA BRANCA',
-            'POLICIA FED CONGONHAS':          'PF CONGONHAS',
-            'B BRASIL RJ 2022.7421.6922':     'BB RJ 89',
-            'CEF 14 DF':                      'CEF 14 DF 90',
-            'CEF 15 RS 4916':                 'CEF 15 RS',
-            'ELETRONUCLEAR RECEP 4500070400': 'ELETRONUCLEAR RECEP 97',
-        }
+        # Substituições de departamento (mapa em self._DEPART_MAP, atributo de classe)
         for reg in registros:
             depart = reg.get('DEPARTAMENTO', '')
-            if depart in _DEPART_MAP:
-                reg['DEPARTAMENTO'] = _DEPART_MAP[depart]
+            if depart in self._DEPART_MAP:
+                reg['DEPARTAMENTO'] = self._DEPART_MAP[depart]
 
         # Substituir BENEFÍCIO DO FUNCIONÁRIO pelo código quando operadora+valor bater uma regra
         for reg in registros:
