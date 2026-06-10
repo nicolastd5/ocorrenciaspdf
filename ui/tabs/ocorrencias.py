@@ -6,13 +6,13 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, Signal, QMutex, QWaitCondition, Qt
 from PySide6.QtWidgets import (
-    QButtonGroup, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QRadioButton, QVBoxLayout, QWidget
+    QButtonGroup, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QRadioButton, QScrollArea, QVBoxLayout, QWidget
 )
 
 from processador import ProcessadorOcorrencias
 from ui import history, settings
-from ui.widgets import DropZone, LogPanel, PrimaryButton, SectionCard
+from ui.widgets import DropZone, KpiStrip, KpiTile, LogPanel, Panel, PrimaryButton, SectionCard
 from ui.widgets.conflict_dialog import ConflictDialog
 
 
@@ -143,26 +143,47 @@ class OcorrenciasTab(QWidget):
         self._xlsx = None
         self._thread = None
         self._worker = None
+        self._showing_result = False
 
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-        layout.setContentsMargins(16, 16, 16, 16)
+        # ---- raiz rolável ----
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(scroll)
+        page = QWidget()
+        page.setStyleSheet("background: transparent;")
+        scroll.setWidget(page)
 
-        card_pdf = SectionCard(1, "PDF de jornada", self)
-        self._dz_pdf = DropZone("Arraste o PDF ou clique para selecionar", (".pdf",))
-        self._lbl_pdf = QLabel("nenhum arquivo selecionado", self)
-        self._lbl_pdf.setStyleSheet("color: #8b949e;")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(16)
+        layout.setContentsMargins(20, 20, 22, 24)
+
+        layout.addWidget(self._page_head(
+            "Ocorrências",
+            "Leia o PDF de jornada, reconcilie as varreduras e gere a planilha de saída."
+        ))
+
+        # ---- workspace em duas colunas ----
+        split = QHBoxLayout(); split.setSpacing(16)
+
+        # coluna esquerda: passos
+        left = QVBoxLayout(); left.setSpacing(14)
+
+        self._card_pdf = SectionCard(1, "PDF de jornada", self)
+        self._dz_pdf = DropZone("Arraste o PDF de jornada", (".pdf",))
         self._dz_pdf.files_selected.connect(self._on_pdf_selected)
-        card_pdf.add(self._dz_pdf); card_pdf.add(self._lbl_pdf)
-        layout.addWidget(card_pdf)
+        self._dz_pdf.removed.connect(self._on_pdf_removed)
+        self._card_pdf.add(self._dz_pdf)
+        left.addWidget(self._card_pdf)
 
-        card_xlsx = SectionCard(2, "Planilha de pedido", self)
-        self._dz_xlsx = DropZone("Arraste o .xlsx ou clique para selecionar", (".xlsx",))
-        self._lbl_xlsx = QLabel("nenhum arquivo selecionado", self)
-        self._lbl_xlsx.setStyleSheet("color: #8b949e;")
+        self._card_xlsx = SectionCard(2, "Planilha de pedido", self)
+        self._dz_xlsx = DropZone("Arraste o .xlsx do pedido", (".xlsx",))
         self._dz_xlsx.files_selected.connect(self._on_xlsx_selected)
-        card_xlsx.add(self._dz_xlsx); card_xlsx.add(self._lbl_xlsx)
-        layout.addWidget(card_xlsx)
+        self._dz_xlsx.removed.connect(self._on_xlsx_removed)
+        self._card_xlsx.add(self._dz_xlsx)
+        left.addWidget(self._card_xlsx)
 
         card_opt = SectionCard(3, "Opções", self)
         row1 = QHBoxLayout()
@@ -198,18 +219,101 @@ class OcorrenciasTab(QWidget):
             modo_row.addWidget(rb)
         wrap_modo = QWidget(); wrap_modo.setLayout(modo_row)
         card_opt.add(wrap_modo)
-        layout.addWidget(card_opt)
+        left.addWidget(card_opt)
+        left.addStretch()
 
-        btn_row = QHBoxLayout(); btn_row.addStretch()
+        left_wrap = QWidget(); left_wrap.setLayout(left)
+        left_wrap.setStyleSheet("background: transparent;")
+        split.addWidget(left_wrap, stretch=5)
+
+        # coluna direita: execução (resumo/KPIs + log)
+        self._panel = Panel("Execução", self)
         self._btn = PrimaryButton("▶ Processar")
         self._btn.setEnabled(False)
         self._btn.clicked.connect(self._on_button_clicked)
-        btn_row.addWidget(self._btn)
-        btn_wrap = QWidget(); btn_wrap.setLayout(btn_row)
-        layout.addWidget(btn_wrap)
+        self._panel.add_header_widget(self._btn)
+
+        # área de resumo que troca entre "pronto" e KPIs de resultado
+        self._summary = QWidget()
+        self._summary.setStyleSheet("background: transparent;")
+        self._summary_lay = QVBoxLayout(self._summary)
+        self._summary_lay.setContentsMargins(0, 0, 0, 0)
+        self._summary_lay.setSpacing(12)
+        self._panel.add(self._summary)
+        self._render_prompt()
 
         self._log = LogPanel(self)
-        layout.addWidget(self._log, stretch=1)
+        self._panel.add(self._log, stretch=1)
+        split.addWidget(self._panel, stretch=4)
+
+        layout.addLayout(split)
+
+    # ---------- cabeçalho ----------
+    def _page_head(self, title, sub):
+        w = QWidget(); w.setStyleSheet("background: transparent;")
+        lay = QVBoxLayout(w); lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(3)
+        t = QLabel(title); t.setObjectName("pageTitle")
+        s = QLabel(sub); s.setObjectName("pageSub"); s.setWordWrap(True)
+        lay.addWidget(t); lay.addWidget(s)
+        return w
+
+    # ---------- resumo da coluna direita ----------
+    def _clear_summary(self):
+        while self._summary_lay.count():
+            item = self._summary_lay.takeAt(0)
+            wid = item.widget()
+            if wid is not None:
+                wid.deleteLater()
+
+    def _render_prompt(self, ready: bool = False):
+        self._showing_result = False
+        self._clear_summary()
+        box = QWidget(); box.setStyleSheet("background: transparent;")
+        bl = QVBoxLayout(box); bl.setAlignment(Qt.AlignCenter); bl.setSpacing(8)
+        bl.setContentsMargins(0, 18, 0, 18)
+        icon = QLabel("✓" if ready else "▶")
+        icon.setAlignment(Qt.AlignCenter)
+        cor = "#3fb950" if ready else "#8b949e"
+        icon.setStyleSheet(f"color: {cor}; font-size: 22pt; background: transparent;")
+        bl.addWidget(icon)
+        t = QLabel("Pronto para processar" if ready else "Selecione os arquivos")
+        t.setAlignment(Qt.AlignCenter)
+        t.setStyleSheet("color: #f0f6fc; font-weight: 500; background: transparent;")
+        bl.addWidget(t)
+        s = QLabel("Clique em Processar para iniciar." if ready
+                   else "Adicione o PDF de jornada e a planilha de pedido.")
+        s.setAlignment(Qt.AlignCenter)
+        s.setStyleSheet("color: #8b949e; font-size: 9pt; background: transparent;")
+        s.setWordWrap(True)
+        bl.addWidget(s)
+        self._summary_lay.addWidget(box)
+
+    def _render_result(self, info):
+        self._showing_result = True
+        self._clear_summary()
+        iv = info.get("info_verif", {})
+        matched = info.get("matched", 0)
+        total = info.get("total_pdf", 0)
+        dur = info.get("duration", 0.0)
+        conflitos = iv.get("conflitos_resolvidos", 0)
+        if iv.get("ia_usada"):
+            ia = "usada"
+        elif iv.get("ia_fallback"):
+            ia = "fallback"
+        else:
+            ia = "—"
+
+        grid = QGridLayout(); grid.setSpacing(10)
+        tiles = [
+            KpiTile("Matches", f"{matched}/{total}", accent="ok"),
+            KpiTile("Conflitos", str(conflitos), accent="warn" if conflitos else None),
+            KpiTile("Duração", f"{dur:.1f}s", accent="accent"),
+            KpiTile("IA", ia),
+        ]
+        for i, tile in enumerate(tiles):
+            grid.addWidget(tile, i // 2, i % 2)
+        wrap = QWidget(); wrap.setStyleSheet("background: transparent;"); wrap.setLayout(grid)
+        self._summary_lay.addWidget(wrap)
 
     def _modo_atual(self) -> str:
         btn = self._modo_group.checkedButton()
@@ -223,13 +327,32 @@ class OcorrenciasTab(QWidget):
         self._salvar_codigos()
 
     def _refresh_state(self):
-        self._btn.setEnabled(self._pdf is not None and self._xlsx is not None and self._thread is None)
+        ready = self._pdf is not None and self._xlsx is not None
+        self._btn.setEnabled(ready and self._thread is None)
+        if self._thread is None and not self._showing_result:
+            self._render_prompt(ready=ready)
 
     def _on_pdf_selected(self, paths):
-        self._pdf = paths[0]; self._lbl_pdf.setText(os.path.basename(self._pdf)); self._refresh_state()
+        self._pdf = paths[0]
+        self._dz_pdf.show_file(self._pdf)
+        self._card_pdf.set_done(True)
+        self._refresh_state()
+
+    def _on_pdf_removed(self):
+        self._pdf = None
+        self._card_pdf.set_done(False)
+        self._refresh_state()
 
     def _on_xlsx_selected(self, paths):
-        self._xlsx = paths[0]; self._lbl_xlsx.setText(os.path.basename(self._xlsx)); self._refresh_state()
+        self._xlsx = paths[0]
+        self._dz_xlsx.show_file(self._xlsx)
+        self._card_xlsx.set_done(True)
+        self._refresh_state()
+
+    def _on_xlsx_removed(self):
+        self._xlsx = None
+        self._card_xlsx.set_done(False)
+        self._refresh_state()
 
     def _on_button_clicked(self):
         if self._thread is not None:
@@ -266,6 +389,8 @@ class OcorrenciasTab(QWidget):
             return
         settings.save({"last_dir": os.path.dirname(output)})
 
+        self._showing_result = False
+        self._render_prompt(ready=True)
         self._log.clear()
         self._log.append(f"iniciando [{modo}] ({Path(self._pdf).name} → {Path(output).name})")
         self._dz_pdf.setEnabled(False); self._dz_xlsx.setEnabled(False)
@@ -310,6 +435,7 @@ class OcorrenciasTab(QWidget):
             self._log.append(
                 f"concluído em {duration:.1f}s — {info.get('matched',0)}/{info.get('total_pdf',0)} matches{extra}",
                 level="success")
+            self._render_result(info)
         elif status == "cancelled":
             self._log.append("cancelado", level="warning")
         self._log.set_progress(100 if status == "ok" else 0, visible=False)

@@ -6,11 +6,12 @@ from pathlib import Path
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
-    QHBoxLayout, QHeaderView, QMenu, QMessageBox, QPushButton,
+    QHBoxLayout, QHeaderView, QLabel, QMenu, QMessageBox, QPushButton,
     QTableView, QVBoxLayout, QWidget
 )
 
 from ui import history
+from ui.widgets import KpiStrip, KpiTile
 
 
 COLUMNS = ["Data/hora", "Tipo", "Entrada", "Saída", "Status", "Duração"]
@@ -74,16 +75,35 @@ class HistoricoTab(QWidget):
         super().__init__(parent)
         self._model = _HistoryModel(self)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(20, 20, 22, 24)
+        layout.setSpacing(16)
+
+        head = QVBoxLayout(); head.setSpacing(3)
+        t = QLabel("Histórico"); t.setObjectName("pageTitle")
+        s = QLabel("Processamentos recentes. Clique duas vezes para abrir a saída.")
+        s.setObjectName("pageSub")
+        head.addWidget(t); head.addWidget(s)
+        head_wrap = QWidget(); head_wrap.setStyleSheet("background: transparent;"); head_wrap.setLayout(head)
+        layout.addWidget(head_wrap)
+
+        # faixa de estatísticas
+        self._strip = KpiStrip(self)
+        self._k_total = KpiTile("Processamentos", "0", accent="accent")
+        self._k_ok = KpiTile("Concluídos", "0", accent="ok")
+        self._k_taxa = KpiTile("Taxa de sucesso", "—")
+        self._k_ultima = KpiTile("Última execução", "—")
+        for k in (self._k_total, self._k_ok, self._k_taxa, self._k_ultima):
+            self._strip.add(k)
+        layout.addWidget(self._strip)
 
         bar = QHBoxLayout()
         bar.addStretch()
         self._btn_reload = QPushButton("Atualizar")
         self._btn_clear = QPushButton("Limpar histórico")
-        self._btn_reload.clicked.connect(self._model.reload)
+        self._btn_reload.clicked.connect(self.refresh)
         self._btn_clear.clicked.connect(self._on_clear)
         bar.addWidget(self._btn_reload); bar.addWidget(self._btn_clear)
-        wrap = QWidget(); wrap.setLayout(bar)
+        wrap = QWidget(); wrap.setStyleSheet("background: transparent;"); wrap.setLayout(bar)
         layout.addWidget(wrap)
 
         self._view = QTableView(self)
@@ -98,15 +118,31 @@ class HistoricoTab(QWidget):
         self._view.setContextMenuPolicy(Qt.CustomContextMenu)
         self._view.customContextMenuRequested.connect(self._show_context_menu)
         layout.addWidget(self._view, stretch=1)
+        self._update_stats()
 
     def refresh(self):
         self._model.reload()
+        self._update_stats()
+
+    def _update_stats(self):
+        rows = history.load()
+        total = len(rows)
+        ok = sum(1 for r in rows if r.get("status") == "ok")
+        taxa = f"{round(ok / total * 100)}%" if total else "—"
+        ultima = "—"
+        if rows:
+            ts = rows[-1].get("timestamp", "") or ""
+            ultima = ts.replace("T", " ")[5:16] if len(ts) >= 16 else ts.replace("T", " ")
+        self._k_total.set_value(str(total))
+        self._k_ok.set_value(str(ok))
+        self._k_taxa.set_value(taxa)
+        self._k_ultima.set_value(ultima)
 
     def _on_clear(self):
         if QMessageBox.question(self, "Limpar histórico",
                                 "Tem certeza? Esta ação não pode ser desfeita.") == QMessageBox.Yes:
             history.clear()
-            self._model.reload()
+            self.refresh()
 
     def _open_output(self, index):
         entry = self._model.entry_at(index.row())
@@ -173,7 +209,7 @@ class HistoricoTab(QWidget):
     def _remove(self, row):
         actual = len(history.load()) - 1 - row  # lista é mostrada invertida
         history.remove(actual)
-        self._model.reload()
+        self.refresh()
 
     def _open_folder(self, out):
         if not out:

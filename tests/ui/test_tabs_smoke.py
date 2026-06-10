@@ -55,4 +55,5 @@ def test_main_window_constructs(qtbot, monkeypatch, tmp_path):
     w = mw.MainWindow()
     qtbot.addWidget(w)
     assert w.windowTitle() == "Processador de Ocorrências"
-    assert w._tabs.count() == 5
+    # navegação migrou de QTabWidget para sidebar + QStackedWidget (5 páginas)
+    assert w._stack.count() == 5

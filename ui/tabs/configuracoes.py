@@ -1,7 +1,7 @@
-from PySide6.QtCore import Signal, QThread
+from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QRadioButton, QVBoxLayout, QWidget
+    QComboBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QLabel,
+    QMessageBox, QPushButton, QVBoxLayout, QWidget
 )
 
 from auto_update import check_and_update
@@ -19,22 +19,34 @@ class ConfiguracoesTab(QWidget):
         cfg = settings.load()
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(20, 20, 22, 24)
         layout.setSpacing(14)
 
-        # Aparência
+        head = QVBoxLayout(); head.setSpacing(3)
+        t = QLabel("Configurações"); t.setObjectName("pageTitle")
+        s = QLabel("Aparência, IA, licença e atualizações.")
+        s.setObjectName("pageSub")
+        head.addWidget(t); head.addWidget(s)
+        head_wrap = QWidget(); head_wrap.setStyleSheet("background: transparent;"); head_wrap.setLayout(head)
+        layout.addWidget(head_wrap)
+
+        # Aparência — toggle segmentado Escuro/Claro
         g_ap = QGroupBox("Aparência", self)
         ap_layout = QHBoxLayout(g_ap)
-        self._rb_dark = QRadioButton("Escuro")
-        self._rb_light = QRadioButton("Claro")
+        seg = QFrame(g_ap); seg.setObjectName("seg")
+        seg_lay = QHBoxLayout(seg); seg_lay.setContentsMargins(3, 3, 3, 3); seg_lay.setSpacing(3)
+        self._rb_dark = QPushButton("Escuro"); self._rb_dark.setObjectName("segBtn")
+        self._rb_light = QPushButton("Claro"); self._rb_light.setObjectName("segBtn")
+        for b in (self._rb_dark, self._rb_light):
+            b.setCheckable(True); b.setCursor(Qt.PointingHandCursor); b.setAutoExclusive(True)
+            seg_lay.addWidget(b)
         if cfg.get("theme") == "light":
             self._rb_light.setChecked(True)
         else:
             self._rb_dark.setChecked(True)
         self._rb_dark.toggled.connect(lambda on: on and self._set_theme("dark"))
         self._rb_light.toggled.connect(lambda on: on and self._set_theme("light"))
-        ap_layout.addWidget(self._rb_dark)
-        ap_layout.addWidget(self._rb_light)
+        ap_layout.addWidget(seg)
         ap_layout.addStretch()
         layout.addWidget(g_ap)
 

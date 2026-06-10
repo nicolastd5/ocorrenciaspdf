@@ -23,7 +23,20 @@ def test_section_card_adds_widgets(qtbot):
     card = SectionCard(1, "PDF de jornada")
     qtbot.addWidget(card)
     card.add(QLabel("hello"))
-    assert "1 · PDF de jornada" in card.title()
+    # título agora é um QLabel no cabeçalho do card (não mais QGroupBox.title())
+    titulos = [w.text() for w in card.findChildren(QLabel) if w.objectName() == "cardTitle"]
+    assert "PDF de jornada" in titulos
+
+
+def test_section_card_set_done_flips_step(qtbot):
+    card = SectionCard(2, "Planilha")
+    qtbot.addWidget(card)
+    assert card._step.text() == "2"
+    card.set_done(True)
+    assert card._step.objectName() == "stepDone"
+    card.set_done(False)
+    assert card._step.text() == "2"
+    assert card._step.objectName() == "step"
 
 
 def test_drop_zone_emits_on_drop(qtbot, tmp_path):

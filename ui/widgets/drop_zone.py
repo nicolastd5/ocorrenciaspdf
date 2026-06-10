@@ -1,17 +1,39 @@
+import os
 from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QFileDialog, QFrame, QLabel, QVBoxLayout
+from PySide6.QtWidgets import (
+    QFileDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QStackedWidget,
+    QVBoxLayout, QWidget
+)
+
+
+def _fmt_size(path: str) -> str:
+    try:
+        n = os.path.getsize(path)
+    except OSError:
+        return ""
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return ""
 
 
 class DropZone(QFrame):
     """Área que aceita arquivos por drag ou clique.
 
-    accept_extensions: tupla de extensões permitidas (com ponto, lowercase). Ex: ('.pdf',).
+    Estado vazio: ícone + texto + dica (mono). Estado selecionado: 'chip' com
+    nome do arquivo, tamanho e botão remover. Emite `files_selected` ao escolher
+    e `removed` ao limpar.
+
+    accept_extensions: tupla de extensões permitidas (com ponto, lowercase).
     multi: se True, files_selected emite uma lista a cada drop (não substitui).
     """
 
     files_selected = Signal(list)  # list[str] de paths
+    removed = Signal()
 
     def __init__(self, label: str, accept_extensions: tuple, multi: bool = False, parent=None):
         super().__init__(parent)
@@ -20,20 +42,106 @@ class DropZone(QFrame):
         self._label_text = label
         self.setAcceptDrops(True)
         self.setObjectName("dropzone")
-        self.setFrameShape(QFrame.StyledPanel)
-        self.setMinimumHeight(80)
-        self.setStyleSheet(
-            "DropZone {border: 1.5px dashed #30363d; border-radius: 8px; background: #161b22;}"
-            "DropZone[active='true'] {border-color: #58a6ff; background: rgba(88,166,255,0.08);}"
-        )
+        self.setMinimumHeight(116)
         self.setCursor(Qt.PointingHandCursor)
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignCenter)
-        self._lbl = QLabel(label, self)
-        self._lbl.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self._lbl)
+        self._apply_style(active=False)
 
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        self._stack = QStackedWidget(self)
+        self._stack.setStyleSheet("background: transparent;")
+        root.addWidget(self._stack)
+
+        # ---- página 0: vazio ----
+        empty = QWidget(self)
+        empty.setStyleSheet("background: transparent;")
+        e_lay = QVBoxLayout(empty)
+        e_lay.setAlignment(Qt.AlignCenter)
+        e_lay.setSpacing(8)
+        self._icon = QLabel("⬓", empty)
+        self._icon.setAlignment(Qt.AlignCenter)
+        self._icon.setStyleSheet("color: #8b949e; font-size: 20pt; background: transparent;")
+        e_lay.addWidget(self._icon)
+        self._lbl = QLabel(label, empty)
+        self._lbl.setAlignment(Qt.AlignCenter)
+        self._lbl.setStyleSheet("background: transparent;")
+        e_lay.addWidget(self._lbl)
+        hint = QLabel("ou clique para selecionar", empty)
+        hint.setAlignment(Qt.AlignCenter)
+        hint.setStyleSheet(
+            'color: #8b949e; font-size: 8pt; background: transparent;'
+            'font-family: "JetBrains Mono", "Consolas", monospace;'
+        )
+        e_lay.addWidget(hint)
+        self._stack.addWidget(empty)
+
+        # ---- página 1: chip de arquivo ----
+        chip = QWidget(self)
+        chip.setStyleSheet("background: transparent;")
+        c_lay = QHBoxLayout(chip)
+        c_lay.setContentsMargins(12, 12, 12, 12)
+        c_lay.setSpacing(12)
+        c_icon = QLabel("✓", chip)
+        c_icon.setFixedSize(36, 36)
+        c_icon.setAlignment(Qt.AlignCenter)
+        c_icon.setStyleSheet(
+            "color: #3fb950; background: rgba(46,160,67,0.12); border-radius: 9px; font-size: 14pt;"
+        )
+        c_lay.addWidget(c_icon)
+        info = QVBoxLayout(); info.setSpacing(2)
+        self._chip_name = QLabel("", chip)
+        self._chip_name.setStyleSheet("color: #f0f6fc; font-weight: 500; background: transparent;")
+        self._chip_meta = QLabel("", chip)
+        self._chip_meta.setStyleSheet(
+            'color: #8b949e; font-size: 8pt; background: transparent;'
+            'font-family: "JetBrains Mono", "Consolas", monospace;'
+        )
+        info.addWidget(self._chip_name); info.addWidget(self._chip_meta)
+        c_lay.addLayout(info)
+        c_lay.addStretch()
+        self._btn_x = QPushButton("✕", chip)
+        self._btn_x.setObjectName("ghost")
+        self._btn_x.setFixedSize(30, 30)
+        self._btn_x.setCursor(Qt.PointingHandCursor)
+        self._btn_x.clicked.connect(self._on_remove)
+        c_lay.addWidget(self._btn_x)
+        self._stack.addWidget(chip)
+
+    # ---------- estilo ----------
+    def _apply_style(self, active: bool) -> None:
+        if active:
+            self.setStyleSheet(
+                "DropZone { border: 1.5px solid #58a6ff; border-radius: 8px;"
+                " background: rgba(88,166,255,0.08); }"
+            )
+        else:
+            self.setStyleSheet(
+                "DropZone { border: 1.5px dashed #30363d; border-radius: 8px; background: #0d1117; }"
+            )
+
+    # ---------- API ----------
+    def show_file(self, path: str) -> None:
+        self._chip_name.setText(os.path.basename(path))
+        size = _fmt_size(path)
+        ext = Path(path).suffix.lstrip(".").upper()
+        meta = " · ".join(x for x in (ext, size) if x)
+        self._chip_meta.setText(meta)
+        self._stack.setCurrentIndex(1)
+        self.setCursor(Qt.ArrowCursor)
+
+    def reset(self) -> None:
+        self._stack.setCurrentIndex(0)
+        self._lbl.setText(self._label_text)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def _on_remove(self) -> None:
+        self.reset()
+        self.removed.emit()
+
+    # ---------- eventos ----------
     def mousePressEvent(self, ev):
+        if self._stack.currentIndex() == 1:
+            return  # já tem arquivo: usar o botão remover
         ext_filter = " ".join(f"*{e}" for e in self._exts)
         caption = "Selecionar arquivo"
         if self._multi:
@@ -45,18 +153,14 @@ class DropZone(QFrame):
             self.files_selected.emit(paths)
 
     def dragEnterEvent(self, ev: QDragEnterEvent):
-        if self._has_acceptable_files(ev):
+        if self._stack.currentIndex() == 0 and self._has_acceptable_files(ev):
             ev.acceptProposedAction()
-            self.setProperty("active", True)
-            self.style().unpolish(self)
-            self.style().polish(self)
+            self._apply_style(active=True)
         else:
             ev.ignore()
 
     def dragLeaveEvent(self, ev):
-        self.setProperty("active", False)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        self._apply_style(active=False)
 
     def dropEvent(self, ev: QDropEvent):
         paths = []
@@ -64,9 +168,7 @@ class DropZone(QFrame):
             p = Path(url.toLocalFile())
             if p.suffix.lower() in self._exts and p.is_file():
                 paths.append(str(p))
-        self.setProperty("active", False)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        self._apply_style(active=False)
         if paths:
             self.files_selected.emit(paths)
             ev.acceptProposedAction()
@@ -82,6 +184,7 @@ class DropZone(QFrame):
                 return True
         return False
 
+    # ---------- compat com chamadas antigas ----------
     def set_label(self, text: str) -> None:
         self._lbl.setText(text)
 

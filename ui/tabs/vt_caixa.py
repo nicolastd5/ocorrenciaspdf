@@ -4,15 +4,15 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import Qt, QObject, QThread, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox,
-    QVBoxLayout, QWidget
+    QCheckBox, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QMessageBox,
+    QScrollArea, QVBoxLayout, QWidget
 )
 
 from vt_caixa_processador import ProcessadorVTCaixa
 from ui import settings
-from ui.widgets import DropZone, LogPanel, PrimaryButton, SectionCard
+from ui.widgets import DropZone, KpiTile, LogPanel, Panel, PrimaryButton, SectionCard
 
 
 class _Cancelled(Exception):
@@ -77,56 +77,155 @@ class VTCaixaTab(QWidget):
         self._xls = None
         self._thread = None
         self._worker = None
+        self._showing_result = False
 
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-        layout.setContentsMargins(16, 16, 16, 16)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(scroll)
+        page = QWidget(); page.setStyleSheet("background: transparent;")
+        scroll.setWidget(page)
 
-        card1 = SectionCard(1, "Fonte Nautilus (PDF ou Excel)", self)
-        self._dz_fonte = DropZone("Arraste o arquivo ou clique para selecionar",
-                                    (".pdf", ".xlsx", ".xls"))
-        self._lbl_fonte = QLabel("nenhum arquivo selecionado")
-        self._lbl_fonte.setStyleSheet("color: #8b949e;")
+        layout = QVBoxLayout(page)
+        layout.setSpacing(16)
+        layout.setContentsMargins(20, 20, 22, 24)
+
+        layout.addWidget(self._page_head(
+            "VT-Caixa",
+            "Processe a fonte Nautilus contra o Excel cadastral e gere o CSV de benefícios."
+        ))
+
+        split = QHBoxLayout(); split.setSpacing(16)
+        left = QVBoxLayout(); left.setSpacing(14)
+
+        self._card1 = SectionCard(1, "Fonte Nautilus (PDF ou Excel)", self)
+        self._dz_fonte = DropZone("Arraste a fonte Nautilus", (".pdf", ".xlsx", ".xls"))
         self._dz_fonte.files_selected.connect(lambda p: self._set_fonte(p[0]))
-        card1.add(self._dz_fonte); card1.add(self._lbl_fonte)
-        layout.addWidget(card1)
+        self._dz_fonte.removed.connect(self._on_fonte_removed)
+        self._card1.add(self._dz_fonte)
+        left.addWidget(self._card1)
 
-        card2 = SectionCard(2, "Excel cadastral", self)
-        self._dz_xls = DropZone("Arraste o .xls/.xlsx ou clique", (".xlsx", ".xls"))
-        self._lbl_xls = QLabel("nenhum arquivo selecionado")
-        self._lbl_xls.setStyleSheet("color: #8b949e;")
+        self._card2 = SectionCard(2, "Excel cadastral", self)
+        self._dz_xls = DropZone("Arraste o .xls/.xlsx cadastral", (".xlsx", ".xls"))
         self._dz_xls.files_selected.connect(lambda p: self._set_xls(p[0]))
-        card2.add(self._dz_xls); card2.add(self._lbl_xls)
-        layout.addWidget(card2)
+        self._dz_xls.removed.connect(self._on_xls_removed)
+        self._card2.add(self._dz_xls)
+        left.addWidget(self._card2)
 
-        card3 = SectionCard(3, "Opções", self)
+        card3 = SectionCard(3, "Opções", self, optional=True)
         self._chk_ia = QCheckBox("Usar IA (Gemini)")
         card3.add(self._chk_ia)
-        layout.addWidget(card3)
+        left.addWidget(card3)
+        left.addStretch()
 
-        row = QHBoxLayout(); row.addStretch()
+        left_wrap = QWidget(); left_wrap.setLayout(left)
+        left_wrap.setStyleSheet("background: transparent;")
+        split.addWidget(left_wrap, stretch=5)
+
+        self._panel = Panel("Execução", self)
         self._btn = PrimaryButton("▶ Processar")
         self._btn.setEnabled(False)
         self._btn.clicked.connect(self._on_button)
-        row.addWidget(self._btn)
-        wrap = QWidget(); wrap.setLayout(row)
-        layout.addWidget(wrap)
+        self._panel.add_header_widget(self._btn)
+
+        self._summary = QWidget(); self._summary.setStyleSheet("background: transparent;")
+        self._summary_lay = QVBoxLayout(self._summary)
+        self._summary_lay.setContentsMargins(0, 0, 0, 0)
+        self._summary_lay.setSpacing(12)
+        self._panel.add(self._summary)
+        self._render_prompt()
 
         self._log = LogPanel(self)
-        layout.addWidget(self._log, stretch=1)
+        self._panel.add(self._log, stretch=1)
+        split.addWidget(self._panel, stretch=4)
+
+        layout.addLayout(split)
+
+    # ---------- cabeçalho / resumo ----------
+    def _page_head(self, title, sub):
+        w = QWidget(); w.setStyleSheet("background: transparent;")
+        lay = QVBoxLayout(w); lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(3)
+        t = QLabel(title); t.setObjectName("pageTitle")
+        s = QLabel(sub); s.setObjectName("pageSub"); s.setWordWrap(True)
+        lay.addWidget(t); lay.addWidget(s)
+        return w
+
+    def _clear_summary(self):
+        while self._summary_lay.count():
+            item = self._summary_lay.takeAt(0)
+            wid = item.widget()
+            if wid is not None:
+                wid.deleteLater()
+
+    def _render_prompt(self, ready: bool = False):
+        self._showing_result = False
+        self._clear_summary()
+        box = QWidget(); box.setStyleSheet("background: transparent;")
+        bl = QVBoxLayout(box); bl.setAlignment(Qt.AlignCenter); bl.setSpacing(8)
+        bl.setContentsMargins(0, 18, 0, 18)
+        icon = QLabel("✓" if ready else "▶")
+        icon.setAlignment(Qt.AlignCenter)
+        icon.setStyleSheet(f"color: {'#3fb950' if ready else '#8b949e'}; font-size: 22pt; background: transparent;")
+        bl.addWidget(icon)
+        t = QLabel("Pronto para processar" if ready else "Selecione os arquivos")
+        t.setAlignment(Qt.AlignCenter)
+        t.setStyleSheet("color: #f0f6fc; font-weight: 500; background: transparent;")
+        bl.addWidget(t)
+        s = QLabel("Clique em Processar para iniciar." if ready
+                   else "Adicione a fonte Nautilus e o Excel cadastral.")
+        s.setAlignment(Qt.AlignCenter); s.setWordWrap(True)
+        s.setStyleSheet("color: #8b949e; font-size: 9pt; background: transparent;")
+        bl.addWidget(s)
+        self._summary_lay.addWidget(box)
+
+    def _render_result(self, info):
+        self._showing_result = True
+        self._clear_summary()
+        ok = info.get("total_ok", 0)
+        total = info.get("total_fonte", info.get("total_pdf", 0))
+        dur = info.get("duration", 0.0)
+        nao_enc = len(info.get("nao_encontrados", []))
+        grid = QGridLayout(); grid.setSpacing(10)
+        tiles = [
+            KpiTile("Processados", str(ok), accent="ok"),
+            KpiTile("Na fonte", str(total), accent="accent"),
+            KpiTile("Sem match", str(nao_enc), accent="warn" if nao_enc else None),
+            KpiTile("Duração", f"{dur:.1f}s"),
+        ]
+        for i, tile in enumerate(tiles):
+            grid.addWidget(tile, i // 2, i % 2)
+        wrap = QWidget(); wrap.setStyleSheet("background: transparent;"); wrap.setLayout(grid)
+        self._summary_lay.addWidget(wrap)
 
     def _set_fonte(self, p):
         self._fonte = p
-        self._lbl_fonte.setText(os.path.basename(p))
+        self._dz_fonte.show_file(p)
+        self._card1.set_done(True)
+        self._refresh()
+
+    def _on_fonte_removed(self):
+        self._fonte = None
+        self._card1.set_done(False)
         self._refresh()
 
     def _set_xls(self, p):
         self._xls = p
-        self._lbl_xls.setText(os.path.basename(p))
+        self._dz_xls.show_file(p)
+        self._card2.set_done(True)
+        self._refresh()
+
+    def _on_xls_removed(self):
+        self._xls = None
+        self._card2.set_done(False)
         self._refresh()
 
     def _refresh(self):
-        self._btn.setEnabled(self._fonte is not None and self._xls is not None and self._thread is None)
+        ready = self._fonte is not None and self._xls is not None
+        self._btn.setEnabled(ready and self._thread is None)
+        if self._thread is None and not self._showing_result:
+            self._render_prompt(ready=ready)
 
     def _on_button(self):
         if self._thread:
@@ -158,6 +257,8 @@ class VTCaixaTab(QWidget):
                 return
         model = cfg.get("gemini_model", "gemini-2.5-flash")
 
+        self._showing_result = False
+        self._render_prompt(ready=True)
         self._log.clear()
         self._log.append(f"iniciando ({Path(self._fonte).name} + {Path(self._xls).name})")
         for w in (self._dz_fonte, self._dz_xls, self._chk_ia):
@@ -222,6 +323,7 @@ class VTCaixaTab(QWidget):
                 self._log.append(f"   {linha}", level=nivel)
             self._mostrar_janela_ia(alertas)
 
+        self._render_result(info)
         self._log.set_progress(0, False)
         self._emit_history(info)
 

@@ -17,14 +17,18 @@ class CodigosTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setContentsMargins(20, 20, 22, 24)
         layout.setSpacing(14)
 
+        head = QVBoxLayout(); head.setSpacing(3)
+        t = QLabel("Códigos"); t.setObjectName("pageTitle")
         dica = QLabel("Tabelas de referência usadas no processamento do VT-Caixa. "
                       "Clique numa linha para copiar o código/substituto.")
+        dica.setObjectName("pageSub")
         dica.setWordWrap(True)
-        dica.setStyleSheet("color: #8b949e; font-size: 9pt;")
-        layout.addWidget(dica)
+        head.addWidget(t); head.addWidget(dica)
+        head_wrap = QWidget(); head_wrap.setStyleSheet("background: transparent;"); head_wrap.setLayout(head)
+        layout.addWidget(head_wrap)
 
         # Operadora -> Código de Benefício
         g_cod = QGroupBox("Operadora → Código de Benefício", self)
@@ -64,7 +68,8 @@ class CodigosTab(QWidget):
             for c, val in enumerate(row):
                 item = QTableWidgetItem(str(val))
                 if c == copy_col:
-                    item.setForeground(Qt.GlobalColor.cyan)
+                    from PySide6.QtGui import QColor
+                    item.setForeground(QColor("#58a6ff"))
                 tbl.setItem(r, c, item)
         tbl.cellClicked.connect(lambda r, _c, t=tbl, cc=copy_col: self._copiar(t, r, cc))
         return tbl
