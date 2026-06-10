@@ -10,9 +10,22 @@ from PySide6.QtWidgets import (
     QScrollArea, QVBoxLayout, QWidget
 )
 
-from vt_caixa_processador import ProcessadorVTCaixa
 from ui import settings
 from ui.widgets import DropZone, KpiTile, LogPanel, Panel, PrimaryButton, SectionCard
+
+
+# Resolvido sob demanda em VTCaixaWorker.run — pdfplumber/openpyxl/xlrd são
+# pesados e só precisam carregar quando o usuário processa um arquivo.
+# Testes podem injetar um fake atribuindo a este nome.
+ProcessadorVTCaixa = None
+
+
+def _resolver_processador():
+    global ProcessadorVTCaixa
+    if ProcessadorVTCaixa is None:
+        from vt_caixa_processador import ProcessadorVTCaixa as _P
+        ProcessadorVTCaixa = _P
+    return ProcessadorVTCaixa
 
 
 class _Cancelled(Exception):
@@ -37,7 +50,7 @@ class VTCaixaWorker(QObject):
     def run(self):
         t0 = time.monotonic()
         try:
-            proc = ProcessadorVTCaixa()
+            proc = _resolver_processador()()
 
             def cb(pct, msg):
                 if self._cancel:

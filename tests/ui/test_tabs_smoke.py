@@ -23,6 +23,7 @@ def test_codigos_tab_constructs(qtbot):
     from vt_caixa_processador import ProcessadorVTCaixa
     tab = CodigosTab()
     qtbot.addWidget(tab)
+    tab.show()  # as tabelas são montadas de forma adiada no primeiro showEvent
     assert tab._tbl_cod.rowCount() == len(ProcessadorVTCaixa._CODIGOS_BENEFICIO)
     assert tab._tbl_dep.rowCount() == len(ProcessadorVTCaixa._DEPART_MAP)
 

@@ -10,10 +10,23 @@ from PySide6.QtWidgets import (
     QMessageBox, QPushButton, QRadioButton, QScrollArea, QVBoxLayout, QWidget
 )
 
-from processador import ProcessadorOcorrencias
 from ui import history, settings
 from ui.widgets import DropZone, KpiStrip, KpiTile, LogPanel, Panel, PrimaryButton, SectionCard
 from ui.widgets.conflict_dialog import ConflictDialog
+
+
+# Resolvido sob demanda em OcorrenciasWorker.run — pdfplumber/openpyxl são
+# pesados e só precisam carregar quando o usuário processa um arquivo.
+# Testes podem injetar um fake atribuindo a este nome.
+ProcessadorOcorrencias = None
+
+
+def _resolver_processador():
+    global ProcessadorOcorrencias
+    if ProcessadorOcorrencias is None:
+        from processador import ProcessadorOcorrencias as _P
+        ProcessadorOcorrencias = _P
+    return ProcessadorOcorrencias
 
 
 class _Cancelled(Exception):
@@ -64,7 +77,7 @@ class OcorrenciasWorker(QObject):
     def run(self):
         t0 = time.monotonic()
         try:
-            proc = ProcessadorOcorrencias()
+            proc = _resolver_processador()()
 
             def cb(pct, msg):
                 if self._cancel:

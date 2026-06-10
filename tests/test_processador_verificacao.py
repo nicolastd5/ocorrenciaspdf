@@ -113,36 +113,62 @@ def test_verificar_com_ia_retorna_none_em_erro(monkeypatch):
     assert resultado is None
 
 
+class _FakeBitmap:
+    def to_pil(self):
+        from PIL import Image
+        return Image.new('RGB', (10, 10))
+
+
+class _FakePdfiumPage:
+    def render(self, scale):
+        return _FakeBitmap()
+
+
+class _FakePdfiumDoc:
+    def __len__(self): return 1
+    def __getitem__(self, i): return _FakePdfiumPage()
+
+
+def _fake_genai_client(resposta_texto):
+    """Fake da API nova google.genai: Client(api_key=...).models.generate_content(...)."""
+    class FakeResponse:
+        text = resposta_texto
+
+    class FakeModels:
+        def generate_content(self, model, contents):
+            return FakeResponse()
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            self.models = FakeModels()
+
+    return FakeClient
+
+
 def test_verificar_com_ia_parseia_json_valido(monkeypatch):
     import pypdfium2 as pdfium
-    import google.generativeai as genai
+    import google.genai as genai
 
     resposta_json = '[{"re": "12345", "nome": "SILVA", "ocorrencias": {"AT": 2, "FA": 1}}]'
-
-    class FakeResponse:
-        text = resposta_json
-
-    class FakeModel:
-        def generate_content(self, parts): return FakeResponse()
-
-    class FakeBitmap:
-        def to_pil(self):
-            from PIL import Image
-            return Image.new('RGB', (10, 10))
-
-    class FakePage:
-        def render(self, scale):
-            return FakeBitmap()
-
-    class FakeDoc:
-        def __len__(self): return 1
-        def __getitem__(self, i): return FakePage()
-
-    monkeypatch.setattr(pdfium, 'PdfDocument', lambda path: FakeDoc())
-    monkeypatch.setattr(genai, 'configure', lambda **kw: None)
-    monkeypatch.setattr(genai, 'GenerativeModel', lambda model: FakeModel())
+    monkeypatch.setattr(pdfium, 'PdfDocument', lambda path: _FakePdfiumDoc())
+    monkeypatch.setattr(genai, 'Client', _fake_genai_client(resposta_json))
 
     resultado = proc.verificar_com_ia('fake.pdf', ['AT', 'FA'], api_key='fake-key', modelo='gemini-1.5-flash')
     assert resultado is not None
     assert '12345' in resultado
+    assert resultado['12345']['ocorrencias']['AT'] == 2
+
+
+def test_verificar_com_ia_remove_cerca_markdown(monkeypatch):
+    import pypdfium2 as pdfium
+    import google.genai as genai
+
+    resposta = ('```json\n'
+                '[{"re": "12345", "nome": "SILVA", "ocorrencias": {"AT": 2}}]\n'
+                '```')
+    monkeypatch.setattr(pdfium, 'PdfDocument', lambda path: _FakePdfiumDoc())
+    monkeypatch.setattr(genai, 'Client', _fake_genai_client(resposta))
+
+    resultado = proc.verificar_com_ia('fake.pdf', ['AT'], api_key='fake-key', modelo='gemini-1.5-flash')
+    assert resultado is not None
     assert resultado['12345']['ocorrencias']['AT'] == 2

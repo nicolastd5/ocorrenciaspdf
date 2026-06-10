@@ -7,7 +7,6 @@ from PySide6.QtWidgets import QApplication
 from license_client import LicenseClient, LicenseStatus
 from ui import settings, theme
 from ui import license_dialogs
-from ui.main_window import MainWindow
 from ui.splash import Splash
 from ui.update_worker import UpdateWorker
 
@@ -79,6 +78,7 @@ def main() -> int:
 
     splash = Splash(LicenseClient.APP_VERSION)
     splash.show()
+    app.processEvents()  # pinta o splash antes de qualquer trabalho bloqueante
 
     estado = _run_auto_update(splash)
     if estado == "reiniciando":
@@ -89,6 +89,11 @@ def main() -> int:
     splash.hide_progress()
     if estado == "erro":
         splash.set_status("Não foi possível atualizar, continuando...")
+
+    # Import adiado: MainWindow puxa as abas (e suas dependências); importar
+    # aqui mantém o splash visível durante esse carregamento em vez de
+    # atrasar a abertura da janela.
+    from ui.main_window import MainWindow
 
     splash.set_status("Validando licença...")
     client = LicenseClient()

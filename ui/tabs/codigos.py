@@ -4,8 +4,6 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QVBoxLayout, QWidget
 )
 
-from vt_caixa_processador import ProcessadorVTCaixa
-
 
 class CodigosTab(QWidget):
     """Tela de referência (somente leitura) com os códigos do VT-Caixa.
@@ -30,6 +28,20 @@ class CodigosTab(QWidget):
         head_wrap = QWidget(); head_wrap.setStyleSheet("background: transparent;"); head_wrap.setLayout(head)
         layout.addWidget(head_wrap)
 
+        self._layout = layout
+        self._built = False
+
+    def showEvent(self, ev):
+        # Montagem adiada: importa o processador (pdfplumber etc.) só quando
+        # a página é exibida pela primeira vez, fora do caminho de abertura.
+        if not self._built:
+            self._built = True
+            self._build_tables()
+        super().showEvent(ev)
+
+    def _build_tables(self):
+        from vt_caixa_processador import ProcessadorVTCaixa
+
         # Operadora -> Código de Benefício
         g_cod = QGroupBox("Operadora → Código de Benefício", self)
         cod_layout = QVBoxLayout(g_cod)
@@ -40,7 +52,7 @@ class CodigosTab(QWidget):
             copy_col=2,
         )
         cod_layout.addWidget(self._tbl_cod)
-        layout.addWidget(g_cod, stretch=3)
+        self._layout.addWidget(g_cod, stretch=3)
 
         # Substituições de Departamento
         g_dep = QGroupBox("Substituições de Departamento", self)
@@ -52,7 +64,7 @@ class CodigosTab(QWidget):
             copy_col=1,
         )
         dep_layout.addWidget(self._tbl_dep)
-        layout.addWidget(g_dep, stretch=2)
+        self._layout.addWidget(g_dep, stretch=2)
 
     def _make_table(self, headers, rows, copy_col):
         tbl = QTableWidget(len(rows), len(headers), self)
