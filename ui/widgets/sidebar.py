@@ -53,7 +53,6 @@ class Sidebar(QFrame):
         super().__init__(parent)
         self.setObjectName("sidebar")
         self.setFixedWidth(200)
-        self.setStyleSheet(self._qss())
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(10, 12, 10, 12)
@@ -118,27 +117,11 @@ class Sidebar(QFrame):
             self._items[index].set_count(n)
 
     def set_license(self, text: str) -> None:
-        self._lic_val.setText(text)
+        # Nome do cliente pode ser longo e a sidebar tem largura fixa.
+        fm = self._lic_val.fontMetrics()
+        self._lic_val.setText(fm.elidedText(text, Qt.ElideRight, 100))
+        self._lic_val.setToolTip(text)
 
     def set_server(self, text: str, cor: str) -> None:
         self._srv_val.setText(text)
         self._srv_dot.setStyleSheet(f"color: {cor};")
-
-    @staticmethod
-    def _qss() -> str:
-        # Estilos específicos da sidebar (independentes do QSS global, pois usam
-        # objectName próprio dos itens). Cores neutras que funcionam nos dois temas.
-        return """
-        QFrame#sidebar { border-right: 1px solid palette(mid); }
-        QPushButton#navItem { background: transparent; border: none; text-align: left;
-            border-radius: 7px; }
-        QPushButton#navItem:hover { background: rgba(127,127,127,0.12); }
-        QPushButton#navItem:checked { background: rgba(127,127,127,0.18); }
-        QLabel#navLabel { background: transparent; font-size: 9.5pt; }
-        QLabel#navGlyph { background: transparent; color: #8b949e; font-size: 11pt; }
-        QPushButton#navItem:checked QLabel#navLabel { font-weight: 600; }
-        QPushButton#navItem:checked QLabel#navGlyph { color: #58a6ff; }
-        QLabel#navCount { background: rgba(127,127,127,0.15); border-radius: 8px;
-            padding: 0 7px; font-family: "JetBrains Mono", monospace; font-size: 8pt;
-            color: #8b949e; }
-        """

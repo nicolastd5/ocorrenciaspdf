@@ -1,13 +1,23 @@
 """Comunicação com o servidor de licença para status de conexão e config (API key do Gemini)."""
+import time
+
 import requests
 from PySide6.QtCore import QObject, Signal
 
 from license_client import LicenseClient, LicenseStatus
 
+# Cache da key do Gemini — evita um request a cada checagem periódica (60s).
+_GEMINI_CACHE_TTL = 900  # 15 min
+_gemini_cache = {"key": "", "ts": 0.0}
 
-def fetch_gemini_key() -> str:
+
+def fetch_gemini_key(force: bool = False) -> str:
     """Baixa a API key do Gemini do servidor usando a license key salva.
-    Retorna a key ou "" se não houver chave salva, servidor indisponível ou resposta inválida."""
+    Retorna a key ou "" se não houver chave salva, servidor indisponível ou
+    resposta inválida. Resultado positivo fica em cache por 15 minutos."""
+    if (not force and _gemini_cache["key"]
+            and time.monotonic() - _gemini_cache["ts"] < _GEMINI_CACHE_TTL):
+        return _gemini_cache["key"]
     client = LicenseClient()
     key = client.get_saved_key()
     if not key:
@@ -19,7 +29,11 @@ def fetch_gemini_key() -> str:
             timeout=LicenseClient.TIMEOUT_SECONDS,
         )
         if resp.status_code == 200:
-            return resp.json().get("gemini_api_key", "") or ""
+            gemini_key = resp.json().get("gemini_api_key", "") or ""
+            if gemini_key:
+                _gemini_cache["key"] = gemini_key
+                _gemini_cache["ts"] = time.monotonic()
+            return gemini_key
     except (requests.RequestException, ValueError):
         pass
     return ""
@@ -44,9 +58,22 @@ def status_info(status, reason=None):
     return texto, cor
 
 
+def license_display(result) -> str:
+    """Texto curto para o card de licença na sidebar, a partir do ValidationResult."""
+    if result.status == LicenseStatus.VALID:
+        return result.client_name or "ativa"
+    if result.status == LicenseStatus.OFFLINE_TOLERATED:
+        return "ativa (offline)"
+    if result.status == LicenseStatus.INVALID:
+        return "inválida"
+    if result.status == LicenseStatus.NO_KEY:
+        return "—"
+    return "expirada"
+
+
 class ConnCheckWorker(QObject):
     """Revalida a licença e baixa a versão mais recente e a key do Gemini do servidor."""
-    resultado = Signal(str, str, str, bool)  # (texto, cor, versao_mais_recente, gemini_ok)
+    resultado = Signal(str, str, str, bool, str)  # (texto, cor, versao, gemini_ok, licenca)
     finished = Signal()
 
     def run(self):
@@ -65,7 +92,8 @@ class ConnCheckWorker(QObject):
                 pass
 
             gemini_ok = bool(fetch_gemini_key())
-            self.resultado.emit(texto, cor, latest_version, gemini_ok)
+            self.resultado.emit(texto, cor, latest_version, gemini_ok,
+                                license_display(result))
         finally:
             self.finished.emit()
 

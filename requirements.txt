@@ -1,6 +1,9 @@
-pdfplumber>=0.10.0
-openpyxl>=3.1.0
-xlrd>=2.0.1
-google-genai>=1.0.0
-requests>=2.31.0
-PySide6>=6.7
+# Pinos compatíveis com as versões testadas — atualize de forma deliberada.
+pdfplumber~=0.11.9
+openpyxl~=3.1.5
+xlrd~=2.0.2
+google-genai~=1.70
+requests~=2.33
+PySide6~=6.11
+pypdfium2~=5.6
+pillow~=12.2

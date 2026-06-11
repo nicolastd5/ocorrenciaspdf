@@ -1,23 +1,26 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
 
 class KpiTile(QFrame):
     """Tile de métrica: número grande em mono + rótulo + sub-rótulo opcional.
 
-    `accent` colore o número: None (padrão), 'ok' (verde), 'warn' (âmbar),
-    'accent' (azul).
+    `accent` colore o número via QSS (propriedade dinâmica, acompanha o tema):
+    None (padrão), 'ok' (verde), 'warn' (âmbar), 'accent' (azul).
+    `clickable=True` habilita o sinal `clicked` (cursor de mão).
     """
 
-    _COLORS = {
-        "ok": "#3fb950",
-        "warn": "#e3b341",
-        "accent": "#58a6ff",
-    }
+    clicked = Signal()
 
-    def __init__(self, label: str, value: str = "—", sub: str = "", accent=None, parent=None):
+    _ACCENTS = ("ok", "warn", "accent")
+
+    def __init__(self, label: str, value: str = "—", sub: str = "", accent=None,
+                 clickable: bool = False, parent=None):
         super().__init__(parent)
         self.setObjectName("kpi")
+        self._clickable = clickable
+        if clickable:
+            self.setCursor(Qt.PointingHandCursor)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(13, 12, 13, 12)
         lay.setSpacing(6)
@@ -28,8 +31,8 @@ class KpiTile(QFrame):
 
         self._num = QLabel(value, self)
         self._num.setObjectName("kpiNum")
-        if accent in self._COLORS:
-            self._num.setStyleSheet(f"color: {self._COLORS[accent]};")
+        if accent in self._ACCENTS:
+            self._num.setProperty("accent", accent)
         lay.addWidget(self._num)
 
         self._sub = QLabel(sub, self)
@@ -42,6 +45,11 @@ class KpiTile(QFrame):
         if sub is not None:
             self._sub.setText(sub)
             self._sub.setVisible(bool(sub))
+
+    def mousePressEvent(self, ev):
+        if self._clickable and ev.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(ev)
 
 
 class KpiStrip(QFrame):

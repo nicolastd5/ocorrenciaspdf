@@ -93,6 +93,58 @@ def test_modo_legado_sem_callbacks_chama_sys_exit(monkeypatch, tmp_path):
         auto_update._download_and_relaunch('novo.exe')
 
 
+def test_download_aborta_quando_sha256_nao_confere(monkeypatch, tmp_path):
+    resp = FakeResponse([b'conteudo-adulterado'], content_length=19)
+    _patch_download(monkeypatch, resp, tmp_path)
+    lancado = []
+    monkeypatch.setattr(auto_update.subprocess, 'Popen',
+                        lambda *a, **k: lancado.append(a))
+
+    estados = []
+    auto_update._download_and_relaunch(
+        'novo.exe',
+        on_progress=lambda b, t: None,
+        on_status=lambda estado: estados.append(estado),
+        expected_sha256='0' * 64,  # hash que não bate
+    )
+
+    assert estados == ["erro"]
+    assert lancado == []  # updater.bat nunca deve ser lançado
+
+
+def test_download_prossegue_quando_sha256_confere(monkeypatch, tmp_path):
+    import hashlib
+    payload = b'exe-legitimo'
+    resp = FakeResponse([payload], content_length=len(payload))
+    _patch_download(monkeypatch, resp, tmp_path)
+
+    estados = []
+    auto_update._download_and_relaunch(
+        'novo.exe',
+        on_progress=lambda b, t: None,
+        on_status=lambda estado: estados.append(estado),
+        expected_sha256=hashlib.sha256(payload).hexdigest(),
+    )
+
+    assert estados == ["reiniciando"]
+
+
+def test_check_and_update_repassa_sha256(monkeypatch):
+    monkeypatch.setattr(auto_update, '_is_frozen', lambda: True)
+    monkeypatch.setattr(auto_update, '_fetch_latest',
+                        lambda: {"version": "9.99", "filename": "novo.exe",
+                                 "sha256": "abc123"})
+    monkeypatch.setattr(auto_update, '_current_version', lambda: "1.00")
+
+    recebidos = {}
+    def fake_download(filename, on_progress=None, on_status=None, expected_sha256=None):
+        recebidos['expected_sha256'] = expected_sha256
+    monkeypatch.setattr(auto_update, '_download_and_relaunch', fake_download)
+
+    auto_update.check_and_update()
+    assert recebidos['expected_sha256'] == "abc123"
+
+
 def test_check_and_update_repassa_callbacks(monkeypatch):
     # Força "é frozen" e versão nova disponível
     monkeypatch.setattr(auto_update, '_is_frozen', lambda: True)
@@ -101,7 +153,7 @@ def test_check_and_update_repassa_callbacks(monkeypatch):
     monkeypatch.setattr(auto_update, '_current_version', lambda: "1.00")
 
     recebidos = {}
-    def fake_download(filename, on_progress=None, on_status=None):
+    def fake_download(filename, on_progress=None, on_status=None, expected_sha256=None):
         recebidos['filename'] = filename
         recebidos['on_progress'] = on_progress
         recebidos['on_status'] = on_status

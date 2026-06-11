@@ -1,16 +1,22 @@
 from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtWidgets import (
     QComboBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QVBoxLayout, QWidget
+    QPushButton, QScrollArea, QVBoxLayout, QWidget
 )
 
-from auto_update import check_and_update
 from license_client import LicenseClient
 from ui import settings
 
 
+def _mask_key(key: str) -> str:
+    if not key:
+        return "(nenhuma)"
+    return key[:6] + "…" + key[-4:] if len(key) > 12 else key
+
+
 class ConfiguracoesTab(QWidget):
-    theme_changed = Signal(str)  # "dark" ou "light"
+    theme_changed = Signal(str)    # "dark" ou "light"
+    license_changed = Signal()     # chave trocada — dispara revalidação
 
     GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"]
 
@@ -18,7 +24,18 @@ class ConfiguracoesTab(QWidget):
         super().__init__(parent)
         cfg = settings.load()
 
-        layout = QVBoxLayout(self)
+        # Conteúdo rolável: em janelas baixas os cards não estouram a tela.
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(scroll)
+        page = QWidget()
+        page.setStyleSheet("background: transparent;")
+        scroll.setWidget(page)
+
+        layout = QVBoxLayout(page)
         layout.setContentsMargins(20, 20, 22, 24)
         layout.setSpacing(14)
 
@@ -63,14 +80,14 @@ class ConfiguracoesTab(QWidget):
         self._btn_modelos = QPushButton("↻ Carregar modelos da API")
         self._btn_modelos.clicked.connect(self._carregar_modelos)
         self._lbl_modelos = QLabel("")
-        self._lbl_modelos.setStyleSheet("color: #8b949e; font-size: 9pt;")
+        self._lbl_modelos.setObjectName("helpText")
         row_btn.addWidget(self._btn_modelos); row_btn.addWidget(self._lbl_modelos); row_btn.addStretch()
         wrap_btn = QWidget(); wrap_btn.setLayout(row_btn)
         ai_form.addRow(wrap_btn)
         nota = QLabel("A chave da API do Gemini é obtida automaticamente do servidor "
                       "(vinculada à sua licença) — não precisa configurar.")
         nota.setWordWrap(True)
-        nota.setStyleSheet("color: #8b949e; font-size: 9pt;")
+        nota.setObjectName("helpText")
         ai_form.addRow(nota)
         layout.addWidget(g_ai)
         self._modelos_thread = None
@@ -79,13 +96,12 @@ class ConfiguracoesTab(QWidget):
         # Licença
         g_lic = QGroupBox("Licença", self)
         lic_layout = QVBoxLayout(g_lic)
-        client = LicenseClient()
         try:
-            current_key = client.get_saved_key() or "(nenhuma)"
+            current_key = LicenseClient().get_saved_key() or ""
         except Exception:
-            current_key = "(nenhuma)"
-        masked = current_key[:6] + "…" + current_key[-4:] if len(current_key) > 12 else current_key
-        lic_layout.addWidget(QLabel(f"Chave atual: {masked}"))
+            current_key = ""
+        self._lbl_chave = QLabel(f"Chave atual: {_mask_key(current_key)}")
+        lic_layout.addWidget(self._lbl_chave)
         btn_change = QPushButton("Trocar chave")
         btn_change.clicked.connect(self._change_license)
         lic_layout.addWidget(btn_change)
@@ -178,8 +194,11 @@ class ConfiguracoesTab(QWidget):
         new_key = show_activation_window("Insira a nova chave de licença.")
         if new_key:
             LicenseClient().save_key(new_key)
-            QMessageBox.information(self, "Licença", "Chave atualizada. Reinicie o app pra validar.")
+            self._lbl_chave.setText(f"Chave atual: {_mask_key(new_key)}")
+            self._lbl_conexao.setText("Validando…")
+            # MainWindow revalida em segundo plano e atualiza sidebar/status.
+            self.license_changed.emit()
 
     def _check_update(self):
-        check_and_update()
-        QMessageBox.information(self, "Atualizações", "Verificação concluída (sem atualização ou já atualizado).")
+        from ui.update_dialog import run_update_dialog
+        run_update_dialog(self)

@@ -76,12 +76,14 @@ class CodigosTab(QWidget):
         tbl.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         for c in range(1, len(headers)):
             tbl.horizontalHeader().setSectionResizeMode(c, QHeaderView.ResizeToContents)
+        from PySide6.QtGui import QColor
+        from ui import theme
+        cor_copy = QColor(theme.token("accent"))
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
                 item = QTableWidgetItem(str(val))
                 if c == copy_col:
-                    from PySide6.QtGui import QColor
-                    item.setForeground(QColor("#58a6ff"))
+                    item.setForeground(cor_copy)
                 tbl.setItem(r, c, item)
         tbl.cellClicked.connect(lambda r, _c, t=tbl, cc=copy_col: self._copiar(t, r, cc))
         return tbl
@@ -92,3 +94,7 @@ class CodigosTab(QWidget):
             return
         from PySide6.QtWidgets import QApplication
         QApplication.clipboard().setText(item.text())
+        win = self.window()
+        sb = win.statusBar() if hasattr(win, "statusBar") else None
+        if sb:
+            sb.showMessage(f"'{item.text()}' copiado para a área de transferência", 2500)

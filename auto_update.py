@@ -13,9 +13,10 @@ from typing import Optional
 
 import requests
 
+from appinfo import SERVER_URL
+
 logger = logging.getLogger("auto_update")
 
-SERVER_URL = "https://nicolasapp.duckdns.org"
 TIMEOUT = 10
 
 
@@ -45,7 +46,17 @@ def _fetch_latest() -> Optional[dict]:
     return None
 
 
-def _download_and_relaunch(filename: str, on_progress=None, on_status=None) -> None:
+def _sha256_of(path: Path) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1048576), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _download_and_relaunch(filename: str, on_progress=None, on_status=None,
+                           expected_sha256: Optional[str] = None) -> None:
     url = f"{SERVER_URL}/api/download/{filename}"
     logger.info("Baixando atualização: %s", url)
 
@@ -70,6 +81,19 @@ def _download_and_relaunch(filename: str, on_progress=None, on_status=None) -> N
         if on_status:
             on_status("erro")
         return
+
+    if expected_sha256:
+        digest = _sha256_of(new_exe)
+        if digest.lower() != expected_sha256.lower():
+            logger.warning("SHA-256 do download não confere (esperado %s, obtido %s) — atualização descartada",
+                           expected_sha256, digest)
+            try:
+                new_exe.unlink()
+            except OSError:
+                pass
+            if on_status:
+                on_status("erro")
+            return
 
     # Script bat robusto:
     # 1) espera o processo atual terminar (loop com timeout máximo)
@@ -164,4 +188,5 @@ def check_and_update(on_progress=None, on_status=None) -> None:
     current = _current_version()
     if _parse_version(latest_ver) > _parse_version(current):
         logger.info("Atualização disponível: %s → %s", current, latest_ver)
-        _download_and_relaunch(filename, on_progress=on_progress, on_status=on_status)
+        _download_and_relaunch(filename, on_progress=on_progress, on_status=on_status,
+                               expected_sha256=latest.get("sha256"))

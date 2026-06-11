@@ -17,12 +17,16 @@ EXE_DIR = _BASE / "releases"
 @router.get("/version")
 async def get_version() -> dict:
     if not VERSION_FILE.exists():
-        return {"version": "0.0", "filename": None}
+        return {"version": "0.0", "filename": None, "sha256": None}
     try:
         data = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
-        return {"version": data.get("version", "0.0"), "filename": data.get("filename")}
+        return {
+            "version": data.get("version", "0.0"),
+            "filename": data.get("filename"),
+            "sha256": data.get("sha256"),
+        }
     except (json.JSONDecodeError, OSError):
-        return {"version": "0.0", "filename": None}
+        return {"version": "0.0", "filename": None, "sha256": None}
 
 
 @router.get("/download/{filename}")

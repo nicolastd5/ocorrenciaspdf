@@ -3,11 +3,15 @@ Módulo de processamento de ocorrências.
 Extrai dados do PDF e atualiza a planilha Excel.
 """
 
-import pdfplumber
-from openpyxl import load_workbook
+import logging
 import shutil
 import os
 import re
+
+import pdfplumber
+from openpyxl import load_workbook
+
+logger = logging.getLogger("processador")
 
 
 class ProcessadorOcorrencias:
@@ -187,9 +191,11 @@ class ProcessadorOcorrencias:
 
             if re_conflitos:
                 conflitos.extend(re_conflitos)
-            else:
-                if ocorrencias_finais:
-                    concordantes[re_val] = {'nome': nome, 'ocorrencias': ocorrencias_finais}
+            # Os códigos em que as camadas concordaram são mantidos mesmo quando
+            # o RE tem outros códigos em conflito — a resolução do usuário só
+            # complementa os conflitantes.
+            if ocorrencias_finais:
+                concordantes[re_val] = {'nome': nome, 'ocorrencias': ocorrencias_finais}
 
         return {'concordantes': concordantes, 'conflitos': conflitos}
 
@@ -272,6 +278,9 @@ class ProcessadorOcorrencias:
             return resultados if resultados else {}
 
         except Exception:
+            # None sinaliza fallback para V1+V2; o log preserva o diagnóstico
+            # (timeout, quota 429, modelo inexistente...) que antes se perdia.
+            logger.warning("verificar_com_ia falhou — usando fallback", exc_info=True)
             return None
 
     def montar_motivo(self, ocorrencias, codigos_selecionados):

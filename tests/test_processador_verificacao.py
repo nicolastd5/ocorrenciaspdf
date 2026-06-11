@@ -86,6 +86,17 @@ def test_reconciliar_maioria_vence():
     assert resultado['conflitos'] == []
 
 
+def test_reconciliar_preserva_codigos_concordantes_de_re_com_conflito():
+    # FA concorda nas duas varreduras; AT conflita. O FA não pode ser perdido
+    # quando o RE vai para o diálogo de conflitos.
+    v1 = {'12345': {'nome': 'SILVA', 'ocorrencias': {'FA': 2, 'AT': 2}}}
+    v2 = {'12345': {'nome': 'SILVA', 'ocorrencias': {'FA': 2, 'AT': 1}}}
+    resultado = proc.reconciliar([v1, v2], ['AT', 'FA'])
+    assert len(resultado['conflitos']) == 1
+    assert resultado['conflitos'][0]['codigo'] == 'AT'
+    assert resultado['concordantes']['12345']['ocorrencias'] == {'FA': 2}
+
+
 def test_reconciliar_re_ausente_em_uma_camada():
     # RE presente na V1 mas não na V2 → conflito com v2=0
     v1 = {'12345': {'nome': 'SILVA', 'ocorrencias': {'AT': 1}}}

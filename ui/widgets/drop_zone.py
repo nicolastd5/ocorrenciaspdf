@@ -44,7 +44,7 @@ class DropZone(QFrame):
         self.setObjectName("dropzone")
         self.setMinimumHeight(116)
         self.setCursor(Qt.PointingHandCursor)
-        self._apply_style(active=False)
+        self.setProperty("dragActive", False)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -59,19 +59,16 @@ class DropZone(QFrame):
         e_lay.setAlignment(Qt.AlignCenter)
         e_lay.setSpacing(8)
         self._icon = QLabel("⬓", empty)
+        self._icon.setObjectName("dropIcon")
         self._icon.setAlignment(Qt.AlignCenter)
-        self._icon.setStyleSheet("color: #8b949e; font-size: 20pt; background: transparent;")
         e_lay.addWidget(self._icon)
         self._lbl = QLabel(label, empty)
+        self._lbl.setObjectName("dropLabel")
         self._lbl.setAlignment(Qt.AlignCenter)
-        self._lbl.setStyleSheet("background: transparent;")
         e_lay.addWidget(self._lbl)
         hint = QLabel("ou clique para selecionar", empty)
+        hint.setObjectName("dropHint")
         hint.setAlignment(Qt.AlignCenter)
-        hint.setStyleSheet(
-            'color: #8b949e; font-size: 8pt; background: transparent;'
-            'font-family: "JetBrains Mono", "Consolas", monospace;'
-        )
         e_lay.addWidget(hint)
         self._stack.addWidget(empty)
 
@@ -82,20 +79,15 @@ class DropZone(QFrame):
         c_lay.setContentsMargins(12, 12, 12, 12)
         c_lay.setSpacing(12)
         c_icon = QLabel("✓", chip)
+        c_icon.setObjectName("chipIcon")
         c_icon.setFixedSize(36, 36)
         c_icon.setAlignment(Qt.AlignCenter)
-        c_icon.setStyleSheet(
-            "color: #3fb950; background: rgba(46,160,67,0.12); border-radius: 9px; font-size: 14pt;"
-        )
         c_lay.addWidget(c_icon)
         info = QVBoxLayout(); info.setSpacing(2)
         self._chip_name = QLabel("", chip)
-        self._chip_name.setStyleSheet("color: #f0f6fc; font-weight: 500; background: transparent;")
+        self._chip_name.setObjectName("chipName")
         self._chip_meta = QLabel("", chip)
-        self._chip_meta.setStyleSheet(
-            'color: #8b949e; font-size: 8pt; background: transparent;'
-            'font-family: "JetBrains Mono", "Consolas", monospace;'
-        )
+        self._chip_meta.setObjectName("chipMeta")
         info.addWidget(self._chip_name); info.addWidget(self._chip_meta)
         c_lay.addLayout(info)
         c_lay.addStretch()
@@ -109,15 +101,10 @@ class DropZone(QFrame):
 
     # ---------- estilo ----------
     def _apply_style(self, active: bool) -> None:
-        if active:
-            self.setStyleSheet(
-                "DropZone { border: 1.5px solid #58a6ff; border-radius: 8px;"
-                " background: rgba(88,166,255,0.08); }"
-            )
-        else:
-            self.setStyleSheet(
-                "DropZone { border: 1.5px dashed #30363d; border-radius: 8px; background: #0d1117; }"
-            )
+        # Estilo vem do QSS global via propriedade dinâmica — re-polish aplica.
+        self.setProperty("dragActive", active)
+        self.style().unpolish(self)
+        self.style().polish(self)
 
     # ---------- API ----------
     def show_file(self, path: str) -> None:
@@ -153,7 +140,8 @@ class DropZone(QFrame):
             self.files_selected.emit(paths)
 
     def dragEnterEvent(self, ev: QDragEnterEvent):
-        if self._stack.currentIndex() == 0 and self._has_acceptable_files(ev):
+        # Aceita também quando já há arquivo: o drop substitui a seleção.
+        if self._has_acceptable_files(ev):
             ev.acceptProposedAction()
             self._apply_style(active=True)
         else:

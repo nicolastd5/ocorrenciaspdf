@@ -8,6 +8,8 @@ from typing import Optional
 
 import requests
 
+import appinfo
+
 
 logger = logging.getLogger("license_client")
 
@@ -31,10 +33,10 @@ DEFAULT_CONFIG_PATH = Path.home() / ".ocorrencias_config.json"
 
 
 class LicenseClient:
-    SERVER_URL = "https://nicolasapp.duckdns.org"
+    SERVER_URL = appinfo.SERVER_URL
     OFFLINE_TOLERANCE_HOURS = 24
     TIMEOUT_SECONDS = 10
-    APP_VERSION = "1.64"
+    APP_VERSION = appinfo.APP_VERSION
 
     def __init__(self, config_path: Path = DEFAULT_CONFIG_PATH):
         self.config_path = config_path
@@ -49,7 +51,12 @@ class LicenseClient:
             return {}
 
     def _write_config(self, data: dict) -> None:
-        self.config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # Escrita atômica: o arquivo guarda a licença — uma queda no meio do
+        # write_text deixaria o JSON truncado e o app sem chave.
+        import os
+        tmp = self.config_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        os.replace(tmp, self.config_path)
 
     def get_saved_key(self) -> Optional[str]:
         return self._read_config().get("license_key")

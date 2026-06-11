@@ -22,6 +22,7 @@ DARK_TOKENS = {
     "ok_text":       "#3fb950",
     "warn_text":     "#e3b341",
     "err_text":      "#ff7b72",
+    "accent_overlay": "rgba(88,166,255,0.08)",
 }
 
 LIGHT_TOKENS = {
@@ -43,6 +44,7 @@ LIGHT_TOKENS = {
     "ok_text":       "#1a7f37",
     "warn_text":     "#9a6700",
     "err_text":      "#cf222e",
+    "accent_overlay": "rgba(9,105,218,0.08)",
 }
 
 
@@ -59,21 +61,13 @@ QTabBar::tab {{
 QTabBar::tab:selected {{ background: {surface}; color: {fg_bright}; border-color: {border}; }}
 QTabBar::tab:hover:!selected {{ color: {fg}; }}
 
-/* ---------- Sidebar (QListWidget de navegação) ---------- */
-QListWidget#sidebar {{
+/* ---------- Sidebar ---------- */
+QFrame#sidebar {{
     background: {surface}; border: none; border-right: 1px solid {border};
-    outline: 0; padding: 8px 8px;
-}}
-QListWidget#sidebar::item {{
-    color: {fg}; padding: 8px 10px; border-radius: 7px; margin: 2px 0;
-}}
-QListWidget#sidebar::item:hover {{ background: {surface_alt}; }}
-QListWidget#sidebar::item:selected {{
-    background: {surface_alt}; color: {fg_bright};
-    border-left: 3px solid {accent};
 }}
 QLabel#sideSect {{
     color: {fg_dim}; font-size: 8pt; font-weight: 600; padding: 10px 9px 4px;
+    background: transparent;
 }}
 
 /* ---------- Card de licença na sidebar ---------- */
@@ -83,8 +77,34 @@ QLabel#licardKey {{ color: {fg_dim}; }}
 QLabel#licardVal {{ color: {fg}; font-family: "JetBrains Mono", "Consolas", monospace; font-size: 9pt; }}
 
 /* ---------- Cabeçalho de página ---------- */
-QLabel#pageTitle {{ color: {fg_bright}; font-size: 13pt; font-weight: 600; }}
-QLabel#pageSub {{ color: {fg_dim}; font-size: 9pt; }}
+QLabel#pageTitle {{ color: {fg_bright}; font-size: 16pt; font-weight: 600; background: transparent; }}
+QLabel#pageSub {{ color: {fg_dim}; font-size: 9pt; background: transparent; }}
+
+/* ---------- Texto de apoio (dicas/ajuda) ---------- */
+QLabel#helpText {{ color: {fg_dim}; font-size: 9pt; background: transparent; }}
+
+/* ---------- DropZone ---------- */
+QFrame#dropzone {{ border: 1.5px dashed {border}; border-radius: 8px; background: {bg}; }}
+QFrame#dropzone[dragActive="true"] {{ border: 1.5px solid {accent}; background: {accent_overlay}; }}
+QLabel#dropIcon {{ color: {fg_dim}; font-size: 20pt; background: transparent; border: none; }}
+QLabel#dropLabel {{ background: transparent; border: none; }}
+QLabel#dropHint {{ color: {fg_dim}; font-size: 8pt; background: transparent; border: none;
+    font-family: "JetBrains Mono", "Consolas", monospace; }}
+QLabel#chipName {{ color: {fg_bright}; font-weight: 500; background: transparent; border: none; }}
+QLabel#chipMeta {{ color: {fg_dim}; font-size: 8pt; background: transparent; border: none;
+    font-family: "JetBrains Mono", "Consolas", monospace; }}
+QLabel#chipIcon {{ color: {ok_text}; background: rgba(46,160,67,0.12); border-radius: 9px;
+    font-size: 14pt; border: none; }}
+
+/* ---------- Prompt do painel de execução ---------- */
+QLabel#promptIcon {{ color: {fg_dim}; font-size: 22pt; background: transparent; }}
+QLabel#promptIcon[state="ready"] {{ color: {ok_text}; }}
+QLabel#promptTitle {{ color: {fg_bright}; font-weight: 500; background: transparent; }}
+QLabel#promptSub {{ color: {fg_dim}; font-size: 9pt; background: transparent; }}
+
+/* ---------- Banner de atualização ---------- */
+QWidget#updateBanner {{ background: {banner_bg}; }}
+QLabel#updateBannerLbl {{ color: {banner_fg}; font-weight: 600; background: transparent; }}
 
 /* ---------- Cards (QGroupBox numerado) ---------- */
 QGroupBox {{
@@ -174,7 +194,23 @@ QFrame#kpi QLabel {{ background: transparent; }}
 QLabel#kpiLabel {{ color: {fg_dim}; font-size: 8.5pt; }}
 QLabel#kpiNum {{ color: {fg_bright}; font-family: "JetBrains Mono", "Consolas", monospace;
     font-size: 17pt; font-weight: 700; }}
+QLabel#kpiNum[accent="ok"] {{ color: {ok_text}; }}
+QLabel#kpiNum[accent="warn"] {{ color: {warn_text}; }}
+QLabel#kpiNum[accent="accent"] {{ color: {accent}; }}
 QLabel#kpiSub {{ color: {fg_dim}; font-size: 8pt; }}
+
+/* ---------- Sidebar: itens de navegação ---------- */
+QPushButton#navItem {{ background: transparent; border: 1px solid transparent;
+    text-align: left; border-radius: 7px; }}
+QPushButton#navItem:hover {{ background: {surface_alt}; }}
+QPushButton#navItem:checked {{ background: {surface_alt}; }}
+QPushButton#navItem:focus {{ border: 1px solid {accent}; outline: none; }}
+QLabel#navLabel {{ background: transparent; font-size: 9.5pt; }}
+QLabel#navGlyph {{ background: transparent; color: {fg_dim}; font-size: 11pt; }}
+QPushButton#navItem:checked QLabel#navLabel {{ font-weight: 600; color: {fg_bright}; }}
+QPushButton#navItem:checked QLabel#navGlyph {{ color: {accent}; }}
+QLabel#navCount {{ background: {surface_alt}; border-radius: 8px; padding: 0 7px;
+    font-family: "JetBrains Mono", monospace; font-size: 8pt; color: {fg_dim}; }}
 
 /* ---------- Painel (coluna direita) ---------- */
 QFrame#panel {{ background: {surface}; border: 1px solid {border}; border-radius: 8px; }}
@@ -191,6 +227,9 @@ QPushButton#segBtn:hover:!checked {{ color: {fg}; }}
 """
 
 
+_current_mode = "dark"
+
+
 def qss_for(mode: str) -> str:
     tokens = LIGHT_TOKENS if mode == "light" else DARK_TOKENS
     return _QSS_TEMPLATE.format(**tokens)
@@ -201,7 +240,19 @@ def tokens_for(mode: str) -> dict:
     return dict(LIGHT_TOKENS if mode == "light" else DARK_TOKENS)
 
 
+def current_mode() -> str:
+    return _current_mode
+
+
+def token(name: str) -> str:
+    """Token do tema ativo — para cores aplicadas em código (ex.: QColor em models)."""
+    tokens = LIGHT_TOKENS if _current_mode == "light" else DARK_TOKENS
+    return tokens[name]
+
+
 def apply_theme(app, mode: str) -> None:
+    global _current_mode
+    _current_mode = "light" if mode == "light" else "dark"
     app.setStyleSheet(qss_for(mode))
 
 
