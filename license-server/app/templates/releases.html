@@ -33,25 +33,100 @@
     <p class="hint">Gere o exe com o PyInstaller (<span class="mono">ProcessadorOcorrencias-vX.YY.spec</span>) e envie aqui.
     O SHA-256 é calculado no upload e os clientes validam o download contra ele.</p>
 
-    <form method="post" action="/admin/releases/upload" enctype="multipart/form-data"
-          onsubmit="document.getElementById('pub-btn').disabled = true; document.getElementById('pub-btn').textContent = 'Enviando…';">
+    <form id="upload-form" method="post" action="/admin/releases/upload" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-
-        <label for="version">Versão</label>
-        <input type="text" id="version" name="version" required placeholder="ex.: 1.66"
-               pattern="\d+\.\d+(\.\d+)?" style="max-width:180px">
-        <div class="hint">O arquivo é renomeado para <span class="mono">ProcessadorOcorrencias-v&lt;versão&gt;.exe</span> automaticamente.</div>
 
         <label for="file">Executável (.exe)</label>
         <input type="file" id="file" name="file" accept=".exe" required>
+
+        <label for="version">Versão</label>
+        <input type="text" id="version" name="version" placeholder="detectada do nome do arquivo"
+               pattern="\d+\.\d+(\.\d+)?" style="max-width:220px">
+        <div class="hint">Detectada automaticamente ao escolher o arquivo (ex.: <span class="mono">…-v1.66.exe</span> → 1.66).
+        O exe é renomeado para <span class="mono">ProcessadorOcorrencias-v&lt;versão&gt;.exe</span> no servidor.</div>
 
         <label class="check"><input type="checkbox" name="keep_old" value="1"> Manter os exes das versões anteriores no servidor</label>
 
         <div class="form-actions">
             <button type="submit" id="pub-btn" class="btn btn-primary">Publicar release</button>
         </div>
+
+        <div id="upload-progress" style="display:none;margin-top:18px">
+            <div class="progress"><div class="bar" id="upload-bar"></div></div>
+            <div class="hint" id="upload-status" style="margin-top:8px">Enviando…</div>
+        </div>
     </form>
 </div>
+
+<script>
+(function () {
+    const fileInput = document.getElementById('file');
+    const versionInput = document.getElementById('version');
+    const form = document.getElementById('upload-form');
+    const btn = document.getElementById('pub-btn');
+    const prog = document.getElementById('upload-progress');
+    const bar = document.getElementById('upload-bar');
+    const statusEl = document.getElementById('upload-status');
+
+    // Autodetecção: extrai "1.66" de "ProcessadorOcorrencias-v1.66.exe"
+    fileInput.addEventListener('change', function () {
+        const f = fileInput.files[0];
+        if (!f) return;
+        const m = f.name.match(/v?(\d+\.\d+(?:\.\d+)?)/i);
+        if (m) versionInput.value = m[1];
+    });
+
+    function mb(n) { return (n / 1048576).toFixed(1); }
+
+    function falha(msg) {
+        statusEl.textContent = msg;
+        statusEl.style.color = 'var(--red)';
+        bar.style.background = 'var(--red)';
+        btn.disabled = false;
+        btn.textContent = 'Publicar release';
+    }
+
+    form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+        btn.disabled = true;
+        btn.textContent = 'Enviando…';
+        prog.style.display = 'block';
+        statusEl.style.color = '';
+        bar.style.background = '';
+        bar.style.width = '0%';
+
+        xhr.upload.onprogress = function (e) {
+            if (!e.lengthComputable) return;
+            const pct = Math.round(e.loaded / e.total * 100);
+            bar.style.width = pct + '%';
+            statusEl.textContent = pct < 100
+                ? 'Enviando… ' + pct + '% — ' + mb(e.loaded) + ' / ' + mb(e.total) + ' MB'
+                : 'Processando no servidor (calculando SHA-256)…';
+        };
+        xhr.onload = function () {
+            let resp = null;
+            try { resp = JSON.parse(xhr.responseText); } catch (e) {}
+            if (xhr.status === 200 && resp && resp.ok) {
+                bar.style.width = '100%';
+                statusEl.textContent = 'Publicado! Recarregando…';
+                window.location = '/admin/releases?published=' + encodeURIComponent(resp.version);
+            } else if (resp && resp.error) {
+                falha(resp.error);
+            } else if (xhr.status === 413) {
+                falha('O proxy recusou o arquivo (413) — limite de tamanho do nginx.');
+            } else {
+                falha('Falha no upload (HTTP ' + xhr.status + ').');
+            }
+        };
+        xhr.onerror = function () { falha('Erro de rede durante o upload.'); };
+        xhr.send(new FormData(form));
+    });
+})();
+</script>
 
 <div class="page-header" style="margin-top:26px"><h2>Arquivos no servidor</h2></div>
 <div class="card">

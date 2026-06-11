@@ -118,6 +118,59 @@ def test_upload_publica_release(client):
     assert (tmp_path / "releases" / "ProcessadorOcorrencias-v9.99.exe").exists()
 
 
+def test_upload_ajax_retorna_json(client):
+    c, tmp_path = client
+    csrf = _login(c)
+    resp = c.post(
+        "/admin/releases/upload",
+        data={"csrf_token": csrf, "version": "9.99"},
+        files={"file": ("ProcessadorOcorrencias-v9.99.exe", b"exe",
+                        "application/octet-stream")},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["version"] == "9.99"
+
+
+def test_upload_ajax_erro_retorna_json(client):
+    c, _ = client
+    csrf = _login(c)
+    resp = c.post(
+        "/admin/releases/upload",
+        data={"csrf_token": csrf, "version": "banana"},
+        files={"file": ("a.exe", b"x", "application/octet-stream")},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["error"]
+
+
+def test_upload_sem_versao_detecta_do_nome_do_arquivo(client):
+    c, tmp_path = client
+    csrf = _login(c)
+    resp = c.post(
+        "/admin/releases/upload",
+        data={"csrf_token": csrf, "version": ""},
+        files={"file": ("ProcessadorOcorrencias-v1.66.exe", b"exe-166",
+                        "application/octet-stream")},
+    )
+    assert resp.status_code == 200
+    saved = json.loads((tmp_path / "version.json").read_text(encoding="utf-8"))
+    assert saved["version"] == "1.66"
+
+
+def test_releases_get_com_published_mostra_confirmacao(client):
+    c, _ = client
+    _login(c)
+    resp = c.get("/admin/releases?published=1.66")
+    assert resp.status_code == 200
+    assert "Release v1.66 publicado" in resp.text
+
+
 def test_upload_versao_invalida_mostra_erro(client):
     c, tmp_path = client
     csrf = _login(c)

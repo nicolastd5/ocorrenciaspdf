@@ -1,9 +1,10 @@
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -204,19 +205,31 @@ def _render_releases(request, *, message=None, error=None, status_code=200):
     )
 
 
+_VERSION_IN_NAME_RE = re.compile(r"v?(\d+\.\d+(?:\.\d+)?)", re.IGNORECASE)
+
+
 @router.get("/releases", response_class=HTMLResponse)
-async def releases_get(request: Request):
+async def releases_get(request: Request, published: str = Query("")):
     redirect = _require_auth_or_redirect(request)
     if redirect:
         return redirect
-    return _render_releases(request)
+    message = None
+    # `published` chega via redirect do upload AJAX; valida o formato antes de exibir
+    if published and re.fullmatch(r"\d+\.\d+(\.\d+)?", published):
+        message = (f"Release v{published} publicado — os clientes passam a "
+                   f"receber a atualização imediatamente.")
+    return _render_releases(request, message=message)
+
+
+def _is_ajax(request: Request) -> bool:
+    return request.headers.get("x-requested-with") == "XMLHttpRequest"
 
 
 @router.post("/releases/upload", response_class=HTMLResponse)
 async def releases_upload(
     request: Request,
     csrf_token: str = Form(...),
-    version: str = Form(...),
+    version: str = Form(""),
     keep_old: str = Form(""),
     file: UploadFile = File(...),
 ):
@@ -224,12 +237,25 @@ async def releases_upload(
     if redirect:
         return redirect
     _check_csrf(request, csrf_token)
+
+    # Sem versão digitada: detecta do nome do arquivo (ProcessadorOcorrencias-v1.66.exe)
+    version = version.strip()
+    if not version and file.filename:
+        m = _VERSION_IN_NAME_RE.search(file.filename)
+        if m:
+            version = m.group(1)
+
     try:
         info = publish_release(version, file.file, keep_old=bool(keep_old))
     except ReleaseError as e:
+        if _is_ajax(request):
+            return JSONResponse({"ok": False, "error": str(e)})
         return _render_releases(request, error=str(e))
     logger.info("release v%s publicado via painel por %s", info["version"],
                 request.client.host if request.client else "?")
+    if _is_ajax(request):
+        return JSONResponse({"ok": True, "version": info["version"],
+                             "sha256": info["sha256"], "size": info["size"]})
     return _render_releases(
         request,
         message=(f"Release v{info['version']} publicado — os clientes passam a "
