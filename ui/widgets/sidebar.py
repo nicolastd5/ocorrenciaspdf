@@ -58,6 +58,21 @@ class Sidebar(QFrame):
         lay.setContentsMargins(12, 14, 12, 14)
         lay.setSpacing(2)
 
+        # Selo da marca (mesmo badge em gradiente da splash)
+        brand = QHBoxLayout()
+        brand.setContentsMargins(4, 0, 4, 10)
+        brand.setSpacing(10)
+        logo = QLabel("▣", self)
+        logo.setObjectName("brandLogo")
+        logo.setFixedSize(30, 30)
+        logo.setAlignment(Qt.AlignCenter)
+        brand.addWidget(logo)
+        name = QLabel("Processador\nde Ocorrências", self)
+        name.setObjectName("brandName")
+        brand.addWidget(name)
+        brand.addStretch()
+        lay.addLayout(brand)
+
         self._items: list[_NavItem] = []
 
         groups = [

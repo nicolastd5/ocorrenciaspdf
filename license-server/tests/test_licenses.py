@@ -43,6 +43,49 @@ def test_list_all_returns_all_licenses_ordered_by_created_at_desc(temp_db):
     assert all_licenses[0].key == "2222-2222-2222-2222"
     assert all_licenses[1].key == "1111-1111-1111-1111"
 
+from app.licenses import (
+    license_stats, last_validation_map, list_recent_validations,
+    count_validations_since,
+)
+
+
+def test_license_stats_conta_total_ativas_revogadas(temp_db):
+    a = create_license(temp_db, key="STAT-0001-STAT-0001", client_name="A", notes=None)
+    create_license(temp_db, key="STAT-0002-STAT-0002", client_name="B", notes=None)
+    revoke_license(temp_db, a.id)
+    stats = license_stats(temp_db)
+    assert stats == {"total": 2, "active": 1, "revoked": 1}
+
+
+def test_last_validation_map_retorna_ultima_por_licenca(temp_db):
+    from app.licenses import log_validation
+    lic = create_license(temp_db, key="LAST-0001-LAST-0001", client_name="C", notes=None)
+    log_validation(temp_db, license_id=lic.id, ip="1.1.1.1", app_version="1.60")
+    log_validation(temp_db, license_id=lic.id, ip="2.2.2.2", app_version="1.65")
+    m = last_validation_map(temp_db)
+    assert lic.id in m
+    assert m[lic.id]["app_version"] == "1.65"
+    assert m[lic.id]["validated_at"]
+
+
+def test_list_recent_validations_junta_nome_do_cliente(temp_db):
+    from app.licenses import log_validation
+    lic = create_license(temp_db, key="RECE-0001-RECE-0001", client_name="Empresa Z", notes=None)
+    log_validation(temp_db, license_id=lic.id, ip="9.9.9.9", app_version="1.65")
+    recentes = list_recent_validations(temp_db, limit=5)
+    assert len(recentes) == 1
+    assert recentes[0]["client_name"] == "Empresa Z"
+    assert recentes[0]["ip"] == "9.9.9.9"
+
+
+def test_count_validations_since(temp_db):
+    from app.licenses import log_validation
+    lic = create_license(temp_db, key="CNT0-0001-CNT0-0001", client_name="D", notes=None)
+    log_validation(temp_db, license_id=lic.id, ip="1.1.1.1", app_version="1.65")
+    assert count_validations_since(temp_db, "2000-01-01T00:00:00+00:00") == 1
+    assert count_validations_since(temp_db, "2999-01-01T00:00:00+00:00") == 0
+
+
 from app.licenses import log_validation, list_validations_for_license
 
 def test_log_validation_creates_entry(temp_db):

@@ -132,6 +132,17 @@ def test_revoke_without_csrf_is_rejected(client):
     assert get_by_id(db_path, lic.id).revoked is False
 
 
+def test_paginas_admin_carregam(client):
+    c, db_path = client
+    from app.licenses import create_license
+    create_license(db_path, key="PAGE-LOAD-PAGE-LOAD", client_name="Pag", notes=None)
+    _login(c)
+    for path in ("/admin", "/admin/licenses", "/admin/licenses?q=pag&status=active",
+                 "/admin/releases", "/admin/config", "/admin/new"):
+        resp = c.get(path)
+        assert resp.status_code == 200, path
+
+
 def test_logout_clears_session(client):
     c, _ = client
     _login(c)

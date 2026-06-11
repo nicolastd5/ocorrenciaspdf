@@ -161,7 +161,7 @@ class OcorrenciasTab(ProcessingTab):
 
     TITLE = "Ocorrências"
     SUBTITLE = "Leia o PDF de jornada, reconcilie as varreduras e gere a planilha de saída."
-    EMPTY_HINT = "Adicione o PDF de jornada e a planilha de pedido."
+    EMPTY_HINT = "Adicione o PDF e a planilha de pedido."
 
     def __init__(self, parent=None):
         self._pdf = None

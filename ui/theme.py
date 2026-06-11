@@ -2,22 +2,23 @@ import os
 import sys
 from pathlib import Path
 
+# Paleta escura azul-marinho — mesma família visual da splash
 DARK_TOKENS = {
-    "bg":            "#0d1117",
-    "surface":       "#161b22",
-    "surface_alt":   "#21262d",
-    "border":        "#30363d",
-    "fg":            "#c9d1d9",
+    "bg":            "#0c1220",
+    "surface":       "#111a2e",
+    "surface_alt":   "#1a2540",
+    "border":        "#273450",
+    "fg":            "#c9d4e6",
     "fg_bright":     "#f0f6fc",
-    "fg_dim":        "#8b949e",
+    "fg_dim":        "#8b95a7",
     "success":       "#238636",
     "success_hover": "#2ea043",
     "accent":        "#58a6ff",
     "warning":       "#d29922",
     "danger":        "#f85149",
     # tons derivados usados no shell (sidebar, log, banner)
-    "log_bg":        "#06080c",
-    "banner_bg":     "#0f1a14",
+    "log_bg":        "#070b15",
+    "banner_bg":     "#0e1f1d",
     "banner_fg":     "#2ea043",
     "ok_text":       "#3fb950",
     "warn_text":     "#e3b341",
@@ -78,6 +79,12 @@ QTabBar::tab:hover:!selected {{ color: {fg}; }}
 QFrame#sidebar {{
     background: {surface}; border: none; border-right: 1px solid {border};
 }}
+QLabel#brandLogo {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1f6feb, stop:1 #238636);
+    color: white; border-radius: 8px; font-size: 12pt; font-weight: 700;
+}}
+QLabel#brandName {{ color: {fg_bright}; font-weight: 600; font-size: 9pt;
+    background: transparent; }}
 QLabel#sideSect {{
     color: {fg_dim}; font-size: 8pt; font-weight: 600; padding: 10px 9px 4px;
     background: transparent;
@@ -155,8 +162,13 @@ QPushButton:hover {{ background: {border}; }}
 QPushButton:pressed {{ background: {border}; border-color: {fg_dim}; }}
 QPushButton:focus {{ border-color: {accent}; outline: none; }}
 QPushButton:disabled {{ color: {fg_dim}; }}
-QPushButton#primary {{ background: {success}; color: white; border: none; font-weight: 600; padding: 8px 20px; }}
-QPushButton#primary:hover {{ background: {success_hover}; }}
+QPushButton#primary {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1f6feb, stop:1 #238636);
+    color: white; border: none; font-weight: 600; padding: 8px 20px;
+}}
+QPushButton#primary:hover {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #388bfd, stop:1 #2ea043);
+}}
 QPushButton#primary:disabled {{ background: {surface_alt}; color: {fg_dim}; }}
 QPushButton#warning {{ background: {warning}; color: white; border: none; font-weight: 600; padding: 8px 20px; }}
 QPushButton#warning:hover {{ background: {warning}; }}
@@ -201,10 +213,13 @@ QStatusBar {{ background: {surface_alt}; color: {fg_dim}; border-top: 1px solid 
 QStatusBar::item {{ border: none; }}
 QStatusBar QLabel {{ background: transparent; }}
 
-/* ---------- Progress ---------- */
+/* ---------- Progress (gradiente azul→verde, como na splash) ---------- */
 QProgressBar {{ background: {surface_alt}; border: 1px solid {border}; border-radius: 4px;
     text-align: center; color: {fg_bright}; max-height: 8px; }}
-QProgressBar::chunk {{ background: {accent}; border-radius: 3px; }}
+QProgressBar::chunk {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1f6feb, stop:1 #3fb950);
+    border-radius: 3px;
+}}
 
 /* ---------- KPI tiles ---------- */
 QFrame#kpi {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}

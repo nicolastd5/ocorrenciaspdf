@@ -1,25 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Login — License Manager{% endblock %}
-{% block content %}
+{% block title %}Login — Processador de Ocorrências{% endblock %}
+{% block layout %}
 <div class="login-wrap">
     <div class="login-card">
-        <div class="login-logo">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-        </div>
-        <h1>License Manager</h1>
-        <p>Faça login para acessar o painel.</p>
-        {% if error %}
-        <div class="alert alert-error">{{ error }}</div>
-        {% endif %}
+        <div class="brand-logo">▣</div>
+        <h1>Processador de Ocorrências</h1>
+        <p>Painel de administração — faça login para continuar.</p>
+        {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
         <form method="post" action="/admin/login">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label for="password">Senha</label>
             <input type="password" id="password" name="password" autofocus placeholder="••••••••">
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Entrar</button>
+                <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">Entrar</button>
             </div>
         </form>
     </div>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Nova licença — License Manager{% endblock %}
+{% block title %}Nova licença — Processador de Ocorrências{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Nova licença</h1>
@@ -10,12 +10,12 @@
     <form method="post" action="/admin/new">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label for="client_name">Nome do cliente</label>
-        <input type="text" id="client_name" name="client_name" required autofocus placeholder="Ex: Empresa XYZ">
+        <input type="text" id="client_name" name="client_name" required autofocus placeholder="Ex.: Empresa XYZ">
         <label for="notes">Notas <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label>
-        <textarea id="notes" name="notes" placeholder="Observações internas..."></textarea>
+        <textarea id="notes" name="notes" placeholder="Observações internas…"></textarea>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Gerar chave</button>
-            <a href="/admin" class="btn btn-ghost">Cancelar</a>
+            <a href="/admin/licenses" class="btn btn-ghost">Cancelar</a>
         </div>
     </form>
 </div>

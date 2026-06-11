@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, Request, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter
@@ -10,8 +10,13 @@ from slowapi.util import get_remote_address
 
 from app.keygen import generate_key
 from app.licenses import (
-    create_license, get_by_id, list_all_licenses,
+    count_validations_since, create_license, get_by_id, last_validation_map,
+    license_stats, list_all_licenses, list_recent_validations,
     list_validations_for_license, revoke_license, unrevoke_license,
+)
+from app.releases import (
+    ReleaseError, delete_release_file, list_release_files, publish_release,
+    read_version_info,
 )
 from app.security import (
     get_or_create_csrf_token, is_authenticated,
@@ -100,19 +105,20 @@ async def logout(request: Request, csrf_token: str = Form(...)):
     return RedirectResponse("/admin/login", status_code=status.HTTP_303_SEE_OTHER)
 
 
-def _get_version_info() -> tuple[str | None, str | None]:
-    try:
-        import json as _json
-        vfile = Path(__file__).parent.parent / "version.json"
-        if vfile.exists():
-            data = _json.loads(vfile.read_text(encoding="utf-8"))
-            return data.get("version"), data.get("filename")
-    except Exception:
-        pass
-    return None, None
-
-
 _GEMINI_KEY_FILE = Path(__file__).parent.parent / "gemini_key.txt"
+
+
+def _fmt_size(n) -> str:
+    if not n:
+        return "—"
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return "—"
+
+
+templates.env.filters["filesize"] = _fmt_size
 
 
 def _read_gemini_key() -> str:
@@ -131,25 +137,122 @@ def _delete_gemini_key() -> None:
 
 
 @router.get("", response_class=HTMLResponse)
-async def list_view(request: Request):
+async def dashboard_view(request: Request):
+    redirect = _require_auth_or_redirect(request)
+    if redirect:
+        return redirect
+    settings = request.app.state.settings
+    db = settings.db_path
+    now = datetime.now(timezone.utc)
+    stats = license_stats(db)
+    csrf = get_or_create_csrf_token(request)
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {
+            "csrf_token": csrf,
+            "stats": stats,
+            "val_24h": count_validations_since(
+                db, (now - timedelta(hours=24)).isoformat(timespec="seconds")),
+            "val_7d": count_validations_since(
+                db, (now - timedelta(days=7)).isoformat(timespec="seconds")),
+            "recent": list_recent_validations(db, limit=12),
+            "release": read_version_info(),
+        },
+    )
+
+
+@router.get("/licenses", response_class=HTMLResponse)
+async def licenses_view(request: Request, q: str = Query(""),
+                        status_f: str = Query("", alias="status")):
     redirect = _require_auth_or_redirect(request)
     if redirect:
         return redirect
     settings = request.app.state.settings
     licenses = list_all_licenses(settings.db_path)
-    rows = []
-    for lic in licenses:
-        validations = list_validations_for_license(settings.db_path, lic.id)
-        last = validations[0].validated_at if validations else None
-        rows.append({"license": lic, "last_validation": last})
+    lastmap = last_validation_map(settings.db_path)
+
+    busca = q.strip().lower()
+    if busca:
+        licenses = [l for l in licenses
+                    if busca in l.client_name.lower() or busca in l.key.lower()]
+    if status_f == "active":
+        licenses = [l for l in licenses if not l.revoked]
+    elif status_f == "revoked":
+        licenses = [l for l in licenses if l.revoked]
+
+    rows = [{"license": lic, "last": lastmap.get(lic.id)} for lic in licenses]
     csrf = get_or_create_csrf_token(request)
-    app_version, app_filename = _get_version_info()
     return templates.TemplateResponse(
         request,
         "list.html",
-        {"rows": rows, "csrf_token": csrf, "message": None,
-         "app_version": app_version, "app_filename": app_filename},
+        {"rows": rows, "csrf_token": csrf, "q": q, "status_f": status_f,
+         "stats": license_stats(settings.db_path)},
     )
+
+
+# ---------- releases (upload de versão nova direto pelo painel) ----------
+
+def _render_releases(request, *, message=None, error=None, status_code=200):
+    csrf = get_or_create_csrf_token(request)
+    return templates.TemplateResponse(
+        request,
+        "releases.html",
+        {"csrf_token": csrf, "release": read_version_info(),
+         "files": list_release_files(), "message": message, "error": error},
+        status_code=status_code,
+    )
+
+
+@router.get("/releases", response_class=HTMLResponse)
+async def releases_get(request: Request):
+    redirect = _require_auth_or_redirect(request)
+    if redirect:
+        return redirect
+    return _render_releases(request)
+
+
+@router.post("/releases/upload", response_class=HTMLResponse)
+async def releases_upload(
+    request: Request,
+    csrf_token: str = Form(...),
+    version: str = Form(...),
+    keep_old: str = Form(""),
+    file: UploadFile = File(...),
+):
+    redirect = _require_auth_or_redirect(request)
+    if redirect:
+        return redirect
+    _check_csrf(request, csrf_token)
+    try:
+        info = publish_release(version, file.file, keep_old=bool(keep_old))
+    except ReleaseError as e:
+        return _render_releases(request, error=str(e))
+    logger.info("release v%s publicado via painel por %s", info["version"],
+                request.client.host if request.client else "?")
+    return _render_releases(
+        request,
+        message=(f"Release v{info['version']} publicado — os clientes passam a "
+                 f"receber a atualização imediatamente. SHA-256: {info['sha256'][:16]}…"))
+
+
+@router.post("/releases/delete", response_class=HTMLResponse)
+async def releases_delete(
+    request: Request,
+    csrf_token: str = Form(...),
+    filename: str = Form(...),
+):
+    redirect = _require_auth_or_redirect(request)
+    if redirect:
+        return redirect
+    _check_csrf(request, csrf_token)
+    try:
+        ok = delete_release_file(filename)
+    except ReleaseError as e:
+        return _render_releases(request, error=str(e))
+    if ok:
+        return _render_releases(request, message=f"{Path(filename).name} removido.")
+    return _render_releases(request, error="Arquivo não encontrado.")
 
 
 @router.get("/new", response_class=HTMLResponse)

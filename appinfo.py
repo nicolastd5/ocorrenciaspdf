@@ -4,5 +4,5 @@ Importado por license_client e auto_update; os .spec de build usam a mesma
 versão via LicenseClient.APP_VERSION.
 """
 
-APP_VERSION = "1.65"
+APP_VERSION = "1.66"
 SERVER_URL = "https://nicolasapp.duckdns.org"

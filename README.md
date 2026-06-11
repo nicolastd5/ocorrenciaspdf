@@ -36,8 +36,13 @@ py -m venv .venv
 1. Bump da versão em [appinfo.py](appinfo.py) (`APP_VERSION`).
 2. Gerar o exe com PyInstaller usando o `.spec` da versão
    (`ProcessadorOcorrencias-vX.YY.spec`).
-3. `py deploy.py --release X.YY` — sobe o exe para a VPS, grava o
-   `version.json` (versão + arquivo + sha256) e reinicia o serviço.
+3. Publicar por um dos caminhos:
+   - **Painel admin** (`https://<servidor>/admin/releases`): faça upload do exe
+     informando a versão — o servidor calcula o SHA-256, grava o `version.json`
+     e remove os exes antigos. Não precisa de SSH nem reiniciar o serviço.
+   - **deploy.py** (`py deploy.py --release X.YY`): além do release, envia
+     arquivos modificados do license-server e reinicia o serviço — use quando
+     o código do servidor também mudou.
 
 Clientes em campo detectam a versão nova no `/api/version`, baixam pelo
 `/api/download/...` e reiniciam sozinhos (ver [auto_update.py](auto_update.py)).

@@ -1,61 +1,45 @@
 {% extends "base.html" %}
-{% block title %}Configurações — License Manager{% endblock %}
+{% block title %}Configurações — Processador de Ocorrências{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Configurações</h1>
-    <p>Gerencie as configurações globais do aplicativo.</p>
+    <p>Configurações globais distribuídas aos clientes.</p>
 </div>
 
-{% if message %}
-<div class="alert alert-success">{{ message }}</div>
-{% endif %}
-{% if error %}
-<div class="alert alert-error">{{ error }}</div>
-{% endif %}
+{% if message %}<div class="alert alert-success">{{ message }}</div>{% endif %}
+{% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
 
-<div class="form-card" style="max-width:560px;">
-    <h2 style="font-size:16px; font-weight:600; margin-bottom:14px; color:var(--text-bright); letter-spacing:-0.01em;">
-        API Key do Google Gemini
-    </h2>
-    <p style="font-size:13px; color:var(--text-muted); margin-bottom:22px; line-height:1.6;">
-        Esta chave é distribuída automaticamente para todos os usuários com licença ativa ao abrirem o aplicativo.
-        Mantenha-a segura — ela é enviada apenas para licenças válidas.
-    </p>
+<div class="form-card">
+    <h2 style="font-size:16px;font-weight:600;color:var(--text-bright);margin-bottom:4px">API Key do Google Gemini</h2>
+    <p class="hint">Distribuída automaticamente para usuários com licença ativa ao abrirem o app.
+    É enviada apenas para licenças válidas.</p>
 
     <form method="post" action="/admin/config">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="action" value="save">
 
         <label for="gemini_key">Chave da API</label>
-        <input type="text" id="gemini_key" name="gemini_key"
-               value="{{ gemini_key }}"
-               placeholder="AIza...">
+        <input type="text" id="gemini_key" name="gemini_key" value="{{ gemini_key }}" placeholder="AIza…">
 
-        <div class="form-actions" style="margin-top:1.5rem;">
+        <div class="form-actions">
             <button type="submit" class="btn btn-primary">Salvar</button>
-
             {% if gemini_key %}
-            <button type="submit"
-                    name="action" value="delete"
-                    class="btn btn-danger"
+            <button type="submit" name="action" value="delete" class="btn btn-danger"
                     onclick="return confirm('Remover a API key? Os usuários não receberão mais a chave automaticamente.')">
                 Remover
             </button>
             {% endif %}
-
             <a href="/admin" class="btn btn-ghost">Cancelar</a>
         </div>
     </form>
 
     {% if gemini_key %}
-    <div style="margin-top:1.5rem; padding:1rem; background:var(--surface-2); border-radius:var(--radius); border:1px solid var(--border);">
-        <div style="font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:.5rem;">Key atual</div>
-        <span class="key">{{ gemini_key[:8] }}••••••••••••••••••••••••••••••••••••</span>
+    <div style="margin-top:18px;padding:13px 16px;background:var(--surface-2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+        <div class="info-label">Key atual</div>
+        <span class="key">{{ gemini_key[:8] }}••••••••••••••••••••••••••••</span>
     </div>
     {% else %}
-    <div style="margin-top:1.5rem; padding:1rem; background:var(--surface-2); border-radius:var(--radius); border:1px solid var(--border); color:var(--text-muted); font-size:.875rem;">
-        Nenhuma API key configurada. Os usuários precisarão inserir a chave manualmente.
-    </div>
+    <div class="hint" style="margin-top:14px">Nenhuma API key configurada — os modos com IA ficam indisponíveis nos clientes.</div>
     {% endif %}
 </div>
 {% endblock %}

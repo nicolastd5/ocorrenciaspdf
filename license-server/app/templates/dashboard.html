@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Processador de Ocorrências{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <p>Visão geral das licenças, validações e do release publicado.</p>
+</div>
+
+<div class="kpi-grid">
+    <div class="kpi">
+        <div class="label">Licenças ativas</div>
+        <div class="value ok">{{ stats.active }}</div>
+        <div class="sub">de {{ stats.total }} no total</div>
+    </div>
+    <div class="kpi">
+        <div class="label">Revogadas</div>
+        <div class="value {{ 'danger' if stats.revoked else '' }}">{{ stats.revoked }}</div>
+    </div>
+    <div class="kpi">
+        <div class="label">Validações 24h</div>
+        <div class="value accent">{{ val_24h }}</div>
+        <div class="sub">{{ val_7d }} nos últimos 7 dias</div>
+    </div>
+    <div class="kpi">
+        <div class="label">Release publicado</div>
+        <div class="value">{{ 'v' + release.version if release.version else '—' }}</div>
+        <div class="sub">{% if release.published_at %}{{ release.published_at | brasilia }}{% else %}nenhum release{% endif %}</div>
+    </div>
+</div>
+
+<div class="toolbar">
+    <a href="/admin/new" class="btn btn-primary">+ Nova licença</a>
+    <a href="/admin/releases" class="btn">Publicar release</a>
+    <a href="/admin/licenses" class="btn btn-ghost">Ver todas as licenças</a>
+</div>
+
+<div class="page-header" style="margin-top:10px">
+    <h2>Atividade recente</h2>
+</div>
+<div class="card">
+    <table>
+        <thead>
+            <tr><th>Quando</th><th>Cliente</th><th>Versão do app</th><th>IP</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+            {% for v in recent %}
+            <tr>
+                <td class="meta">{{ v.validated_at | brasilia }}</td>
+                <td><a href="/admin/{{ v.license_id }}" style="text-decoration:none;color:var(--text-bright)">{{ v.client_name }}</a></td>
+                <td class="meta">{{ v.app_version or '—' }}</td>
+                <td class="mono" style="color:var(--text-muted)">{{ v.ip }}</td>
+                <td>
+                    {% if v.revoked %}<span class="badge badge-revoked">Revogada</span>
+                    {% else %}<span class="badge badge-active">Ativa</span>{% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">Nenhuma validação registrada ainda.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

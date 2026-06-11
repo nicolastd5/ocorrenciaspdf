@@ -92,7 +92,7 @@ class VTCaixaWorker(QObject):
 class VTCaixaTab(ProcessingTab):
     TITLE = "VT-Caixa"
     SUBTITLE = "Processe a fonte Nautilus contra o Excel cadastral e gere o CSV de benefícios."
-    EMPTY_HINT = "Adicione a fonte Nautilus e o Excel cadastral."
+    EMPTY_HINT = "Adicione a fonte e o Excel cadastral."
 
     def __init__(self, parent=None):
         self._fonte = None

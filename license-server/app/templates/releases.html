@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Releases — Processador de Ocorrências{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Releases</h1>
+    <p>Publique uma versão nova do app sem sair do painel — os clientes recebem pelo auto-update.</p>
+</div>
+
+{% if message %}<div class="alert alert-success">{{ message }}</div>{% endif %}
+{% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+
+<div class="release-hero">
+    <div class="meta-col">
+        <div class="info-label">Versão publicada</div>
+        <div class="ver">{{ 'v' + release.version if release.version else '—' }}</div>
+    </div>
+    <div class="meta-col" style="flex:1;min-width:260px">
+        {% if release.filename %}
+        <div class="mono" style="color:var(--text)">{{ release.filename }}{% if release.size %} · {{ release.size | filesize }}{% endif %}</div>
+        <div class="mono" style="color:var(--text-muted);word-break:break-all">sha256: {{ release.sha256 or '—' }}</div>
+        {% if release.published_at %}<div class="meta">publicado em {{ release.published_at | brasilia }}</div>{% endif %}
+        {% else %}
+        <div class="meta">Nenhum release publicado ainda.</div>
+        {% endif %}
+    </div>
+    {% if release.filename %}
+    <a href="/api/download/{{ release.filename }}" class="btn btn-ghost">Baixar .exe</a>
+    {% endif %}
+</div>
+
+<div class="form-card">
+    <h2 style="font-size:16px;font-weight:600;color:var(--text-bright);margin-bottom:4px">Publicar nova versão</h2>
+    <p class="hint">Gere o exe com o PyInstaller (<span class="mono">ProcessadorOcorrencias-vX.YY.spec</span>) e envie aqui.
+    O SHA-256 é calculado no upload e os clientes validam o download contra ele.</p>
+
+    <form method="post" action="/admin/releases/upload" enctype="multipart/form-data"
+          onsubmit="document.getElementById('pub-btn').disabled = true; document.getElementById('pub-btn').textContent = 'Enviando…';">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <label for="version">Versão</label>
+        <input type="text" id="version" name="version" required placeholder="ex.: 1.66"
+               pattern="\d+\.\d+(\.\d+)?" style="max-width:180px">
+        <div class="hint">O arquivo é renomeado para <span class="mono">ProcessadorOcorrencias-v&lt;versão&gt;.exe</span> automaticamente.</div>
+
+        <label for="file">Executável (.exe)</label>
+        <input type="file" id="file" name="file" accept=".exe" required>
+
+        <label class="check"><input type="checkbox" name="keep_old" value="1"> Manter os exes das versões anteriores no servidor</label>
+
+        <div class="form-actions">
+            <button type="submit" id="pub-btn" class="btn btn-primary">Publicar release</button>
+        </div>
+    </form>
+</div>
+
+<div class="page-header" style="margin-top:26px"><h2>Arquivos no servidor</h2></div>
+<div class="card">
+    <table>
+        <thead><tr><th>Arquivo</th><th>Tamanho</th><th>Modificado</th><th></th></tr></thead>
+        <tbody>
+            {% for f in files %}
+            <tr>
+                <td class="mono" style="color:{{ 'var(--green)' if f.name == release.filename else 'var(--text)' }}">
+                    {{ f.name }}
+                    {% if f.name == release.filename %}<span class="badge badge-active" style="margin-left:8px">publicado</span>{% endif %}
+                </td>
+                <td class="meta">{{ f.size | filesize }}</td>
+                <td class="meta">{{ f.mtime | brasilia }}</td>
+                <td style="text-align:right">
+                    {% if f.name != release.filename %}
+                    <form method="post" action="/admin/releases/delete" class="inline"
+                          onsubmit="return confirm('Remover {{ f.name }} do servidor?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="filename" value="{{ f.name }}">
+                        <button class="btn btn-danger btn-sm">Remover</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="empty">Nenhum exe na pasta de releases.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

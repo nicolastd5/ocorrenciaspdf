@@ -1,91 +1,62 @@
 {% extends "base.html" %}
-{% block title %}Licenças — License Manager{% endblock %}
+{% block title %}Licenças — Processador de Ocorrências{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Licenças</h1>
-    <p>Gerencie as chaves de acesso ao aplicativo.</p>
+    <p>{{ stats.active }} ativa(s) · {{ stats.revoked }} revogada(s) · {{ stats.total }} no total.</p>
 </div>
 
-{% if message %}
-<div class="alert alert-success">{{ message }}</div>
-{% endif %}
-
 <div class="toolbar">
-    {% if app_version %}
-    <div class="card" style="display:flex; align-items:center; gap:20px; padding:14px 22px; flex:1; min-width:280px;">
-        <div>
-            <div class="eyebrow">Versão atual do app</div>
-            <div style="font-size:18px; font-weight:700; color:var(--text-bright); letter-spacing:-0.01em; font-variant-numeric:tabular-nums;">v{{ app_version }}</div>
-        </div>
-        {% if app_filename %}
-        <a href="/api/download/{{ app_filename }}" class="btn btn-ghost" style="margin-left:auto;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Baixar .exe
-        </a>
-        {% else %}
-        <span style="color:var(--text-muted); font-size:13px; margin-left:auto;">Nenhum release publicado</span>
-        {% endif %}
-    </div>
-    {% endif %}
-
-    <a href="/admin/new" class="btn btn-primary" style="white-space:nowrap;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        Nova licença
-    </a>
+    <form method="get" action="/admin/licenses">
+        <input type="text" name="q" value="{{ q }}" placeholder="Buscar por cliente ou chave…">
+        <select name="status" onchange="this.form.submit()">
+            <option value="" {{ 'selected' if not status_f }}>Todas</option>
+            <option value="active" {{ 'selected' if status_f == 'active' }}>Ativas</option>
+            <option value="revoked" {{ 'selected' if status_f == 'revoked' }}>Revogadas</option>
+        </select>
+        <button type="submit" class="btn">Buscar</button>
+    </form>
+    <a href="/admin/new" class="btn btn-primary" style="white-space:nowrap">+ Nova licença</a>
 </div>
 
 <div class="card">
     <table>
         <thead>
             <tr>
-                <th>Chave</th>
-                <th>Cliente</th>
-                <th>Status</th>
-                <th>Criada em</th>
-                <th>Última validação</th>
-                <th></th>
+                <th>Chave</th><th>Cliente</th><th>Status</th>
+                <th>Última validação</th><th>Versão</th><th></th>
             </tr>
         </thead>
         <tbody>
             {% for row in rows %}
             <tr>
-                <td><a href="/admin/{{ row.license.id }}" style="text-decoration:none;"><span class="key">{{ row.license.key }}</span></a></td>
-                <td>{{ row.license.client_name }}</td>
+                <td><a href="/admin/{{ row.license.id }}" style="text-decoration:none"><span class="key">{{ row.license.key }}</span></a></td>
+                <td style="color:var(--text-bright)">{{ row.license.client_name }}</td>
                 <td>
-                    {% if row.license.revoked %}
-                    <span class="badge badge-revoked">Revogada</span>
-                    {% else %}
-                    <span class="badge badge-active">Ativa</span>
-                    {% endif %}
+                    {% if row.license.revoked %}<span class="badge badge-revoked">Revogada</span>
+                    {% else %}<span class="badge badge-active">Ativa</span>{% endif %}
                 </td>
-                <td class="meta">{{ row.license.created_at | brasilia }}</td>
-                <td class="meta">{{ row.last_validation | brasilia }}</td>
-                <td>
+                <td class="meta">{{ (row.last.validated_at if row.last else None) | brasilia }}</td>
+                <td class="meta">{{ row.last.app_version if row.last and row.last.app_version else '—' }}</td>
+                <td style="text-align:right">
                     {% if row.license.revoked %}
                     <form method="post" action="/admin/{{ row.license.id }}/unrevoke" class="inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <button class="btn btn-ghost">Reativar</button>
+                        <button class="btn btn-ghost btn-sm">Reativar</button>
                     </form>
                     {% else %}
-                    <form method="post" action="/admin/{{ row.license.id }}/revoke" class="inline">
+                    <form method="post" action="/admin/{{ row.license.id }}/revoke" class="inline"
+                          onsubmit="return confirm('Revogar a licença de {{ row.license.client_name }}?')">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <button class="btn btn-danger">Revogar</button>
+                        <button class="btn btn-danger btn-sm">Revogar</button>
                     </form>
                     {% endif %}
                 </td>
             </tr>
             {% else %}
-            <tr>
-                <td colspan="6" class="empty">
-                    Nenhuma licença criada ainda.
-                </td>
-            </tr>
+            <tr><td colspan="6" class="empty">
+                {% if q or status_f %}Nenhuma licença para este filtro.{% else %}Nenhuma licença criada ainda.{% endif %}
+            </td></tr>
             {% endfor %}
         </tbody>
     </table>
