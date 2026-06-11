@@ -55,14 +55,14 @@ class ProcessingTab(QWidget):
         scroll.setWidget(page)
 
         layout = QVBoxLayout(page)
-        layout.setSpacing(16)
-        layout.setContentsMargins(20, 20, 22, 24)
+        layout.setSpacing(18)
+        layout.setContentsMargins(28, 24, 28, 28)
         layout.addWidget(self._page_head(self.TITLE, self.SUBTITLE))
 
         # ---- workspace em duas colunas ----
-        split = QHBoxLayout(); split.setSpacing(16)
+        split = QHBoxLayout(); split.setSpacing(20)
 
-        left = QVBoxLayout(); left.setSpacing(14)
+        left = QVBoxLayout(); left.setSpacing(16)
         self._build_left(left)
         left.addStretch()
         left_wrap = QWidget(); left_wrap.setLayout(left)
@@ -71,6 +71,7 @@ class ProcessingTab(QWidget):
 
         # coluna direita: execução (resumo/KPIs + log)
         self._panel = Panel("Execução", self)
+        self._panel.setMinimumWidth(380)
         self._btn = PrimaryButton("▶ Processar")
         self._btn.setEnabled(False)
         self._btn.clicked.connect(self._on_button_clicked)

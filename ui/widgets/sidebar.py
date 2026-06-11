@@ -15,7 +15,7 @@ class _NavItem(QPushButton):
         self.setFlat(True)
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(11, 8, 10, 8)
+        lay.setContentsMargins(12, 9, 10, 9)
         lay.setSpacing(10)
 
         if glyph:
@@ -52,10 +52,10 @@ class Sidebar(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("sidebar")
-        self.setFixedWidth(200)
+        self.setFixedWidth(216)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 12, 10, 12)
+        lay.setContentsMargins(12, 14, 12, 14)
         lay.setSpacing(2)
 
         self._items: list[_NavItem] = []
@@ -66,7 +66,7 @@ class Sidebar(QFrame):
         ]
         idx = 0
         for sect_name, entries in groups:
-            sect = QLabel(sect_name, self)
+            sect = QLabel(sect_name.upper(), self)
             sect.setObjectName("sideSect")
             lay.addWidget(sect)
             for label, glyph in entries:

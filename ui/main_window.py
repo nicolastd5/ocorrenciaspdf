@@ -20,8 +20,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Processador de Ocorrências")
-        self.setMinimumSize(880, 600)
-        self.resize(980, 700)
+        self.setMinimumSize(1024, 640)
+        self.resize(1280, 760)
         self._restore_geometry()
         self._session_runs = 0
         self._banner_version = ""
@@ -178,14 +178,23 @@ class MainWindow(QMainWindow):
         self._lbl_sessao.setText(f"{self._session_runs} processamento(s) nesta sessão")
 
     def _restore_geometry(self) -> None:
+        screen = QGuiApplication.primaryScreen().availableGeometry()
         geo = settings.load().get("geometry")
         if geo and isinstance(geo, list) and len(geo) == 4:
             x, y, w, h = geo
+            # Geometrias salvas por versões antigas eram estreitas (980px);
+            # alarga até um mínimo confortável, sem estourar a tela.
+            w = min(max(w, 1180), screen.width())
+            h = min(max(h, 700), screen.height())
+            x = max(screen.left(), min(x, screen.right() - w))
+            y = max(screen.top(), min(y, screen.bottom() - h))
             self.setGeometry(x, y, w, h)
         else:
-            screen = QGuiApplication.primaryScreen().availableGeometry()
-            self.move((screen.width() - self.width()) // 2,
-                      (screen.height() - self.height()) // 2)
+            w = min(1280, screen.width() - 80)
+            h = min(760, screen.height() - 80)
+            self.resize(w, h)
+            self.move(screen.left() + (screen.width() - w) // 2,
+                      screen.top() + (screen.height() - h) // 2)
 
     def closeEvent(self, ev):
         self._conn_timer.stop()

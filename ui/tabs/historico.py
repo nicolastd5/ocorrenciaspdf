@@ -110,8 +110,8 @@ class HistoricoTab(QWidget):
         self._proxy.setSourceModel(self._model)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 22, 24)
-        layout.setSpacing(16)
+        layout.setContentsMargins(28, 24, 28, 28)
+        layout.setSpacing(18)
 
         head = QVBoxLayout(); head.setSpacing(3)
         t = QLabel("Histórico"); t.setObjectName("pageTitle")

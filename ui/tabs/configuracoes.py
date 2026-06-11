@@ -35,9 +35,19 @@ class ConfiguracoesTab(QWidget):
         page.setStyleSheet("background: transparent;")
         scroll.setWidget(page)
 
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(20, 20, 22, 24)
-        layout.setSpacing(14)
+        # Limita a largura dos cards: linhas de texto curtas leem melhor em
+        # janelas largas; o espaço extra fica à direita.
+        outer = QHBoxLayout(page)
+        outer.setContentsMargins(28, 24, 28, 28)
+        col = QWidget(page)
+        col.setStyleSheet("background: transparent;")
+        col.setMaximumWidth(860)
+        outer.addWidget(col)
+        outer.addStretch()
+
+        layout = QVBoxLayout(col)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
 
         head = QVBoxLayout(); head.setSpacing(3)
         t = QLabel("Configurações"); t.setObjectName("pageTitle")

@@ -15,8 +15,8 @@ class CodigosTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 22, 24)
-        layout.setSpacing(14)
+        layout.setContentsMargins(28, 24, 28, 28)
+        layout.setSpacing(16)
 
         head = QVBoxLayout(); head.setSpacing(3)
         t = QLabel("Códigos"); t.setObjectName("pageTitle")

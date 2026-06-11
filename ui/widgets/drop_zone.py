@@ -42,7 +42,7 @@ class DropZone(QFrame):
         self._label_text = label
         self.setAcceptDrops(True)
         self.setObjectName("dropzone")
-        self.setMinimumHeight(116)
+        self.setMinimumHeight(128)
         self.setCursor(Qt.PointingHandCursor)
         self.setProperty("dragActive", False)
 

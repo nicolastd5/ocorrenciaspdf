@@ -52,6 +52,19 @@ _QSS_TEMPLATE = """
 QWidget {{ background: {bg}; color: {fg}; font-family: "Inter", "Segoe UI", sans-serif; font-size: 10pt; }}
 QMainWindow, QDialog {{ background: {bg}; }}
 
+/* ---------- Scrollbars (finas, sem setas) ---------- */
+QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px 2px 2px 0; }}
+QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 0 2px 2px 2px; }}
+QScrollBar::handle:vertical {{ background: {border}; border-radius: 4px; min-height: 32px; }}
+QScrollBar::handle:horizontal {{ background: {border}; border-radius: 4px; min-width: 32px; }}
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{ background: {fg_dim}; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; background: transparent; border: none; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
+
+/* ---------- Tooltip ---------- */
+QToolTip {{ background: {surface_alt}; color: {fg_bright}; border: 1px solid {border};
+    padding: 5px 8px; font-size: 9pt; }}
+
 /* ---------- Tabs (mantido para diálogos/compat) ---------- */
 QTabWidget::pane {{ border: 1px solid {border}; background: {surface}; top: -1px; }}
 QTabBar::tab {{
@@ -71,20 +84,21 @@ QLabel#sideSect {{
 }}
 
 /* ---------- Card de licença na sidebar ---------- */
-QFrame#licard {{ background: {bg}; border: 1px solid {border}; border-radius: 8px; }}
+QFrame#licard {{ background: {bg}; border: 1px solid {border}; border-radius: 10px; }}
 QFrame#licard QLabel {{ background: transparent; }}
 QLabel#licardKey {{ color: {fg_dim}; }}
 QLabel#licardVal {{ color: {fg}; font-family: "JetBrains Mono", "Consolas", monospace; font-size: 9pt; }}
 
 /* ---------- Cabeçalho de página ---------- */
 QLabel#pageTitle {{ color: {fg_bright}; font-size: 16pt; font-weight: 600; background: transparent; }}
-QLabel#pageSub {{ color: {fg_dim}; font-size: 9pt; background: transparent; }}
+QLabel#pageSub {{ color: {fg_dim}; font-size: 9.5pt; background: transparent; }}
 
 /* ---------- Texto de apoio (dicas/ajuda) ---------- */
 QLabel#helpText {{ color: {fg_dim}; font-size: 9pt; background: transparent; }}
 
 /* ---------- DropZone ---------- */
-QFrame#dropzone {{ border: 1.5px dashed {border}; border-radius: 8px; background: {bg}; }}
+QFrame#dropzone {{ border: 1.5px dashed {border}; border-radius: 10px; background: {bg}; }}
+QFrame#dropzone:hover {{ border-color: {fg_dim}; }}
 QFrame#dropzone[dragActive="true"] {{ border: 1.5px solid {accent}; background: {accent_overlay}; }}
 QLabel#dropIcon {{ color: {fg_dim}; font-size: 20pt; background: transparent; border: none; }}
 QLabel#dropLabel {{ background: transparent; border: none; }}
@@ -108,14 +122,14 @@ QLabel#updateBannerLbl {{ color: {banner_fg}; font-weight: 600; background: tran
 
 /* ---------- Cards (QGroupBox numerado) ---------- */
 QGroupBox {{
-    background: {surface}; border: 1px solid {border}; border-radius: 6px;
-    margin-top: 14px; padding: 14px;
+    background: {surface}; border: 1px solid {border}; border-radius: 9px;
+    margin-top: 14px; padding: 16px;
 }}
 QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 6px; color: {fg_bright}; font-weight: 600; }}
 
 /* SectionCard com cabeçalho próprio (sem título nativo do QGroupBox) */
-QFrame#card {{ background: {surface}; border: 1px solid {border}; border-radius: 8px; }}
-QFrame#cardHead {{ background: {surface_alt}; border: none; border-top-left-radius: 8px; border-top-right-radius: 8px;
+QFrame#card {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
+QFrame#cardHead {{ background: {surface_alt}; border: none; border-top-left-radius: 10px; border-top-right-radius: 10px;
     border-bottom: 1px solid {border}; }}
 QFrame#cardBody {{ background: transparent; border: none; }}
 QLabel#cardTitle {{ color: {fg_bright}; font-weight: 600; background: transparent; }}
@@ -135,24 +149,28 @@ QLabel#cardOpt {{ color: {fg_dim}; font-size: 8pt; background: {bg}; border: 1px
 /* ---------- Botões ---------- */
 QPushButton {{
     background: {surface_alt}; color: {fg}; border: 1px solid {border};
-    padding: 6px 14px; border-radius: 6px;
+    padding: 7px 15px; border-radius: 7px;
 }}
 QPushButton:hover {{ background: {border}; }}
+QPushButton:pressed {{ background: {border}; border-color: {fg_dim}; }}
+QPushButton:focus {{ border-color: {accent}; outline: none; }}
 QPushButton:disabled {{ color: {fg_dim}; }}
-QPushButton#primary {{ background: {success}; color: white; border: none; font-weight: 600; padding: 8px 18px; }}
+QPushButton#primary {{ background: {success}; color: white; border: none; font-weight: 600; padding: 8px 20px; }}
 QPushButton#primary:hover {{ background: {success_hover}; }}
 QPushButton#primary:disabled {{ background: {surface_alt}; color: {fg_dim}; }}
-QPushButton#warning {{ background: {warning}; color: white; border: none; font-weight: 600; padding: 8px 18px; }}
+QPushButton#warning {{ background: {warning}; color: white; border: none; font-weight: 600; padding: 8px 20px; }}
 QPushButton#warning:hover {{ background: {warning}; }}
 QPushButton#ghost {{ background: transparent; border: 1px solid transparent; }}
 QPushButton#ghost:hover {{ background: {surface_alt}; }}
 
 /* ---------- Inputs ---------- */
 QLineEdit, QPlainTextEdit, QTextEdit, QComboBox {{
-    background: {surface}; color: {fg_bright}; border: 1px solid {border}; border-radius: 4px; padding: 6px;
+    background: {surface}; color: {fg_bright}; border: 1px solid {border}; border-radius: 6px;
+    padding: 7px 9px;
     selection-background-color: {accent};
 }}
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QComboBox:focus {{ border-color: {accent}; }}
+QLineEdit:hover, QComboBox:hover {{ border-color: {fg_dim}; }}
 QComboBox::drop-down {{ border: none; width: 18px; }}
 QComboBox QAbstractItemView {{ background: {surface}; color: {fg}; border: 1px solid {border};
     selection-background-color: {surface_alt}; selection-color: {fg_bright}; }}
@@ -172,7 +190,7 @@ QCheckBox::indicator:checked {{ border-color: {accent}; background: {accent}; }}
 
 /* ---------- Tabelas ---------- */
 QTableView, QTableWidget {{ background: {surface}; gridline-color: {border};
-    border: 1px solid {border}; border-radius: 6px; }}
+    border: 1px solid {border}; border-radius: 8px; }}
 QTableView::item:selected, QTableWidget::item:selected {{ background: {surface_alt}; color: {fg_bright}; }}
 QHeaderView::section {{ background: {surface_alt}; color: {fg_dim}; padding: 7px 10px;
     border: none; border-right: 1px solid {border}; border-bottom: 1px solid {border};
@@ -189,7 +207,7 @@ QProgressBar {{ background: {surface_alt}; border: 1px solid {border}; border-ra
 QProgressBar::chunk {{ background: {accent}; border-radius: 3px; }}
 
 /* ---------- KPI tiles ---------- */
-QFrame#kpi {{ background: {surface}; border: 1px solid {border}; border-radius: 8px; }}
+QFrame#kpi {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
 QFrame#kpi QLabel {{ background: transparent; }}
 QLabel#kpiLabel {{ color: {fg_dim}; font-size: 8.5pt; }}
 QLabel#kpiNum {{ color: {fg_bright}; font-family: "JetBrains Mono", "Consolas", monospace;
@@ -213,9 +231,9 @@ QLabel#navCount {{ background: {surface_alt}; border-radius: 8px; padding: 0 7px
     font-family: "JetBrains Mono", monospace; font-size: 8pt; color: {fg_dim}; }}
 
 /* ---------- Painel (coluna direita) ---------- */
-QFrame#panel {{ background: {surface}; border: 1px solid {border}; border-radius: 8px; }}
+QFrame#panel {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
 QFrame#panelHead {{ background: {surface_alt}; border: none; border-bottom: 1px solid {border};
-    border-top-left-radius: 8px; border-top-right-radius: 8px; }}
+    border-top-left-radius: 10px; border-top-right-radius: 10px; }}
 QLabel#panelTitle {{ color: {fg_bright}; font-weight: 600; background: transparent; }}
 
 /* ---------- Segmented toggle (tema) ---------- */
