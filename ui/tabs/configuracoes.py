@@ -14,6 +14,21 @@ def _mask_key(key: str) -> str:
     return key[:6] + "…" + key[-4:] if len(key) > 12 else key
 
 
+class _NoWheelComboBox(QComboBox):
+    """Só aceita a roda do mouse com foco — rolar a página por cima do combo
+    não pode trocar o modelo selecionado sem querer."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    def wheelEvent(self, ev):
+        if self.hasFocus():
+            super().wheelEvent(ev)
+        else:
+            ev.ignore()
+
+
 class ConfiguracoesTab(QWidget):
     theme_changed = Signal(str)    # "dark" ou "light"
     license_changed = Signal()     # chave trocada — dispara revalidação
@@ -77,24 +92,29 @@ class ConfiguracoesTab(QWidget):
         ap_layout.addStretch()
         layout.addWidget(g_ap)
 
-        # IA Gemini — a chave vem do servidor automaticamente; aqui só escolhe o modelo
+        # IA Gemini — a chave vem do servidor; os modelos compatíveis são
+        # buscados automaticamente na API (sem digitação manual).
         g_ai = QGroupBox("IA Gemini", self)
         ai_form = QFormLayout(g_ai)
-        self._cb_model = QComboBox()
-        self._cb_model.addItems(self.GEMINI_MODELS)
-        self._cb_model.setCurrentText(cfg.get("gemini_model", "gemini-2.5-flash"))
-        self._cb_model.setEditable(True)  # permite manter um model_id não-listado
-        self._cb_model.currentTextChanged.connect(self._save_model)
+        saved_model = cfg.get("gemini_model", "gemini-2.5-flash")
+        self._cb_model = _NoWheelComboBox()
+        for mid in dict.fromkeys([saved_model] + self.GEMINI_MODELS):
+            self._cb_model.addItem(mid, mid)
+        self._cb_model.setCurrentIndex(self._cb_model.findData(saved_model))
+        self._cb_model.currentIndexChanged.connect(self._save_model)
         ai_form.addRow("Modelo:", self._cb_model)
         row_btn = QHBoxLayout()
-        self._btn_modelos = QPushButton("↻ Carregar modelos da API")
+        self._btn_modelos = QPushButton("Atualizar lista")
+        from ui import icons, theme
+        self._btn_modelos.setIcon(icons.icon("refresh", theme.token("fg"), 14))
         self._btn_modelos.clicked.connect(self._carregar_modelos)
         self._lbl_modelos = QLabel("")
         self._lbl_modelos.setObjectName("helpText")
         row_btn.addWidget(self._btn_modelos); row_btn.addWidget(self._lbl_modelos); row_btn.addStretch()
         wrap_btn = QWidget(); wrap_btn.setLayout(row_btn)
         ai_form.addRow(wrap_btn)
-        nota = QLabel("A chave da API do Gemini é obtida automaticamente do servidor "
+        nota = QLabel("A lista mostra apenas modelos compatíveis, buscados direto da API. "
+                      "A chave do Gemini é obtida automaticamente do servidor "
                       "(vinculada à sua licença) — não precisa configurar.")
         nota.setWordWrap(True)
         nota.setObjectName("helpText")
@@ -102,6 +122,7 @@ class ConfiguracoesTab(QWidget):
         layout.addWidget(g_ai)
         self._modelos_thread = None
         self._modelos_worker = None
+        self._modelos_buscados = False
 
         # Licença
         g_lic = QGroupBox("Licença", self)
@@ -157,12 +178,22 @@ class ConfiguracoesTab(QWidget):
         if gemini_ok is not None:
             self._lbl_gemini.setText("configurada" if gemini_ok else "indisponível")
 
+    def showEvent(self, ev):
+        # Primeira visita à página: busca os modelos compatíveis na API
+        # em segundo plano — o usuário só escolhe, não digita.
+        super().showEvent(ev)
+        if not self._modelos_buscados:
+            self._modelos_buscados = True
+            self._carregar_modelos()
+
     def _set_theme(self, mode: str):
         settings.save({"theme": mode})
         self.theme_changed.emit(mode)
 
-    def _save_model(self, model: str):
-        settings.save({"gemini_model": model})
+    def _save_model(self, _index: int):
+        model = self._cb_model.currentData()
+        if model:
+            settings.save({"gemini_model": model})
 
     def _carregar_modelos(self):
         if self._modelos_thread is not None:
@@ -181,18 +212,23 @@ class ConfiguracoesTab(QWidget):
         self._modelos_thread.start()
 
     def _popular_modelos(self, modelos):
-        atual = self._cb_model.currentText()
+        atual = self._cb_model.currentData()
         self._cb_model.blockSignals(True)
         self._cb_model.clear()
-        ids = [model_id for _display, model_id in modelos]
-        self._cb_model.addItems(ids)
-        if atual in ids:
-            self._cb_model.setCurrentText(atual)
+        for display, model_id in modelos:
+            self._cb_model.addItem(f"{display}  ({model_id})", model_id)
+        idx = self._cb_model.findData(atual)
+        if idx >= 0:
+            self._cb_model.setCurrentIndex(idx)
+        else:
+            # modelo salvo não está mais na lista: mantém como opção extra
+            self._cb_model.addItem(atual, atual)
+            self._cb_model.setCurrentIndex(self._cb_model.count() - 1)
         self._cb_model.blockSignals(False)
-        self._lbl_modelos.setText(f"{len(ids)} modelo(s) carregado(s).")
+        self._lbl_modelos.setText(f"{len(modelos)} modelo(s) compatível(is) encontrado(s).")
 
     def _erro_modelos(self, msg):
-        self._lbl_modelos.setText(f"Erro: {msg[:60]}")
+        self._lbl_modelos.setText(f"Não foi possível buscar os modelos: {msg[:60]}")
 
     def _modelos_cleanup(self):
         self._btn_modelos.setEnabled(True)

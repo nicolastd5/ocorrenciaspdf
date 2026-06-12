@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 )
 
+from ui import icons
 from ui.utils import open_path
 from ui.widgets import LogPanel, Panel, PrimaryButton
 
@@ -72,7 +73,8 @@ class ProcessingTab(QWidget):
         # coluna direita: execução (resumo/KPIs + log)
         self._panel = Panel("Execução", self)
         self._panel.setMinimumWidth(380)
-        self._btn = PrimaryButton("▶ Processar")
+        self._btn = PrimaryButton("Processar")
+        self._btn.setIcon(icons.icon("play", "#ffffff", 14))
         self._btn.setEnabled(False)
         self._btn.clicked.connect(self._on_button_clicked)
         self._panel.add_header_widget(self._btn)
@@ -137,9 +139,8 @@ class ProcessingTab(QWidget):
         box = QWidget(); box.setStyleSheet("background: transparent;")
         bl = QVBoxLayout(box); bl.setAlignment(Qt.AlignCenter); bl.setSpacing(8)
         bl.setContentsMargins(0, 18, 0, 18)
-        icon = QLabel("✓" if ready else "▶")
-        icon.setObjectName("promptIcon")
-        icon.setProperty("state", "ready" if ready else "idle")
+        icon = icons.IconLabel("check" if ready else "play",
+                               "ok_text" if ready else "fg_dim", 28)
         icon.setAlignment(Qt.AlignCenter)
         bl.addWidget(icon)
         t = QLabel(self.READY_TEXT if ready else self.EMPTY_TEXT)
@@ -150,6 +151,9 @@ class ProcessingTab(QWidget):
         s.setObjectName("promptSub")
         s.setAlignment(Qt.AlignCenter)
         s.setWordWrap(True)
+        # Labels com wordWrap subestimam a própria altura em layouts
+        # aninhados; reserva 2 linhas para o hint não ser cortado.
+        s.setMinimumHeight(s.fontMetrics().lineSpacing() * 2 + 4)
         bl.addWidget(s)
         self._summary_lay.addWidget(box)
 
@@ -200,7 +204,9 @@ class ProcessingTab(QWidget):
         if start_msg:
             self._log.append(start_msg)
         self._set_inputs_enabled(False)
-        self._btn.set_mode("warning"); self._btn.setText("Cancelar")
+        self._btn.set_mode("warning")
+        self._btn.setText("Cancelar")
+        self._btn.setIcon(icons.icon("x", "#ffffff", 14))
 
         self._thread = QThread(self)
         self._worker = worker
@@ -228,7 +234,9 @@ class ProcessingTab(QWidget):
     def _cleanup_thread(self):
         self._thread = None; self._worker = None
         self._set_inputs_enabled(True)
-        self._btn.set_mode("primary"); self._btn.setText("▶ Processar")
+        self._btn.set_mode("primary")
+        self._btn.setText("Processar")
+        self._btn.setIcon(icons.icon("play", "#ffffff", 14))
         self._refresh_state()
 
     def _emit_history(self, info: dict):

@@ -41,16 +41,16 @@ def fetch_gemini_key(force: bool = False) -> str:
 
 # Mapa de status -> (texto curto, cor) para a pill da status bar e o card.
 _STATUS_INFO = {
-    LicenseStatus.VALID: ("Conectado", "#238636"),
-    LicenseStatus.OFFLINE_TOLERATED: ("Servidor indisponível (tolerado)", "#d29922"),
-    LicenseStatus.OFFLINE_EXPIRED: ("Servidor indisponível", "#f85149"),
-    LicenseStatus.INVALID: ("Licença inválida", "#f85149"),
-    LicenseStatus.NO_KEY: ("Sem licença", "#f85149"),
+    LicenseStatus.VALID: ("Conectado", "#10b981"),
+    LicenseStatus.OFFLINE_TOLERATED: ("Servidor indisponível (tolerado)", "#f59e0b"),
+    LicenseStatus.OFFLINE_EXPIRED: ("Servidor indisponível", "#ef4444"),
+    LicenseStatus.INVALID: ("Licença inválida", "#ef4444"),
+    LicenseStatus.NO_KEY: ("Sem licença", "#ef4444"),
 }
 
 
 def status_info(status, reason=None):
-    texto, cor = _STATUS_INFO.get(status, ("Desconhecido", "#8b949e"))
+    texto, cor = _STATUS_INFO.get(status, ("Desconhecido", "#8590a8"))
     if status == LicenseStatus.OFFLINE_TOLERATED and reason == "no_internet":
         texto = "Sem internet (tolerado)"
     elif status == LicenseStatus.OFFLINE_EXPIRED and reason == "no_internet":

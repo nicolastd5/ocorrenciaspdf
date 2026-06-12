@@ -8,6 +8,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget
 )
 
+from ui import icons
+
 
 def _fmt_size(path: str) -> str:
     try:
@@ -58,8 +60,7 @@ class DropZone(QFrame):
         e_lay = QVBoxLayout(empty)
         e_lay.setAlignment(Qt.AlignCenter)
         e_lay.setSpacing(8)
-        self._icon = QLabel("⬓", empty)
-        self._icon.setObjectName("dropIcon")
+        self._icon = icons.IconLabel("upload", "fg_dim", 26, empty)
         self._icon.setAlignment(Qt.AlignCenter)
         e_lay.addWidget(self._icon)
         self._lbl = QLabel(label, empty)
@@ -78,11 +79,15 @@ class DropZone(QFrame):
         c_lay = QHBoxLayout(chip)
         c_lay.setContentsMargins(12, 12, 12, 12)
         c_lay.setSpacing(12)
-        c_icon = QLabel("✓", chip)
-        c_icon.setObjectName("chipIcon")
-        c_icon.setFixedSize(36, 36)
+        badge = QFrame(chip)
+        badge.setObjectName("chipBadge")
+        badge.setFixedSize(36, 36)
+        badge_lay = QVBoxLayout(badge)
+        badge_lay.setContentsMargins(0, 0, 0, 0)
+        c_icon = icons.IconLabel("check", "ok_text", 18, badge)
         c_icon.setAlignment(Qt.AlignCenter)
-        c_lay.addWidget(c_icon)
+        badge_lay.addWidget(c_icon)
+        c_lay.addWidget(badge)
         info = QVBoxLayout(); info.setSpacing(2)
         self._chip_name = QLabel("", chip)
         self._chip_name.setObjectName("chipName")

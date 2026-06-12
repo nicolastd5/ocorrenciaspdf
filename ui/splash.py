@@ -5,20 +5,21 @@ Mantém a API usada pelo app.py: set_status, set_progress, hide_progress, fechar
 """
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QRectF, QTimer
 from PySide6.QtGui import (
-    QBrush, QColor, QConicalGradient, QFont, QLinearGradient, QPainter, QPen
+    QBrush, QColor, QConicalGradient, QLinearGradient, QPainter, QPen
 )
 from PySide6.QtWidgets import (
     QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QProgressBar,
     QVBoxLayout, QWidget
 )
 
-# Cores próprias do splash (momento de marca — independe do tema claro/escuro)
-_FG = "#f0f6fc"
-_FG_DIM = "#8b95a7"
-_BORDER = "#273450"
-_BLUE = "#1f6feb"
-_ACCENT = "#58a6ff"
-_GREEN = "#3fb950"
+# Cores próprias do splash (momento de marca — independe do tema claro/escuro).
+# Mesmo gradiente índigo→violeta dos tokens grad_a/grad_b do tema.
+_FG = "#f2f4fa"
+_FG_DIM = "#8590a8"
+_BORDER = "#262c3f"
+_GRAD_A = "#4f7df9"
+_GRAD_B = "#8b5cf6"
+_ACCENT = "#8b7cf7"
 
 
 class _LogoSpinner(QWidget):
@@ -48,32 +49,32 @@ class _LogoSpinner(QWidget):
         p.setPen(QPen(QColor(255, 255, 255, 20), 3))
         p.drawEllipse(ring)
 
-        # arco girante com gradiente cônico (azul → verde → some)
+        # arco girante com gradiente cônico (índigo → violeta → some)
         grad = QConicalGradient(ring.center(), -self._angle)
-        grad.setColorAt(0.00, QColor(_ACCENT))
-        grad.setColorAt(0.45, QColor(_GREEN))
-        grad.setColorAt(0.80, QColor(88, 166, 255, 0))
-        grad.setColorAt(1.00, QColor(_ACCENT))
+        grad.setColorAt(0.00, QColor(_GRAD_A))
+        grad.setColorAt(0.45, QColor(_GRAD_B))
+        grad.setColorAt(0.80, QColor(139, 124, 247, 0))
+        grad.setColorAt(1.00, QColor(_GRAD_A))
         pen = QPen(QBrush(grad), 3.5)
         pen.setCapStyle(Qt.RoundCap)
         p.setPen(pen)
         p.drawArc(ring, int(-self._angle * 16), 300 * 16)
 
-        # badge central em gradiente com o glyph do app
+        # badge central em gradiente com o ícone da marca
         badge = ring.adjusted(17, 17, -17, -17)
         bg = QLinearGradient(badge.topLeft(), badge.bottomRight())
-        bg.setColorAt(0.0, QColor(_BLUE))
-        bg.setColorAt(1.0, QColor("#238636"))
+        bg.setColorAt(0.0, QColor(_GRAD_A))
+        bg.setColorAt(1.0, QColor(_GRAD_B))
         p.setPen(Qt.NoPen)
         p.setBrush(QBrush(bg))
         p.drawRoundedRect(badge, 14, 14)
 
-        p.setPen(QColor("white"))
-        f = QFont(self.font())
-        f.setPointSize(18)
-        f.setBold(True)
-        p.setFont(f)
-        p.drawText(badge, Qt.AlignCenter, "▣")
+        from ui import icons
+        glyph = icons.pixmap("zap", "#ffffff", 26)
+        gw = glyph.width() / glyph.devicePixelRatio()
+        gh = glyph.height() / glyph.devicePixelRatio()
+        p.drawPixmap(int(badge.center().x() - gw / 2),
+                     int(badge.center().y() - gh / 2), glyph)
         p.end()
 
 
@@ -97,7 +98,7 @@ class Splash(QWidget):
         card.setStyleSheet(f"""
             QFrame#splashCard {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #0e1626, stop:0.5 #0d1117, stop:1 #11203a);
+                    stop:0 #131524, stop:0.5 #0e1016, stop:1 #181231);
                 border: 1px solid {_BORDER};
                 border-radius: 18px;
             }}
@@ -109,7 +110,7 @@ class Splash(QWidget):
             QProgressBar::chunk {{
                 border-radius: 3px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {_BLUE}, stop:1 {_GREEN});
+                    stop:0 {_GRAD_A}, stop:1 {_GRAD_B});
             }}
         """)
         shadow = QGraphicsDropShadowEffect(self)

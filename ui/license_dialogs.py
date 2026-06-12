@@ -16,7 +16,7 @@ def show_activation_window(initial_message: str = "") -> str | None:
 
     if initial_message:
         msg = QLabel(initial_message)
-        msg.setStyleSheet("color: #f85149;")
+        msg.setStyleSheet("color: #ef4444;")
         msg.setWordWrap(True)
         layout.addWidget(msg)
 

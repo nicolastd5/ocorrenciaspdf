@@ -20,8 +20,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Processador de Ocorrências")
-        self.setMinimumSize(1024, 640)
-        self.resize(1280, 760)
+        self.setMinimumSize(1080, 580)
+        self.resize(1250, 780)
         self._restore_geometry()
         self._session_runs = 0
         self._banner_version = ""
@@ -179,19 +179,20 @@ class MainWindow(QMainWindow):
 
     def _restore_geometry(self) -> None:
         screen = QGuiApplication.primaryScreen().availableGeometry()
-        geo = settings.load().get("geometry")
+        # "geometry_v2": o redesign mudou a proporção padrão (mais larga e
+        # menos alta) — geometrias salvas pela chave antiga são descartadas
+        # uma única vez para que todos abram no novo formato.
+        geo = settings.load().get("geometry_v2")
         if geo and isinstance(geo, list) and len(geo) == 4:
             x, y, w, h = geo
-            # Geometrias salvas por versões antigas eram estreitas (980px);
-            # alarga até um mínimo confortável, sem estourar a tela.
             w = min(max(w, 1180), screen.width())
-            h = min(max(h, 700), screen.height())
+            h = min(max(h, 580), screen.height())
             x = max(screen.left(), min(x, screen.right() - w))
             y = max(screen.top(), min(y, screen.bottom() - h))
             self.setGeometry(x, y, w, h)
         else:
-            w = min(1280, screen.width() - 80)
-            h = min(760, screen.height() - 80)
+            w = min(1250, screen.width() - 60)
+            h = min(780, screen.height() - 80)
             self.resize(w, h)
             self.move(screen.left() + (screen.width() - w) // 2,
                       screen.top() + (screen.height() - h) // 2)
@@ -202,5 +203,5 @@ class MainWindow(QMainWindow):
             self._conn_thread.quit()
             self._conn_thread.wait()
         g = self.geometry()
-        settings.save({"geometry": [g.x(), g.y(), g.width(), g.height()]})
+        settings.save({"geometry_v2": [g.x(), g.y(), g.width(), g.height()]})
         super().closeEvent(ev)

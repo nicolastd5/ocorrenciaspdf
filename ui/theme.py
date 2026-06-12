@@ -2,50 +2,63 @@ import os
 import sys
 from pathlib import Path
 
-# Paleta escura azul-marinho — mesma família visual da splash
+# Identidade visual: grafite + acento índigo→violeta ("aurora").
+# O gradiente (grad_a → grad_b) é a assinatura da marca: botão primário,
+# selo do app, barra de progresso e splash usam o mesmo par de cores.
 DARK_TOKENS = {
-    "bg":            "#0c1220",
-    "surface":       "#111a2e",
-    "surface_alt":   "#1a2540",
-    "border":        "#273450",
-    "fg":            "#c9d4e6",
-    "fg_bright":     "#f0f6fc",
-    "fg_dim":        "#8b95a7",
-    "success":       "#238636",
-    "success_hover": "#2ea043",
-    "accent":        "#58a6ff",
-    "warning":       "#d29922",
-    "danger":        "#f85149",
+    "bg":            "#0e1016",
+    "surface":       "#151823",
+    "surface_alt":   "#1c2130",
+    "border":        "#262c3f",
+    "fg":            "#cdd3e1",
+    "fg_bright":     "#f2f4fa",
+    "fg_dim":        "#8590a8",
+    "success":       "#10b981",
+    "success_hover": "#34d399",
+    "accent":        "#8b7cf7",
+    "warning":       "#d97706",
+    "danger":        "#ef4444",
+    # gradiente da marca
+    "grad_a":        "#4f7df9",
+    "grad_b":        "#8b5cf6",
+    "grad_a_h":      "#6b93fa",
+    "grad_b_h":      "#a78bfa",
     # tons derivados usados no shell (sidebar, log, banner)
-    "log_bg":        "#070b15",
-    "banner_bg":     "#0e1f1d",
-    "banner_fg":     "#2ea043",
-    "ok_text":       "#3fb950",
-    "warn_text":     "#e3b341",
-    "err_text":      "#ff7b72",
-    "accent_overlay": "rgba(88,166,255,0.08)",
+    "log_bg":        "#0a0c12",
+    "banner_bg":     "#1d1838",
+    "banner_fg":     "#b8a8ff",
+    "ok_text":       "#34d399",
+    "warn_text":     "#fbbf24",
+    "err_text":      "#f87171",
+    "accent_overlay": "rgba(139,124,247,0.10)",
+    "accent_overlay_strong": "rgba(139,124,247,0.18)",
 }
 
 LIGHT_TOKENS = {
-    "bg":            "#f6f8fa",
+    "bg":            "#f5f6fa",
     "surface":       "#ffffff",
-    "surface_alt":   "#f0f3f6",
-    "border":        "#d0d7de",
-    "fg":            "#1f2328",
-    "fg_bright":     "#0d1117",
-    "fg_dim":        "#656d76",
-    "success":       "#1f883d",
-    "success_hover": "#1a7f37",
-    "accent":        "#0969da",
-    "warning":       "#9a6700",
-    "danger":        "#cf222e",
-    "log_bg":        "#0d1117",
-    "banner_bg":     "#dafbe1",
-    "banner_fg":     "#1a7f37",
-    "ok_text":       "#1a7f37",
-    "warn_text":     "#9a6700",
-    "err_text":      "#cf222e",
-    "accent_overlay": "rgba(9,105,218,0.08)",
+    "surface_alt":   "#edeff7",
+    "border":        "#d9dded",
+    "fg":            "#3a4254",
+    "fg_bright":     "#161b26",
+    "fg_dim":        "#6f7a92",
+    "success":       "#0e9f6e",
+    "success_hover": "#0b8a5f",
+    "accent":        "#6450e8",
+    "warning":       "#b45309",
+    "danger":        "#dc2626",
+    "grad_a":        "#3f6df0",
+    "grad_b":        "#7c4ef0",
+    "grad_a_h":      "#5a83f5",
+    "grad_b_h":      "#9067f5",
+    "log_bg":        "#11131a",
+    "banner_bg":     "#ebe7fd",
+    "banner_fg":     "#5b48d6",
+    "ok_text":       "#0e9f6e",
+    "warn_text":     "#b45309",
+    "err_text":      "#dc2626",
+    "accent_overlay": "rgba(100,80,232,0.08)",
+    "accent_overlay_strong": "rgba(100,80,232,0.15)",
 }
 
 
@@ -80,47 +93,43 @@ QFrame#sidebar {{
     background: {surface}; border: none; border-right: 1px solid {border};
 }}
 QLabel#brandLogo {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1f6feb, stop:1 #238636);
-    color: white; border-radius: 8px; font-size: 12pt; font-weight: 700;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {grad_a}, stop:1 {grad_b});
+    color: white; border-radius: 9px; font-size: 12pt; font-weight: 700;
 }}
-QLabel#brandName {{ color: {fg_bright}; font-weight: 600; font-size: 9pt;
+QLabel#brandName {{ color: {fg_bright}; font-weight: 600; font-size: 9.5pt;
     background: transparent; }}
 QLabel#sideSect {{
-    color: {fg_dim}; font-size: 8pt; font-weight: 600; padding: 10px 9px 4px;
+    color: {fg_dim}; font-size: 8pt; font-weight: 700; padding: 12px 10px 5px;
     background: transparent;
 }}
 
 /* ---------- Card de licença na sidebar ---------- */
-QFrame#licard {{ background: {bg}; border: 1px solid {border}; border-radius: 10px; }}
+QFrame#licard {{ background: {bg}; border: 1px solid {border}; border-radius: 12px; }}
 QFrame#licard QLabel {{ background: transparent; }}
-QLabel#licardKey {{ color: {fg_dim}; }}
+QLabel#licardKey {{ color: {fg_dim}; font-size: 9pt; }}
 QLabel#licardVal {{ color: {fg}; font-family: "JetBrains Mono", "Consolas", monospace; font-size: 9pt; }}
 
 /* ---------- Cabeçalho de página ---------- */
-QLabel#pageTitle {{ color: {fg_bright}; font-size: 16pt; font-weight: 600; background: transparent; }}
+QLabel#pageTitle {{ color: {fg_bright}; font-size: 17pt; font-weight: 700; background: transparent; }}
 QLabel#pageSub {{ color: {fg_dim}; font-size: 9.5pt; background: transparent; }}
 
 /* ---------- Texto de apoio (dicas/ajuda) ---------- */
 QLabel#helpText {{ color: {fg_dim}; font-size: 9pt; background: transparent; }}
 
 /* ---------- DropZone ---------- */
-QFrame#dropzone {{ border: 1.5px dashed {border}; border-radius: 10px; background: {bg}; }}
-QFrame#dropzone:hover {{ border-color: {fg_dim}; }}
+QFrame#dropzone {{ border: 1.5px dashed {border}; border-radius: 12px; background: {bg}; }}
+QFrame#dropzone:hover {{ border-color: {accent}; }}
 QFrame#dropzone[dragActive="true"] {{ border: 1.5px solid {accent}; background: {accent_overlay}; }}
-QLabel#dropIcon {{ color: {fg_dim}; font-size: 20pt; background: transparent; border: none; }}
 QLabel#dropLabel {{ background: transparent; border: none; }}
 QLabel#dropHint {{ color: {fg_dim}; font-size: 8pt; background: transparent; border: none;
     font-family: "JetBrains Mono", "Consolas", monospace; }}
 QLabel#chipName {{ color: {fg_bright}; font-weight: 500; background: transparent; border: none; }}
 QLabel#chipMeta {{ color: {fg_dim}; font-size: 8pt; background: transparent; border: none;
     font-family: "JetBrains Mono", "Consolas", monospace; }}
-QLabel#chipIcon {{ color: {ok_text}; background: rgba(46,160,67,0.12); border-radius: 9px;
-    font-size: 14pt; border: none; }}
+QFrame#chipBadge {{ background: rgba(52,211,153,0.14); border-radius: 10px; border: none; }}
 
 /* ---------- Prompt do painel de execução ---------- */
-QLabel#promptIcon {{ color: {fg_dim}; font-size: 22pt; background: transparent; }}
-QLabel#promptIcon[state="ready"] {{ color: {ok_text}; }}
-QLabel#promptTitle {{ color: {fg_bright}; font-weight: 500; background: transparent; }}
+QLabel#promptTitle {{ color: {fg_bright}; font-weight: 600; background: transparent; }}
 QLabel#promptSub {{ color: {fg_dim}; font-size: 9pt; background: transparent; }}
 
 /* ---------- Banner de atualização ---------- */
@@ -129,25 +138,25 @@ QLabel#updateBannerLbl {{ color: {banner_fg}; font-weight: 600; background: tran
 
 /* ---------- Cards (QGroupBox numerado) ---------- */
 QGroupBox {{
-    background: {surface}; border: 1px solid {border}; border-radius: 9px;
+    background: {surface}; border: 1px solid {border}; border-radius: 12px;
     margin-top: 14px; padding: 16px;
 }}
 QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 6px; color: {fg_bright}; font-weight: 600; }}
 
 /* SectionCard com cabeçalho próprio (sem título nativo do QGroupBox) */
-QFrame#card {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
-QFrame#cardHead {{ background: {surface_alt}; border: none; border-top-left-radius: 10px; border-top-right-radius: 10px;
+QFrame#card {{ background: {surface}; border: 1px solid {border}; border-radius: 12px; }}
+QFrame#cardHead {{ background: {surface_alt}; border: none; border-top-left-radius: 12px; border-top-right-radius: 12px;
     border-bottom: 1px solid {border}; }}
 QFrame#cardBody {{ background: transparent; border: none; }}
 QLabel#cardTitle {{ color: {fg_bright}; font-weight: 600; background: transparent; }}
 QLabel#step {{
     background: {bg}; border: 1px solid {border}; border-radius: 11px;
-    color: {fg_bright}; font-weight: 600; min-width: 22px; max-width: 22px;
+    color: {accent}; font-weight: 700; min-width: 22px; max-width: 22px;
     min-height: 22px; max-height: 22px;
 }}
 QLabel#stepDone {{
     background: {success}; border: 1px solid {success}; border-radius: 11px;
-    color: white; font-weight: 600; min-width: 22px; max-width: 22px;
+    color: white; font-weight: 700; min-width: 22px; max-width: 22px;
     min-height: 22px; max-height: 22px;
 }}
 QLabel#cardOpt {{ color: {fg_dim}; font-size: 8pt; background: {bg}; border: 1px solid {border};
@@ -156,18 +165,18 @@ QLabel#cardOpt {{ color: {fg_dim}; font-size: 8pt; background: {bg}; border: 1px
 /* ---------- Botões ---------- */
 QPushButton {{
     background: {surface_alt}; color: {fg}; border: 1px solid {border};
-    padding: 7px 15px; border-radius: 7px;
+    padding: 7px 15px; border-radius: 8px;
 }}
 QPushButton:hover {{ background: {border}; }}
 QPushButton:pressed {{ background: {border}; border-color: {fg_dim}; }}
 QPushButton:focus {{ border-color: {accent}; outline: none; }}
 QPushButton:disabled {{ color: {fg_dim}; }}
 QPushButton#primary {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1f6feb, stop:1 #238636);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {grad_a}, stop:1 {grad_b});
     color: white; border: none; font-weight: 600; padding: 8px 20px;
 }}
 QPushButton#primary:hover {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #388bfd, stop:1 #2ea043);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {grad_a_h}, stop:1 {grad_b_h});
 }}
 QPushButton#primary:disabled {{ background: {surface_alt}; color: {fg_dim}; }}
 QPushButton#warning {{ background: {warning}; color: white; border: none; font-weight: 600; padding: 8px 20px; }}
@@ -177,7 +186,7 @@ QPushButton#ghost:hover {{ background: {surface_alt}; }}
 
 /* ---------- Inputs ---------- */
 QLineEdit, QPlainTextEdit, QTextEdit, QComboBox {{
-    background: {surface}; color: {fg_bright}; border: 1px solid {border}; border-radius: 6px;
+    background: {surface}; color: {fg_bright}; border: 1px solid {border}; border-radius: 8px;
     padding: 7px 9px;
     selection-background-color: {accent};
 }}
@@ -187,7 +196,7 @@ QComboBox::drop-down {{ border: none; width: 18px; }}
 QComboBox QAbstractItemView {{ background: {surface}; color: {fg}; border: 1px solid {border};
     selection-background-color: {surface_alt}; selection-color: {fg_bright}; }}
 QPlainTextEdit#log {{ font-family: "JetBrains Mono", "Consolas", monospace; font-size: 9pt;
-    background: {log_bg}; border: 1px solid {border}; }}
+    background: {log_bg}; color: #c8cede; border: 1px solid {border}; }}
 
 /* ---------- Radio / Checkbox ---------- */
 QRadioButton, QCheckBox {{ color: {fg}; spacing: 8px; padding: 4px 2px; }}
@@ -202,7 +211,7 @@ QCheckBox::indicator:checked {{ border-color: {accent}; background: {accent}; }}
 
 /* ---------- Tabelas ---------- */
 QTableView, QTableWidget {{ background: {surface}; gridline-color: {border};
-    border: 1px solid {border}; border-radius: 8px; }}
+    border: 1px solid {border}; border-radius: 10px; }}
 QTableView::item:selected, QTableWidget::item:selected {{ background: {surface_alt}; color: {fg_bright}; }}
 QHeaderView::section {{ background: {surface_alt}; color: {fg_dim}; padding: 7px 10px;
     border: none; border-right: 1px solid {border}; border-bottom: 1px solid {border};
@@ -213,16 +222,16 @@ QStatusBar {{ background: {surface_alt}; color: {fg_dim}; border-top: 1px solid 
 QStatusBar::item {{ border: none; }}
 QStatusBar QLabel {{ background: transparent; }}
 
-/* ---------- Progress (gradiente azul→verde, como na splash) ---------- */
+/* ---------- Progress (gradiente da marca) ---------- */
 QProgressBar {{ background: {surface_alt}; border: 1px solid {border}; border-radius: 4px;
     text-align: center; color: {fg_bright}; max-height: 8px; }}
 QProgressBar::chunk {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1f6feb, stop:1 #3fb950);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {grad_a}, stop:1 {grad_b});
     border-radius: 3px;
 }}
 
 /* ---------- KPI tiles ---------- */
-QFrame#kpi {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
+QFrame#kpi {{ background: {surface}; border: 1px solid {border}; border-radius: 12px; }}
 QFrame#kpi QLabel {{ background: transparent; }}
 QLabel#kpiLabel {{ color: {fg_dim}; font-size: 8.5pt; }}
 QLabel#kpiNum {{ color: {fg_bright}; font-family: "JetBrains Mono", "Consolas", monospace;
@@ -234,27 +243,25 @@ QLabel#kpiSub {{ color: {fg_dim}; font-size: 8pt; }}
 
 /* ---------- Sidebar: itens de navegação ---------- */
 QPushButton#navItem {{ background: transparent; border: 1px solid transparent;
-    text-align: left; border-radius: 7px; }}
-QPushButton#navItem:hover {{ background: {surface_alt}; }}
-QPushButton#navItem:checked {{ background: {surface_alt}; }}
+    text-align: left; border-radius: 9px; }}
+QPushButton#navItem:hover {{ background: {accent_overlay}; }}
+QPushButton#navItem:checked {{ background: {accent_overlay_strong}; }}
 QPushButton#navItem:focus {{ border: 1px solid {accent}; outline: none; }}
-QLabel#navLabel {{ background: transparent; font-size: 9.5pt; }}
-QLabel#navGlyph {{ background: transparent; color: {fg_dim}; font-size: 11pt; }}
+QLabel#navLabel {{ background: transparent; font-size: 10pt; color: {fg}; }}
 QPushButton#navItem:checked QLabel#navLabel {{ font-weight: 600; color: {fg_bright}; }}
-QPushButton#navItem:checked QLabel#navGlyph {{ color: {accent}; }}
-QLabel#navCount {{ background: {surface_alt}; border-radius: 8px; padding: 0 7px;
-    font-family: "JetBrains Mono", monospace; font-size: 8pt; color: {fg_dim}; }}
+QLabel#navCount {{ background: {surface_alt}; border-radius: 9px; padding: 1px 8px;
+    min-height: 16px; font-family: "JetBrains Mono", monospace; font-size: 8pt; color: {fg_dim}; }}
 
 /* ---------- Painel (coluna direita) ---------- */
-QFrame#panel {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
+QFrame#panel {{ background: {surface}; border: 1px solid {border}; border-radius: 12px; }}
 QFrame#panelHead {{ background: {surface_alt}; border: none; border-bottom: 1px solid {border};
-    border-top-left-radius: 10px; border-top-right-radius: 10px; }}
+    border-top-left-radius: 12px; border-top-right-radius: 12px; }}
 QLabel#panelTitle {{ color: {fg_bright}; font-weight: 600; background: transparent; }}
 
 /* ---------- Segmented toggle (tema) ---------- */
-QFrame#seg {{ background: {bg}; border: 1px solid {border}; border-radius: 8px; }}
+QFrame#seg {{ background: {bg}; border: 1px solid {border}; border-radius: 9px; }}
 QPushButton#segBtn {{ background: transparent; color: {fg_dim}; border: none;
-    border-radius: 6px; padding: 6px 16px; font-weight: 500; }}
+    border-radius: 7px; padding: 6px 16px; font-weight: 500; }}
 QPushButton#segBtn:checked {{ background: {surface_alt}; color: {fg_bright}; }}
 QPushButton#segBtn:hover:!checked {{ color: {fg}; }}
 """
