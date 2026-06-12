@@ -1,8 +1,58 @@
 """Atualização manual sem travar a UI: UpdateWorker em QThread + QProgressDialog."""
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import QObject, Qt, QThread
 from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
 from ui.update_worker import UpdateWorker
+
+
+class _DialogRelay(QObject):
+    """Recebe os sinais do worker na thread da GUI.
+
+    Conectar os sinais a funções soltas executaria os handlers na thread do
+    worker, e o QProgressDialog/QMessageBox seriam tocados de lá (crash
+    nativo em Qt6Gui.dll — mesmo bug do _UpdateRelay em app.py).
+    """
+
+    def __init__(self, dlg: QProgressDialog, parent_widget, thread: QThread):
+        # Parente do thread (QObject da thread principal): mantém o relay
+        # vivo até o deleteLater — conexões a métodos são referências fracas.
+        super().__init__(thread)
+        self._dlg = dlg
+        self._parent = parent_widget
+        self.estado = ""
+        self.worker = None
+        self.thread = thread
+
+    def on_progress(self, baixado, total):
+        mb_b = baixado / 1048576
+        if total > 0:
+            self._dlg.setMaximum(100)
+            self._dlg.setValue(int(baixado / total * 100))
+            self._dlg.setLabelText(f"Baixando atualização... {mb_b:.1f} / {total / 1048576:.1f} MB")
+        else:
+            self._dlg.setMaximum(0)
+            self._dlg.setLabelText(f"Baixando atualização... {mb_b:.1f} MB")
+
+    def on_status(self, e):
+        self.estado = e
+
+    def on_done(self):
+        self._dlg.close()
+        if self.estado == "reiniciando":
+            QMessageBox.information(
+                self._parent, "Atualização",
+                "Atualização baixada — o aplicativo será reiniciado agora.")
+            QApplication.instance().quit()
+        elif self.estado == "erro":
+            QMessageBox.warning(
+                self._parent, "Atualização",
+                "Não foi possível baixar a atualização. Verifique sua conexão "
+                "e tente novamente mais tarde.")
+        else:
+            QMessageBox.information(self._parent, "Atualização",
+                                    "Você já está na versão mais recente.")
+        self.worker.deleteLater()
+        self.thread.deleteLater()
 
 
 def run_update_dialog(parent) -> None:
@@ -19,47 +69,16 @@ def run_update_dialog(parent) -> None:
     dlg.setAutoReset(False)
     dlg.canceled.connect(dlg.hide)  # "Ocultar" esconde; o download continua
 
-    estado = {"valor": ""}
     thread = QThread(parent)
     worker = UpdateWorker()
     worker.moveToThread(thread)
 
-    def on_progress(baixado, total):
-        mb_b = baixado / 1048576
-        if total > 0:
-            dlg.setMaximum(100)
-            dlg.setValue(int(baixado / total * 100))
-            dlg.setLabelText(f"Baixando atualização... {mb_b:.1f} / {total / 1048576:.1f} MB")
-        else:
-            dlg.setMaximum(0)
-            dlg.setLabelText(f"Baixando atualização... {mb_b:.1f} MB")
+    relay = _DialogRelay(dlg, parent, thread)
+    relay.worker = worker
 
-    def on_status(e):
-        estado["valor"] = e
-
-    worker.progress.connect(on_progress)
-    worker.status.connect(on_status)
+    worker.progress.connect(relay.on_progress, Qt.QueuedConnection)
+    worker.status.connect(relay.on_status, Qt.QueuedConnection)
     worker.finished.connect(thread.quit)
     thread.started.connect(worker.run)
-
-    def on_done():
-        dlg.close()
-        e = estado["valor"]
-        if e == "reiniciando":
-            QMessageBox.information(
-                parent, "Atualização",
-                "Atualização baixada — o aplicativo será reiniciado agora.")
-            QApplication.instance().quit()
-        elif e == "erro":
-            QMessageBox.warning(
-                parent, "Atualização",
-                "Não foi possível baixar a atualização. Verifique sua conexão "
-                "e tente novamente mais tarde.")
-        else:
-            QMessageBox.information(parent, "Atualização",
-                                    "Você já está na versão mais recente.")
-        worker.deleteLater()
-        thread.deleteLater()
-
-    thread.finished.connect(on_done)
+    thread.finished.connect(relay.on_done, Qt.QueuedConnection)
     thread.start()

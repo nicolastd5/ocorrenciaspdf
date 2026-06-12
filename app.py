@@ -1,7 +1,7 @@
-"""Processador de Ocorrências v1.64 — entrypoint."""
+"""Processador de Ocorrências — entrypoint (versão em appinfo.py)."""
 import sys
 
-from PySide6.QtCore import QEventLoop, QThread, QTimer
+from PySide6.QtCore import QEventLoop, QObject, Qt, QThread, QTimer
 from PySide6.QtWidgets import QApplication
 
 from license_client import LicenseClient, LicenseStatus
@@ -37,37 +37,53 @@ def _resolver_licenca(client, result) -> bool:
         result = client.validate()
 
 
-def _run_auto_update(splash: Splash) -> str:
-    estado = {"valor": ""}
+class _UpdateRelay(QObject):
+    """Encaminha os sinais do worker para o splash na thread da GUI.
 
+    Os sinais são emitidos na thread do worker; conectar a funções soltas
+    executaria os handlers lá e o splash seria pintado fora da thread da
+    GUI (crash nativo em Qt6Gui.dll). Como QObject da thread principal,
+    a entrega é enfileirada e os widgets só são tocados na thread certa.
+    """
+
+    def __init__(self, splash: Splash):
+        super().__init__()
+        self._splash = splash
+        self.estado = ""
+
+    def on_progress(self, baixado, total):
+        if total > 0:
+            mb_b, mb_t = baixado / 1048576, total / 1048576
+            self._splash.set_progress(baixado / total,
+                                      f"Baixando atualização... {int(baixado / total * 100)}% — {mb_b:.1f} / {mb_t:.1f} MB")
+        else:
+            self._splash.set_progress(None, f"Baixando atualização... {baixado / 1048576:.1f} MB")
+
+    def on_status(self, e):
+        self.estado = e
+        if e == "verificando":
+            self._splash.set_status("Procurando atualizações...")
+
+
+def _run_auto_update(splash: Splash) -> str:
     thread = QThread()
     worker = UpdateWorker()
     worker.moveToThread(thread)
 
-    def on_progress(baixado, total):
-        if total > 0:
-            mb_b, mb_t = baixado / 1048576, total / 1048576
-            splash.set_progress(baixado / total,
-                                f"Baixando atualização... {int(baixado / total * 100)}% — {mb_b:.1f} / {mb_t:.1f} MB")
-        else:
-            splash.set_progress(None, f"Baixando atualização... {baixado / 1048576:.1f} MB")
-
-    def on_status(e):
-        estado["valor"] = e
-        if e == "verificando":
-            splash.set_status("Procurando atualizações...")
-
-    worker.progress.connect(on_progress)
-    worker.status.connect(on_status)
+    relay = _UpdateRelay(splash)
+    worker.progress.connect(relay.on_progress, Qt.QueuedConnection)
+    worker.status.connect(relay.on_status, Qt.QueuedConnection)
 
     loop = QEventLoop()
-    worker.finished.connect(loop.quit)
+    # QueuedConnection garante que progress/status pendentes sejam
+    # processados antes do quit — a ordem de entrega é preservada.
+    worker.finished.connect(loop.quit, Qt.QueuedConnection)
     worker.finished.connect(thread.quit)
     thread.started.connect(worker.run)
     thread.start()
     loop.exec()
     thread.wait()
-    return estado["valor"]
+    return relay.estado
 
 
 def main() -> int:
