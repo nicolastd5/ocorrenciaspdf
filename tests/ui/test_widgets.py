@@ -12,11 +12,15 @@ def test_primary_button_constructs(qtbot):
     assert btn.objectName() == "primary"
 
 
-def test_primary_button_set_mode_changes_object_name(qtbot):
+def test_primary_button_set_mode_sets_property(qtbot):
+    # objectName fica fixo em "primary"; o estado vai na propriedade "mode"
+    # (seletor de atributo no QSS) para o Qt reavaliar o estilo em runtime.
     btn = PrimaryButton("X")
     qtbot.addWidget(btn)
+    assert btn.property("mode") == "primary"
     btn.set_mode("warning")
-    assert btn.objectName() == "warning"
+    assert btn.objectName() == "primary"
+    assert btn.property("mode") == "warning"
 
 
 def test_section_card_adds_widgets(qtbot):

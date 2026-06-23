@@ -177,9 +177,9 @@ QPushButton#primary {{
 }}
 QPushButton#primary:hover {{ background: {grad_b_h}; }}
 QPushButton#primary:disabled {{ background: {surface_alt}; color: {fg_dim}; }}
-QPushButton#warning {{ background: {danger}; color: white; border: none; font-weight: 700;
-    font-size: 10pt; padding: 9px 26px; border-radius: 9px; }}
-QPushButton#warning:hover {{ background: {err_text}; }}
+/* Estado "Cancelar" durante o processamento (set_mode -> propriedade mode). */
+QPushButton#primary[mode="warning"] {{ background: {danger}; }}
+QPushButton#primary[mode="warning"]:hover {{ background: {err_text}; }}
 QPushButton#ghost {{ background: transparent; border: 1px solid transparent; }}
 QPushButton#ghost:hover {{ background: {surface_alt}; }}
 
