@@ -172,17 +172,14 @@ QPushButton:pressed {{ background: {border}; border-color: {fg_dim}; }}
 QPushButton:focus {{ border-color: {accent}; outline: none; }}
 QPushButton:disabled {{ color: {fg_dim}; }}
 QPushButton#primary {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {grad_a}, stop:1 {grad_b});
-    color: white; border: none; font-weight: 700; font-size: 10pt; padding: 9px 26px;
-    border-radius: 9px;
+    background: {accent}; color: white; border: none; font-weight: 700;
+    font-size: 10pt; padding: 9px 26px; border-radius: 9px;
 }}
-QPushButton#primary:hover {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {grad_a_h}, stop:1 {grad_b_h});
-}}
+QPushButton#primary:hover {{ background: {grad_b_h}; }}
 QPushButton#primary:disabled {{ background: {surface_alt}; color: {fg_dim}; }}
-QPushButton#warning {{ background: {warning}; color: white; border: none; font-weight: 700;
+QPushButton#warning {{ background: {danger}; color: white; border: none; font-weight: 700;
     font-size: 10pt; padding: 9px 26px; border-radius: 9px; }}
-QPushButton#warning:hover {{ background: {warn_text}; }}
+QPushButton#warning:hover {{ background: {err_text}; }}
 QPushButton#ghost {{ background: transparent; border: 1px solid transparent; }}
 QPushButton#ghost:hover {{ background: {surface_alt}; }}
 
@@ -201,15 +198,13 @@ QPlainTextEdit#log {{ font-family: "JetBrains Mono", "Consolas", monospace; font
     background: {log_bg}; color: #c8cede; border: 1px solid {border}; }}
 
 /* ---------- Radio / Checkbox ---------- */
+/* Radio e checkbox compartilham o mesmo indicador quadrado (igual ao VT-Caixa):
+   borda + preenchimento sólido quando marcado — alinhamento consistente. */
 QRadioButton, QCheckBox {{ color: {fg}; spacing: 8px; padding: 4px 2px; }}
-QRadioButton::indicator {{ width: 15px; height: 15px; border-radius: 8px;
-    border: 1.5px solid {fg_dim}; background: transparent; }}
-QRadioButton::indicator:checked {{ border-color: {accent};
-    background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fp:0.5, fy:0.5,
-        stop:0 {accent}, stop:0.45 {accent}, stop:0.5 transparent); }}
-QCheckBox::indicator {{ width: 15px; height: 15px; border-radius: 4px;
-    border: 1.5px solid {fg_dim}; background: transparent; }}
-QCheckBox::indicator:checked {{ border-color: {accent}; background: {accent}; }}
+QRadioButton::indicator, QCheckBox::indicator {{ width: 15px; height: 15px;
+    border-radius: 4px; border: 1.5px solid {fg_dim}; background: transparent; }}
+QRadioButton::indicator:checked, QCheckBox::indicator:checked {{
+    border-color: {accent}; background: {accent}; }}
 
 /* ---------- Tabelas ---------- */
 QTableView, QTableWidget {{ background: {surface}; gridline-color: {border};
