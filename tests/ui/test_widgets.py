@@ -23,6 +23,38 @@ def test_primary_button_set_mode_sets_property(qtbot):
     assert btn.property("mode") == "warning"
 
 
+def test_processar_cancelar_renderizam_com_cor(qtbot):
+    """Regressão: o botão dentro da aba real precisa renderizar roxo
+    (Processar) e vermelho (Cancelar). Um `background: transparent` solto
+    num ancestral cascateava e deixava o botão sem cor — só testes de
+    propriedade não pegavam isso, por isso aqui medimos o pixel."""
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QImage
+    import ui.theme as theme
+    from ui.tabs.ocorrencias import OcorrenciasTab
+
+    theme.apply_theme(QApplication.instance(), "dark")
+    tab = OcorrenciasTab()
+    qtbot.addWidget(tab)
+    tab.resize(1000, 700)
+    tab.show()
+    btn = tab._btn
+    btn.setEnabled(True)
+
+    def cor_fundo():
+        # Amostra perto da borda direita (longe do ícone/texto centrais)
+        # para medir só o fundo do botão.
+        img = QImage(btn.size(), QImage.Format_ARGB32)
+        img.fill(0)
+        btn.render(img)
+        s = btn.size()
+        return img.pixelColor(s.width() - 6, s.height() // 2).name()
+
+    assert cor_fundo() == "#8b7cf7"   # Processar: roxo da marca
+    btn.set_mode("warning")
+    assert cor_fundo() == "#ef4444"   # Cancelar: vermelho
+
+
 def test_section_card_adds_widgets(qtbot):
     card = SectionCard(1, "PDF de jornada")
     qtbot.addWidget(card)

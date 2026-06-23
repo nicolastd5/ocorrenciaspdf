@@ -53,7 +53,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='ProcessadorOcorrencias-v1.71',
+    name='ProcessadorOcorrencias-v1.72',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

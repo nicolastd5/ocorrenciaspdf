@@ -27,6 +27,24 @@ from ui import icons
 from ui.utils import open_path
 from ui.widgets import LogPanel, Panel, PrimaryButton
 
+_transp_seq = 0
+
+
+def _transparent(w: QWidget) -> QWidget:
+    """Fundo transparente SÓ neste widget, sem cascatear para os filhos.
+
+    `setStyleSheet("background: transparent;")` solto vaza para todos os
+    descendentes — incl. os botões Processar/Cancelar, que perdiam a cor.
+    Escopar por objectName (`QWidget#nome {...}`) limita a regra ao próprio
+    widget. Ver ui/widgets/primary_button.py e o tema (#primary/#warning).
+    """
+    global _transp_seq
+    _transp_seq += 1
+    name = f"transpBg{_transp_seq}"
+    w.setObjectName(name)
+    w.setStyleSheet(f"QWidget#{name} {{ background: transparent; }}")
+    return w
+
 
 class ProcessingTab(QWidget):
     processed = Signal(dict)
@@ -51,8 +69,7 @@ class ProcessingTab(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(scroll)
-        page = QWidget()
-        page.setStyleSheet("background: transparent;")
+        page = _transparent(QWidget())
         scroll.setWidget(page)
 
         layout = QVBoxLayout(page)
@@ -66,8 +83,7 @@ class ProcessingTab(QWidget):
         left = QVBoxLayout(); left.setSpacing(16)
         self._build_left(left)
         left.addStretch()
-        left_wrap = QWidget(); left_wrap.setLayout(left)
-        left_wrap.setStyleSheet("background: transparent;")
+        left_wrap = _transparent(QWidget()); left_wrap.setLayout(left)
         split.addWidget(left_wrap, stretch=5)
 
         # coluna direita: execução (resumo/KPIs + log)
@@ -79,8 +95,7 @@ class ProcessingTab(QWidget):
         self._btn.clicked.connect(self._on_button_clicked)
         self._panel.add_header_widget(self._btn)
 
-        self._summary = QWidget()
-        self._summary.setStyleSheet("background: transparent;")
+        self._summary = _transparent(QWidget())
         self._summary_lay = QVBoxLayout(self._summary)
         self._summary_lay.setContentsMargins(0, 0, 0, 0)
         self._summary_lay.setSpacing(12)
@@ -118,7 +133,7 @@ class ProcessingTab(QWidget):
     # ---------- cabeçalho ----------
     @staticmethod
     def _page_head(title, sub):
-        w = QWidget(); w.setStyleSheet("background: transparent;")
+        w = _transparent(QWidget())
         lay = QVBoxLayout(w); lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(3)
         t = QLabel(title); t.setObjectName("pageTitle")
         s = QLabel(sub); s.setObjectName("pageSub"); s.setWordWrap(True)
@@ -136,7 +151,7 @@ class ProcessingTab(QWidget):
     def _render_prompt(self, ready: bool = False):
         self._showing_result = False
         self._clear_summary()
-        box = QWidget(); box.setStyleSheet("background: transparent;")
+        box = _transparent(QWidget())
         bl = QVBoxLayout(box); bl.setAlignment(Qt.AlignCenter); bl.setSpacing(8)
         bl.setContentsMargins(0, 18, 0, 18)
         icon = icons.IconLabel("check" if ready else "play",
@@ -164,7 +179,7 @@ class ProcessingTab(QWidget):
         grid = QGridLayout(); grid.setSpacing(10)
         for i, tile in enumerate(tiles):
             grid.addWidget(tile, i // 2, i % 2)
-        wrap = QWidget(); wrap.setStyleSheet("background: transparent;"); wrap.setLayout(grid)
+        wrap = _transparent(QWidget()); wrap.setLayout(grid)
         self._summary_lay.addWidget(wrap)
 
         out = info.get("output_path")
@@ -175,7 +190,7 @@ class ProcessingTab(QWidget):
             b_dir = QPushButton("Abrir pasta")
             b_dir.clicked.connect(lambda _=False, p=os.path.dirname(out): open_path(p))
             row.addWidget(b_open); row.addWidget(b_dir); row.addStretch()
-            w = QWidget(); w.setStyleSheet("background: transparent;"); w.setLayout(row)
+            w = _transparent(QWidget()); w.setLayout(row)
             self._summary_lay.addWidget(w)
 
     # ---------- estado / execução ----------
