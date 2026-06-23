@@ -14,6 +14,7 @@ from ui import settings
 from ui.tabs.processing_base import ProcessingTab
 from ui.widgets import DropZone, KpiTile, SectionCard
 from ui.widgets.conflict_dialog import ConflictDialog
+from ui.widgets.text_dialog import show_text_dialog
 
 
 # Resolvido sob demanda em OcorrenciasWorker.run — pdfplumber/openpyxl são
@@ -148,6 +149,7 @@ class OcorrenciasWorker(QObject):
                 "duration": time.monotonic() - t0,
                 "matched": result.get("matched", 0),
                 "total_pdf": result.get("total_pdf", 0),
+                "nao_encontrados": result.get("nao_encontrados", []),
                 "info_verif": info_verif,
             })
         except _Cancelled:
@@ -301,19 +303,35 @@ class OcorrenciasTab(ProcessingTab):
         total = info.get("total_pdf", 0)
         dur = info.get("duration", 0.0)
         conflitos = iv.get("conflitos_resolvidos", 0)
+        nao_enc = info.get("nao_encontrados", [])
+        n_falta = len(nao_enc)
         if iv.get("ia_usada"):
             ia = "usada"
         elif iv.get("ia_fallback"):
             ia = "fallback"
         else:
             ia = "—"
+        tile_falta = KpiTile(
+            "Não localizados", str(n_falta),
+            sub="clique para ver" if n_falta else "",
+            accent="warn" if n_falta else None,
+            clickable=bool(n_falta))
+        if n_falta:
+            tile_falta.clicked.connect(lambda: self._show_nao_encontrados(nao_enc))
         tiles = [
-            KpiTile("Matches", f"{matched}/{total}", accent="ok"),
+            KpiTile("Localizados", f"{matched}/{total}", accent="ok"),
+            tile_falta,
             KpiTile("Conflitos", str(conflitos), accent="warn" if conflitos else None),
             KpiTile("Duração", f"{dur:.1f}s", accent="accent"),
             KpiTile("IA", ia),
         ]
         self._show_result_tiles(tiles, info)
+
+    def _show_nao_encontrados(self, nao_enc):
+        linhas = [f"{len(nao_enc)} pessoa(s) não localizada(s) na planilha:\n"]
+        for item in nao_enc:
+            linhas.append(f"RE {item['re']} — {item['nome']}\n    motivo: {item['motivo']}")
+        show_text_dialog(self, "Não localizados", "\n".join(linhas))
 
     def _on_finished(self, info):
         status = info.get("status", "ok")
@@ -326,8 +344,16 @@ class OcorrenciasTab(ProcessingTab):
             elif iv.get("ia_usada"):
                 extra = " (IA usada)"
             self._log.append(
-                f"concluído em {duration:.1f}s — {info.get('matched',0)}/{info.get('total_pdf',0)} matches{extra}",
+                f"concluído em {duration:.1f}s — {info.get('matched',0)}/{info.get('total_pdf',0)} localizados{extra}",
                 level="success")
+            nao_enc = info.get("nao_encontrados", [])
+            if nao_enc:
+                self._log.append(
+                    f"{len(nao_enc)} não localizado(s):", level="warning")
+                for item in nao_enc:
+                    self._log.append(
+                        f"  RE {item['re']} — {item['nome']} ({item['motivo']})",
+                        level="warning")
             self._render_result(info)
         elif status == "cancelled":
             self._log.append("cancelado", level="warning")
@@ -343,5 +369,9 @@ class OcorrenciasTab(ProcessingTab):
             "status": info.get("status", "error"),
             "duration_seconds": round(info.get("duration", 0.0), 2),
             "rows_processed": info.get("matched"),
+            "nao_encontrados": [
+                f"RE {x['re']} — {x['nome']} ({x['motivo']})"
+                for x in info.get("nao_encontrados", [])
+            ],
             "error": info.get("error"),
         }

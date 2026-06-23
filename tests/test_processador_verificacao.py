@@ -170,6 +170,38 @@ def test_verificar_com_ia_parseia_json_valido(monkeypatch):
     assert resultado['12345']['ocorrencias']['AT'] == 2
 
 
+def test_processar_retorna_e_grava_nao_encontrados(tmp_path):
+    """RE presente no PDF mas ausente da planilha vira 'não localizado',
+    é retornado e gravado na aba 'Não localizados' da saída."""
+    from openpyxl import Workbook, load_workbook
+
+    xlsx = tmp_path / "pedido.xlsx"
+    out = tmp_path / "pedido_out.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Folha RE", "MOTIVO"])
+    ws.append(["12345", ""])  # só este RE existe na planilha
+    wb.save(xlsx)
+
+    dados = {
+        "12345": {"nome": "SILVA", "ocorrencias": {"AT": 2}},   # bate
+        "99999": {"nome": "AUSENTE", "ocorrencias": {"AT": 1}},  # não bate
+    }
+    res = proc.processar(str(xlsx), str(xlsx), str(out), ["AT"],
+                         dados_externos=dados)
+
+    nomes = {x["re"]: x for x in res["nao_encontrados"]}
+    assert "99999" in nomes
+    assert "12345" not in nomes
+    assert nomes["99999"]["nome"] == "AUSENTE"
+
+    wb_out = load_workbook(out)
+    assert "Não localizados" in wb_out.sheetnames
+    linhas = list(wb_out["Não localizados"].iter_rows(values_only=True))
+    assert linhas[0] == ("Folha RE", "Nome", "Motivo")
+    assert any(r[0] == "99999" for r in linhas[1:])
+
+
 def test_verificar_com_ia_remove_cerca_markdown(monkeypatch):
     import pypdfium2 as pdfium
     import google.genai as genai

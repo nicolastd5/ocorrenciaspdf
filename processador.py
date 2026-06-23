@@ -439,6 +439,15 @@ class ProcessadorOcorrencias:
 
         nao_encontrados.sort(key=lambda x: x['nome'])
 
+        # 5b. Gravar aba "Não localizados" na própria planilha de saída.
+        if 'Não localizados' in wb.sheetnames:
+            del wb['Não localizados']
+        if nao_encontrados:
+            ws_nl = wb.create_sheet('Não localizados')
+            ws_nl.append(['Folha RE', 'Nome', 'Motivo'])
+            for item in nao_encontrados:
+                ws_nl.append([item['re'], item['nome'], item['motivo']])
+
         # 6. Salvar
         _prog(97, "Salvando planilha...")
         wb.save(output_path)

@@ -173,14 +173,16 @@ QPushButton:focus {{ border-color: {accent}; outline: none; }}
 QPushButton:disabled {{ color: {fg_dim}; }}
 QPushButton#primary {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {grad_a}, stop:1 {grad_b});
-    color: white; border: none; font-weight: 600; padding: 8px 20px;
+    color: white; border: none; font-weight: 700; font-size: 10pt; padding: 9px 26px;
+    border-radius: 9px;
 }}
 QPushButton#primary:hover {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {grad_a_h}, stop:1 {grad_b_h});
 }}
 QPushButton#primary:disabled {{ background: {surface_alt}; color: {fg_dim}; }}
-QPushButton#warning {{ background: {warning}; color: white; border: none; font-weight: 600; padding: 8px 20px; }}
-QPushButton#warning:hover {{ background: {warning}; }}
+QPushButton#warning {{ background: {warning}; color: white; border: none; font-weight: 700;
+    font-size: 10pt; padding: 9px 26px; border-radius: 9px; }}
+QPushButton#warning:hover {{ background: {warn_text}; }}
 QPushButton#ghost {{ background: transparent; border: 1px solid transparent; }}
 QPushButton#ghost:hover {{ background: {surface_alt}; }}
 
@@ -217,18 +219,21 @@ QHeaderView::section {{ background: {surface_alt}; color: {fg_dim}; padding: 7px
     border: none; border-right: 1px solid {border}; border-bottom: 1px solid {border};
     font-weight: 600; }}
 
+
 /* ---------- Status bar ---------- */
 QStatusBar {{ background: {surface_alt}; color: {fg_dim}; border-top: 1px solid {border}; }}
 QStatusBar::item {{ border: none; }}
 QStatusBar QLabel {{ background: transparent; }}
 
 /* ---------- Progress (gradiente da marca) ---------- */
-QProgressBar {{ background: {surface_alt}; border: 1px solid {border}; border-radius: 4px;
-    text-align: center; color: {fg_bright}; max-height: 8px; }}
+QProgressBar {{ background: {surface_alt}; border: 1px solid {border}; border-radius: 5px;
+    min-height: 10px; max-height: 10px; }}
 QProgressBar::chunk {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {grad_a}, stop:1 {grad_b});
-    border-radius: 3px;
+    border-radius: 4px;
 }}
+QLabel#progressPct {{ color: {fg_bright}; font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 9.5pt; font-weight: 700; background: transparent; }}
 
 /* ---------- KPI tiles ---------- */
 QFrame#kpi {{ background: {surface}; border: 1px solid {border}; border-radius: 12px; }}

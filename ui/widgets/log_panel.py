@@ -1,5 +1,9 @@
 from datetime import datetime
-from PySide6.QtWidgets import QPlainTextEdit, QProgressBar, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextOption
+from PySide6.QtWidgets import (
+    QHBoxLayout, QLabel, QPlainTextEdit, QProgressBar, QVBoxLayout, QWidget
+)
 
 
 class LogPanel(QWidget):
@@ -9,14 +13,30 @@ class LogPanel(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
         # Barra acima do log: fica visível mesmo com o log rolando/extenso.
-        self._progress = QProgressBar(self)
+        # O percentual vai num label próprio ao lado — dentro da barra fina
+        # ele ficava achatado/cortado.
+        self._progress_row = QWidget(self)
+        self._progress_row.setVisible(False)
+        row = QHBoxLayout(self._progress_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        self._progress = QProgressBar(self._progress_row)
         self._progress.setRange(0, 100)
-        self._progress.setVisible(False)
-        layout.addWidget(self._progress)
+        self._progress.setTextVisible(False)
+        row.addWidget(self._progress, stretch=1)
+        self._pct = QLabel("0%", self._progress_row)
+        self._pct.setObjectName("progressPct")
+        self._pct.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
+        self._pct.setMinimumWidth(38)
+        row.addWidget(self._pct)
+        layout.addWidget(self._progress_row)
         self._log = QPlainTextEdit(self)
         self._log.setReadOnly(True)
         self._log.setObjectName("log")
+        # Quebra em qualquer ponto: caminhos/arquivos longos não somem na borda.
+        self._log.setWordWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
         layout.addWidget(self._log)
 
     def append(self, msg: str, level: str = "info") -> None:
@@ -27,13 +47,16 @@ class LogPanel(QWidget):
         bar.setValue(bar.maximum())
 
     def set_progress(self, pct: int, visible: bool = True) -> None:
-        self._progress.setVisible(visible)
-        self._progress.setValue(max(0, min(100, pct)))
+        pct = max(0, min(100, pct))
+        self._progress_row.setVisible(visible)
+        self._progress.setValue(pct)
+        self._pct.setText(f"{pct}%")
 
     def clear(self) -> None:
         self._log.clear()
-        self._progress.setVisible(False)
+        self._progress_row.setVisible(False)
         self._progress.setValue(0)
+        self._pct.setText("0%")
 
     def text(self) -> str:
         return self._log.toPlainText()
