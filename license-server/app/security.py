@@ -45,6 +45,19 @@ def require_admin(request: Request):
         )
 
 
+def current_user_id(request: Request) -> Optional[int]:
+    uid = request.session.get("user_id")
+    return int(uid) if uid else None
+
+
+def require_user(request: Request):
+    if not current_user_id(request):
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            headers={"Location": "/login"},
+        )
+
+
 def get_or_create_csrf_token(request: Request) -> str:
     token = request.session.get("csrf_token")
     if not token:

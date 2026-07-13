@@ -8,6 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import load_settings
 from app.db import init_db
 from app.routes_api import router as api_router, limiter as api_limiter
+from app.routes_auth import router as auth_router
 from app.routes_admin import router as admin_router
 from app.routes_update import router as update_router
 
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     )
 
     fastapi_app.include_router(api_router)
+    fastapi_app.include_router(auth_router)
     fastapi_app.include_router(admin_router)
     fastapi_app.include_router(update_router)
 
