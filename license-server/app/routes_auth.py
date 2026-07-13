@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import users
 from app.security import (
-    get_or_create_csrf_token, require_user, verify_csrf_token,
+    get_or_create_csrf_token, verify_csrf_token,
 )
 
 router = APIRouter()
