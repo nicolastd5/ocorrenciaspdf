@@ -1,0 +1,13 @@
+[Unit]
+Description=Processador de Ocorrencias — worker RQ
+After=network.target redis-server.service
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/ocorrencias
+EnvironmentFile=/opt/ocorrencias/.env.systemd
+ExecStart=/opt/ocorrencias/.venv/bin/rq worker default
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

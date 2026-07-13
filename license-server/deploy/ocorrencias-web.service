@@ -1,0 +1,13 @@
+[Unit]
+Description=Processador de Ocorrencias — web app
+After=network.target redis-server.service
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/ocorrencias
+EnvironmentFile=/opt/ocorrencias/.env.systemd
+ExecStart=/opt/ocorrencias/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
