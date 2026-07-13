@@ -104,8 +104,8 @@ license-server/
    conflitos, download.
 3. **VT-Caixa** (`/app/vt-caixa`) — upload Nautilus (PDF/Excel) + cadastral,
    progresso, download do CSV (latin-1).
-4. **Códigos** (`/app/codigos`) — tabelas de referência com botão copiar;
-   dados guardados no servidor e editáveis pelo admin.
+4. **Códigos** (`/app/codigos`) — tabelas de referência com botão copiar,
+   renderizadas das constantes do `core/` (somente leitura, como no desktop).
 5. **Histórico** (`/app/historico`).
 6. **Admin** (existente) — ganha CRUD de usuários; perde config de IA e,
    na fase final, licenças/releases.
