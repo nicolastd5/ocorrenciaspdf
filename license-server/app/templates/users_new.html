@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Novo usuário — Processador de Ocorrências{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Novo usuário</h1>
+    <p>Criar uma nova conta de acesso à plataforma web.</p>
+</div>
+<div class="form-card">
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    <form method="post" action="/admin/users/new">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" name="email" required placeholder="usuario@exemplo.com">
+        <label for="name">Nome</label>
+        <input type="text" id="name" name="name" required placeholder="Nome completo">
+        <label for="password">Senha</label>
+        <input type="password" id="password" name="password" required placeholder="Mínimo 8 caracteres" minlength="8">
+        <div class="hint">A senha deve ter ao menos 8 caracteres.</div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Criar usuário</button>
+            <a href="/admin/users" class="btn btn-ghost">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

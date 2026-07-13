@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter
@@ -19,9 +19,10 @@ from app.releases import (
     ReleaseError, delete_release_file, list_release_files, publish_release,
     read_version_info,
 )
+from app import users as users_module
 from app.security import (
     get_or_create_csrf_token, is_authenticated,
-    verify_csrf_token, verify_password, hash_password,
+    require_admin, verify_csrf_token, verify_password, hash_password,
 )
 
 
@@ -343,6 +344,66 @@ async def config_post(
         request, "config.html",
         {"csrf_token": csrf, "gemini_key": _read_gemini_key(), "message": msg, "error": None},
     )
+
+
+# ── User management (admin) ────────────────────────────────────────────
+
+
+@router.get("/users", response_class=HTMLResponse)
+def users_list(request: Request, _=Depends(require_admin)):
+    settings = request.app.state.settings
+    return templates.TemplateResponse(request, "users_list.html", {
+        "users": users_module.list_users(settings.db_path),
+        "csrf_token": get_or_create_csrf_token(request),
+    })
+
+
+@router.get("/users/new", response_class=HTMLResponse)
+def users_new_page(request: Request, _=Depends(require_admin)):
+    return templates.TemplateResponse(request, "users_new.html", {
+        "csrf_token": get_or_create_csrf_token(request), "error": None,
+    })
+
+
+@router.post("/users/new")
+def users_new_submit(request: Request, email: str = Form(...), name: str = Form(...),
+                     password: str = Form(...), csrf_token: str = Form(...),
+                     _=Depends(require_admin)):
+    if not verify_csrf_token(request.session.get("csrf_token"), csrf_token):
+        return RedirectResponse("/admin/users", status_code=303)
+    settings = request.app.state.settings
+    if len(password) < 8:
+        return templates.TemplateResponse(request, "users_new.html", {
+            "csrf_token": get_or_create_csrf_token(request),
+            "error": "A senha deve ter ao menos 8 caracteres.",
+        })
+    try:
+        users_module.create_user(settings.db_path, email, name, password)
+    except ValueError as e:
+        return templates.TemplateResponse(request, "users_new.html", {
+            "csrf_token": get_or_create_csrf_token(request), "error": str(e),
+        })
+    return RedirectResponse("/admin/users", status_code=303)
+
+
+@router.post("/users/{user_id}/toggle")
+def users_toggle(request: Request, user_id: int, csrf_token: str = Form(...),
+                 _=Depends(require_admin)):
+    if verify_csrf_token(request.session.get("csrf_token"), csrf_token):
+        settings = request.app.state.settings
+        u = users_module.get_user(settings.db_path, user_id)
+        if u:
+            users_module.set_active(settings.db_path, user_id, not u["active"])
+    return RedirectResponse("/admin/users", status_code=303)
+
+
+@router.post("/users/{user_id}/password")
+def users_password(request: Request, user_id: int, password: str = Form(...),
+                   csrf_token: str = Form(...), _=Depends(require_admin)):
+    if verify_csrf_token(request.session.get("csrf_token"), csrf_token) and len(password) >= 8:
+        settings = request.app.state.settings
+        users_module.set_password(settings.db_path, user_id, password)
+    return RedirectResponse("/admin/users", status_code=303)
 
 
 @router.get("/{license_id}", response_class=HTMLResponse)

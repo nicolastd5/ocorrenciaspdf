@@ -67,3 +67,21 @@ def login_user(client):
 def user_csrf(login_user):
     """Just return the csrf token from login_user."""
     return login_user[1]
+
+
+@pytest.fixture
+def admin_client(client, monkeypatch):
+    """Log into admin and return dict with 'client' and 'csrf'."""
+    c = client[0] if isinstance(client, tuple) else client
+    # Login as admin
+    r = c.get("/admin/login")
+    assert r.status_code == 200
+    token = re.search(r'name="csrf_token" value="([^"]+)"', r.text).group(1)
+    r = c.post("/admin/login", data={"csrf_token": token, "password": "test-password"},
+               follow_redirects=False)
+    assert r.status_code in (302, 303)
+    # Get fresh CSRF from dashboard
+    r = c.get("/admin")
+    assert r.status_code == 200
+    token = re.search(r'name="csrf_token" value="([^"]+)"', r.text).group(1)
+    return {"client": c, "csrf": token}

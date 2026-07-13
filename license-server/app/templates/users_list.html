@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Usuários — Processador de Ocorrências{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Usuários</h1>
+    <p>Gerenciar contas de acesso à plataforma web.</p>
+</div>
+<div class="toolbar">
+    <a href="/admin/users/new" class="btn btn-primary">+ Novo usuário</a>
+</div>
+<div class="card">
+    <table>
+        <thead>
+            <tr><th>E-mail</th><th>Nome</th><th>Status</th><th>Criado em</th><th>Ações</th></tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td class="key">{{ u.email }}</td>
+                <td>{{ u.name }}</td>
+                <td>
+                    {% if u.active %}<span class="badge badge-active">Ativo</span>
+                    {% else %}<span class="badge badge-revoked">Inativo</span>{% endif %}
+                </td>
+                <td class="meta">{{ u.created_at | brasilia }}</td>
+                <td>
+                    <form method="post" action="/admin/users/{{ u.id }}/toggle" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-sm {{ 'btn-danger' if u.active else 'btn-primary' }}">
+                            {{ 'Desativar' if u.active else 'Ativar' }}
+                        </button>
+                    </form>
+                    <form method="post" action="/admin/users/{{ u.id }}/password" class="inline" style="display:inline-flex;gap:6px;margin-left:6px">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="password" name="password" placeholder="Nova senha" class="btn-sm" style="width:140px;padding:5px 10px;font-size:12.5px" minlength="8" required>
+                        <button type="submit" class="btn btn-sm btn-ghost">Redefinir</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">Nenhum usuário cadastrado.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
