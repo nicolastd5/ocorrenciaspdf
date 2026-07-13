@@ -24,6 +24,15 @@ CREATE TABLE IF NOT EXISTS validation_log (
 
 CREATE INDEX IF NOT EXISTS idx_validation_log_license_id
     ON validation_log(license_id);
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
 """
 
 def init_db(db_path: str) -> None:
