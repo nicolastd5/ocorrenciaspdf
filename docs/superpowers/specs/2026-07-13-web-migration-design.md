@@ -80,8 +80,8 @@ license-server/
   `progress_cb`.
 - **Ocorrências:** worker roda V1 + V2 e `reconciliar`. Sem conflitos →
   gera a planilha e status `done`. Com conflitos → status `awaiting_review`;
-  a resolução do usuário (tela web) é enviada, o worker (ou a própria rota,
-  pois é rápido) aplica `dados_externos` e finaliza.
+  a resolução do usuário (tela web) é enviada e a própria rota aplica
+  `dados_externos` e finaliza (etapa rápida, não precisa voltar à fila).
 - **VT-Caixa:** fluxo direto upload → CSV.
 - Página de acompanhamento consulta `GET /app/jobs/<id>/status` via polling
   HTMX (1s) e troca para a tela de conflitos ou de download conforme o status.
