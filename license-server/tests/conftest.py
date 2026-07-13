@@ -70,6 +70,21 @@ def user_csrf(login_user):
 
 
 @pytest.fixture
+def logged_client(client):
+    """Create user, log in, return TestClient with active session."""
+    c, db = client
+    from app import users
+    users.create_user(db, "ana@ex.com", "Ana", "s3nh4forte")
+    r = c.get("/login")
+    assert r.status_code == 200
+    token = re.search(r'name="csrf_token" value="([^"]+)"', r.text).group(1)
+    r = c.post("/login", data={"email": "ana@ex.com", "password": "s3nh4forte",
+                               "csrf_token": token}, follow_redirects=False)
+    assert r.status_code == 303
+    return c, db
+
+
+@pytest.fixture
 def admin_client(client, monkeypatch):
     """Log into admin and return dict with 'client' and 'csrf'."""
     c = client[0] if isinstance(client, tuple) else client

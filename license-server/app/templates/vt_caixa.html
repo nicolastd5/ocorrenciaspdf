@@ -1,0 +1,14 @@
+{% extends "app_base.html" %}
+{% block title %}VT-Caixa — Processador de Ocorrências{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>VT-Caixa</h1>
+    <p>Geração de arquivo CSV de Vale-Transporte a partir de fonte (PDF/Excel) e cadastro funcional.</p>
+</div>
+<div class="form-card">
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    <p class="hint" style="padding:20px 0;text-align:center;color:var(--text-muted)">
+        Faça upload do arquivo fonte (Nautilus PDF ou Excel) e do cadastro funcional para gerar o CSV.
+    </p>
+</div>
+{% endblock %}

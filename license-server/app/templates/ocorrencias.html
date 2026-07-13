@@ -1,0 +1,14 @@
+{% extends "app_base.html" %}
+{% block title %}Ocorrências — Processador de Ocorrências{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Ocorrências</h1>
+    <p>Processamento de ocorrências de faltas a partir de PDF de jornada e planilha de pedido.</p>
+</div>
+<div class="form-card">
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    <p class="hint" style="padding:20px 0;text-align:center;color:var(--text-muted)">
+        Faça upload do PDF de jornada e da planilha de pedido para iniciar o processamento.
+    </p>
+</div>
+{% endblock %}

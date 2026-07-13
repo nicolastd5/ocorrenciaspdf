@@ -42,7 +42,4 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
-# Stub route for the app area — replaced in Task 6
-@router.get("/app/ocorrencias", response_class=HTMLResponse)
-def ocorrencias_stub(request: Request, _=Depends(require_user)):
-    return HTMLResponse("ok")
+

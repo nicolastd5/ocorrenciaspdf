@@ -1,9 +1,11 @@
 import logging
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
+from starlette import status
 
 from app.config import load_settings
 from app.db import init_db
@@ -11,6 +13,7 @@ from app.routes_api import router as api_router, limiter as api_limiter
 from app.routes_auth import router as auth_router
 from app.routes_admin import router as admin_router
 from app.routes_update import router as update_router
+from app.routes_app import router as app_router
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -33,10 +36,12 @@ def create_app() -> FastAPI:
         max_age=7 * 24 * 60 * 60,
     )
 
+    fastapi_app.mount("/static", StaticFiles(directory="app/static"), name="static")
     fastapi_app.include_router(api_router)
     fastapi_app.include_router(auth_router)
     fastapi_app.include_router(admin_router)
     fastapi_app.include_router(update_router)
+    fastapi_app.include_router(app_router)
 
     @fastapi_app.exception_handler(RateLimitExceeded)
     async def rate_limit_handler(request, exc):
@@ -44,7 +49,7 @@ def create_app() -> FastAPI:
 
     @fastapi_app.get("/")
     async def root():
-        return {"service": "license-server", "status": "ok"}
+        return RedirectResponse("/app/ocorrencias", status_code=status.HTTP_303_SEE_OTHER)
 
     return fastapi_app
 

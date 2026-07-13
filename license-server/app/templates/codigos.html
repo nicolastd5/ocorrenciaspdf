@@ -1,0 +1,47 @@
+{% extends "app_base.html" %}
+{% block title %}Códigos — Processador de Ocorrências{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Códigos de referência</h1>
+    <p>Tabelas de consulta rápida — clique em um código para copiar.</p>
+</div>
+<div class="code-grid">
+    <div class="card">
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);font-weight:600;color:var(--text-bright)">
+            Operadora → Código de Benefício
+        </div>
+        <table>
+            <thead>
+                <tr><th>Operadora</th><th>Valor Unitário</th><th>Código</th></tr>
+            </thead>
+            <tbody>
+                {% for op, valor, cod in cod_rows %}
+                <tr onclick="navigator.clipboard.writeText('{{ cod }}');this.style.opacity='0.5';setTimeout(()=>this.style.opacity='',300)" style="cursor:pointer">
+                    <td>{{ op }}</td>
+                    <td class="meta">{{ valor }}</td>
+                    <td class="key">{{ cod }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card">
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);font-weight:600;color:var(--text-bright)">
+            Departamento → Substituição
+        </div>
+        <table>
+            <thead>
+                <tr><th>Original</th><th>Substituto</th></tr>
+            </thead>
+            <tbody>
+                {% for orig, sub in depart_map.items() %}
+                <tr>
+                    <td>{{ orig }}</td>
+                    <td class="key">{{ sub }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "app_base.html" %}
+{% block title %}Histórico — Processador de Ocorrências{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Histórico</h1>
+    <p>Registro dos processamentos realizados.</p>
+</div>
+<div class="toolbar">
+    <form method="get" action="/app/historico">
+        <input type="text" name="q" placeholder="Buscar por arquivo..." value="{{ q or '' }}">
+        <select name="status">
+            <option value="">Todos</option>
+            <option value="sucesso" {{ 'selected' if status == 'sucesso' else '' }}>Sucesso</option>
+            <option value="erro" {{ 'selected' if status == 'erro' else '' }}>Erro</option>
+        </select>
+        <button type="submit" class="btn">Filtrar</button>
+    </form>
+    <a href="/app/historico.csv" class="btn btn-ghost btn-sm">Exportar CSV</a>
+</div>
+<div class="card">
+    <table>
+        <thead>
+            <tr><th>Data</th><th>Tipo</th><th>Arquivos</th><th>Resultado</th><th></th></tr>
+        </thead>
+        <tbody>
+            {% for e in entries %}
+            <tr>
+                <td class="meta">{{ e.created_at }}</td>
+                <td>{{ 'Ocorrências' if e.kind == 'ocorrencias' else 'VT-Caixa' }}</td>
+                <td>{{ e.input_names | join('; ') }}</td>
+                <td>
+                    {% if e.counts.matched is defined %}
+                    {{ e.counts.matched }} correspondências
+                    {% elif e.counts.total_ok is defined %}
+                    {{ e.counts.total_ok }} registros
+                    {% endif %}
+                </td>
+                <td>
+                    {% if e.job_id %}
+                    <a href="/app/jobs/{{ e.job_id }}" class="btn btn-sm btn-ghost">Abrir</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">Nenhum processamento realizado ainda.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
