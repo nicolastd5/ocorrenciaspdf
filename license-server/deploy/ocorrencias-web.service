@@ -1,12 +1,15 @@
+# Referência: unit do app web. Na VPS atual o serviço já existe com o nome
+# "license-server" — se for recriar, use este arquivo. Caso contrário, apenas
+# confirme que a unit existente equivale a isto (uvicorn na porta 8000).
 [Unit]
 Description=Processador de Ocorrencias — web app
 After=network.target redis-server.service
 
 [Service]
-User=www-data
-WorkingDirectory=/opt/ocorrencias
-EnvironmentFile=/opt/ocorrencias/.env.systemd
-ExecStart=/opt/ocorrencias/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+User=ubuntu
+WorkingDirectory=/home/ubuntu/license-server
+EnvironmentFile=/home/ubuntu/license-server/.env.systemd
+ExecStart=/home/ubuntu/license-server/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 
 [Install]

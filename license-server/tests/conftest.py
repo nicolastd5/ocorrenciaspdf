@@ -24,6 +24,7 @@ def set_env(monkeypatch, tmp_path):
     monkeypatch.setenv("ADMIN_PASSWORD", "test-password")
     monkeypatch.setenv("SECRET_KEY", "0123456789abcdef0123456789abcdef-test-only")
     monkeypatch.setenv("DB_PATH", str(tmp_path / "licenses.db"))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
 
 
 # ── Fixtures compartilhadas para testes de rota ──────────────────────────────
@@ -35,6 +36,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setenv("DB_PATH", db_path)
     monkeypatch.setenv("ADMIN_PASSWORD", "test-password")
     monkeypatch.setenv("SECRET_KEY", "0123456789abcdef0123456789abcdef-test-only")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     import importlib
     import app.routes_admin
     import app.main

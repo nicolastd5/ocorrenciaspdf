@@ -6,6 +6,8 @@ __pycache__/
 venv/
 *.db
 *.db-journal
+data/
+gemini_key.txt
 .env
 .coverage
 htmlcov/
