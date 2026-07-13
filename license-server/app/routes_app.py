@@ -1,8 +1,13 @@
+import csv
+import io
+import json
+
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.security import get_or_create_csrf_token, require_user
+from app import history as history_module
+from app.security import current_user_id, get_or_create_csrf_token, require_user
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -34,7 +39,23 @@ def codigos(request: Request, _=Depends(require_user)):
 
 
 @router.get("/app/historico", response_class=HTMLResponse)
-def historico(request: Request, _=Depends(require_user)):
+def historico(request: Request, q: str = "", status: str = "", _=Depends(require_user)):
+    settings = request.app.state.settings
+    entries = history_module.list_for_user(settings.db_path, current_user_id(request), q, status)
     return templates.TemplateResponse(request, "historico.html", {
-        "entries": [], "active": "historico",
+        "entries": entries, "q": q, "status": status, "active": "historico",
     })
+
+
+@router.get("/app/historico.csv")
+def historico_csv(request: Request, q: str = "", status: str = "", _=Depends(require_user)):
+    settings = request.app.state.settings
+    entries = history_module.list_for_user(settings.db_path, current_user_id(request), q, status)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["data", "tipo", "status", "arquivos", "detalhes"])
+    for e in entries:
+        w.writerow([e["created_at"], e["kind"], e["status"],
+                    "; ".join(e["input_names"]), json.dumps(e["counts"], ensure_ascii=False)])
+    return PlainTextResponse(buf.getvalue(), media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=historico.csv"})

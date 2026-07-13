@@ -7,8 +7,20 @@
 </div>
 <div class="form-card">
     {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
-    <p class="hint" style="padding:20px 0;text-align:center;color:var(--text-muted)">
-        Faça upload do arquivo fonte (Nautilus PDF ou Excel) e do cadastro funcional para gerar o CSV.
-    </p>
+    <form method="post" action="/app/vt-caixa" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <label for="fonte">Fonte (relatório Nautilus — PDF ou Excel)</label>
+        <input type="file" id="fonte" name="fonte" accept=".pdf,.xlsx,.xls" required>
+
+        <label for="cadastral">Cadastro funcional (.xlsx/.xls)</label>
+        <input type="file" id="cadastral" name="cadastral" accept=".xlsx,.xls" required>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">
+                Processar
+            </button>
+        </div>
+    </form>
 </div>
 {% endblock %}

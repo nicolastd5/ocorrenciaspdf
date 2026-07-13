@@ -2,8 +2,10 @@ import os
 from pathlib import Path
 import re
 
+import fakeredis
 import pytest
 from fastapi.testclient import TestClient
+from rq import Queue
 
 from app import users
 from app.db import init_db
@@ -28,7 +30,7 @@ def set_env(monkeypatch, tmp_path):
 
 @pytest.fixture
 def client(monkeypatch, tmp_path):
-    """Create a fresh TestClient for each test, with a clean DB."""
+    """Create a fresh TestClient for each test, with a clean DB and fake RQ queue."""
     db_path = str(tmp_path / "licenses.db")
     monkeypatch.setenv("DB_PATH", db_path)
     monkeypatch.setenv("ADMIN_PASSWORD", "test-password")
@@ -39,6 +41,12 @@ def client(monkeypatch, tmp_path):
     app.routes_admin._admin_password_hash = None
     app.routes_admin.limiter._storage.reset()
     importlib.reload(app.main)
+
+    # Inject fake Redis queue into the app state
+    fake_conn = fakeredis.FakeStrictRedis()
+    fake_queue = Queue("default", connection=fake_conn, is_async=False)
+    app.main.app.state.queue = fake_queue
+
     return TestClient(app.main.app), db_path
 
 

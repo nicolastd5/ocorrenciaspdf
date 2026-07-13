@@ -13,20 +13,27 @@ from app.routes_api import router as api_router, limiter as api_limiter
 from app.routes_auth import router as auth_router
 from app.routes_admin import router as admin_router
 from app.routes_update import router as update_router
+from app import jobs as jobs_module
 from app.routes_app import router as app_router
+from app.routes_jobs import router as jobs_router
+
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("license-server")
 
 
-def create_app() -> FastAPI:
+def create_app(queue=None) -> FastAPI:
     settings = load_settings()
     init_db(settings.db_path)
 
     fastapi_app = FastAPI(title="License Server")
     fastapi_app.state.limiter = api_limiter
     fastapi_app.state.settings = settings
+    fastapi_app.state.queue = queue
+
+    if fastapi_app.state.queue is None:
+        fastapi_app.state.queue = jobs_module.make_queue(settings.redis_url)
 
     fastapi_app.add_middleware(
         SessionMiddleware,
@@ -42,6 +49,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(admin_router)
     fastapi_app.include_router(update_router)
     fastapi_app.include_router(app_router)
+    fastapi_app.include_router(jobs_router)
 
     @fastapi_app.exception_handler(RateLimitExceeded)
     async def rate_limit_handler(request, exc):

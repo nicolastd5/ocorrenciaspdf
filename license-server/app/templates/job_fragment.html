@@ -1,0 +1,33 @@
+{% if job.status in ("queued", "running") %}
+<div hx-get="/app/jobs/{{ job.id }}/fragment" hx-trigger="every 1s"
+     hx-target="#job-box" hx-swap="innerHTML">
+  <div class="card" style="padding:24px">
+    <progress value="{{ job.progress }}" max="100"></progress>
+    <p style="margin-top:12px;color:var(--text-muted)">{{ job.message or "Na fila..." }}</p>
+  </div>
+</div>
+{% elif job.status == "awaiting_review" %}
+<div class="card" style="padding:24px">
+  <p>{{ job.result.conflitos | length }} divergência(s) precisam de revisão.</p>
+  <div class="form-actions">
+    <a class="btn btn-primary" href="/app/jobs/{{ job.id }}/conflitos">Revisar divergências</a>
+  </div>
+</div>
+{% elif job.status == "done" %}
+<div class="card" style="padding:24px">
+  <p>Concluído — {{ job.result.matched }} registro(s) atualizados,
+     {{ (job.result.nao_encontrados or []) | length }} não localizado(s).</p>
+  <div class="form-actions">
+    <a class="btn btn-primary" href="/app/jobs/{{ job.id }}/download">Baixar resultado</a>
+  </div>
+</div>
+{% elif job.status == "error" %}
+<div class="card" style="padding:24px">
+  <div class="alert alert-error">Falhou: {{ job.error }}</div>
+  <a class="btn" href="/app/{{ 'ocorrencias' if job.kind == 'ocorrencias' else 'vt-caixa' }}">Tentar novamente</a>
+</div>
+{% elif job.status == "expired" %}
+<div class="card" style="padding:24px">
+  <p class="hint">Este processamento expirou (arquivos são mantidos por 7 dias).</p>
+</div>
+{% endif %}

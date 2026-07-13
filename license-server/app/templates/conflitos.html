@@ -1,0 +1,34 @@
+{% extends "app_base.html" %}
+{% block title %}Revisão de divergências — Processador de Ocorrências{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Revisão de divergências</h1>
+    <p>Os valores abaixo divergem entre a 1ª e 2ª varredura do PDF. Confirme ou ajuste o valor final.</p>
+</div>
+<form method="post" action="/app/jobs/{{ job.id }}/conflitos" class="form-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <table>
+        <thead>
+            <tr><th>RE</th><th>Nome</th><th>Código</th><th>1ª varredura</th><th>2ª varredura</th><th>Valor final</th></tr>
+        </thead>
+        <tbody>
+            {% for c in job.result.conflitos %}
+            <tr>
+                <td class="key">{{ c.re }}</td>
+                <td>{{ c.nome }}</td>
+                <td>{{ c.codigo }}</td>
+                <td class="meta">{{ c.valores.v1 }}</td>
+                <td class="meta">{{ c.valores.v2 }}</td>
+                <td>
+                    <input type="number" min="0" name="res_{{ c.re }}|{{ c.codigo }}"
+                           value="{{ c.sugestao }}" style="width:80px">
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Aplicar e gerar planilha</button>
+    </div>
+</form>
+{% endblock %}

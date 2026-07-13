@@ -7,8 +7,43 @@
 </div>
 <div class="form-card">
     {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
-    <p class="hint" style="padding:20px 0;text-align:center;color:var(--text-muted)">
-        Faça upload do PDF de jornada e da planilha de pedido para iniciar o processamento.
-    </p>
+    <form method="post" action="/app/ocorrencias" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <label for="pdf">PDF de jornada</label>
+        <input type="file" id="pdf" name="pdf" accept=".pdf" required>
+
+        <label for="xlsx">Planilha de pedido (.xlsx/.xls)</label>
+        <input type="file" id="xlsx" name="xlsx" accept=".xlsx,.xls" required>
+
+        <label>Códigos de ocorrência</label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px">
+            {% for cod in ['FA','AT','A-','SD','LC','AA','AP','LM','FE','14','13'] %}
+            <label class="check">
+                <input type="checkbox" name="codigos" value="{{ cod }}" checked>
+                {{ cod }}
+            </label>
+            {% endfor %}
+        </div>
+
+        <label for="dias_mes">Dias no mês (opcional)</label>
+        <input type="number" id="dias_mes" name="dias_mes" min="1" max="31" placeholder="Ex: 30">
+
+        <label>Colunas Qt (opcional)</label>
+        <div style="display:flex;gap:16px">
+            {% for col in ['qt va','qt vr','qt vt'] %}
+            <label class="check">
+                <input type="checkbox" name="colunas_qt" value="{{ col }}">
+                {{ col }}
+            </label>
+            {% endfor %}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">
+                Processar
+            </button>
+        </div>
+    </form>
 </div>
 {% endblock %}
