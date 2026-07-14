@@ -27,17 +27,6 @@ def vt_caixa(request: Request, _=Depends(require_user)):
     })
 
 
-@router.get("/app/codigos", response_class=HTMLResponse)
-def codigos(request: Request, _=Depends(require_user)):
-    from core.vt_caixa_processador import ProcessadorVTCaixa
-    cod_rows = [(op, valor or "qualquer", cod)
-                for op, valor, cod in ProcessadorVTCaixa._CODIGOS_BENEFICIO]
-    return templates.TemplateResponse(request, "codigos.html", {
-        "cod_rows": cod_rows, "depart_map": ProcessadorVTCaixa._DEPART_MAP,
-        "active": "codigos",
-    })
-
-
 @router.get("/app/historico", response_class=HTMLResponse)
 def historico(request: Request, q: str = "", status: str = "", _=Depends(require_user)):
     settings = request.app.state.settings

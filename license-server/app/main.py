@@ -15,6 +15,7 @@ from app.routes_admin import router as admin_router
 from app.routes_update import router as update_router
 from app import jobs as jobs_module
 from app.routes_app import router as app_router
+from app.routes_codigos import router as codigos_router
 from app.routes_jobs import router as jobs_router
 
 
@@ -49,6 +50,7 @@ def create_app(queue=None) -> FastAPI:
     fastapi_app.include_router(admin_router)
     fastapi_app.include_router(update_router)
     fastapi_app.include_router(app_router)
+    fastapi_app.include_router(codigos_router)
     fastapi_app.include_router(jobs_router)
 
     @fastapi_app.exception_handler(RateLimitExceeded)

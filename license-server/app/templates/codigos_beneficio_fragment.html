@@ -1,0 +1,45 @@
+<div id="sec-beneficio" class="card" data-tour="cod-beneficio">
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border);font-weight:600;color:var(--text-bright)">
+        Operadora → Código de Benefício
+    </div>
+    <form hx-post="/app/codigos/beneficio" hx-target="#sec-beneficio" hx-swap="outerHTML"
+          style="display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);align-items:flex-end"
+          data-tour="cod-add-beneficio">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div style="flex:2"><label>Operadora</label>
+            <input type="text" name="operadora" placeholder="NOME DA OPERADORA" required></div>
+        <div style="flex:1"><label>Valor (opcional)</label>
+            <input type="text" name="valor_unitario" placeholder="11,64"></div>
+        <div style="flex:1"><label>Código</label>
+            <input type="text" name="codigo" placeholder="12345" required></div>
+        <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Adicionar</button>
+    </form>
+    {% if beneficio_error %}
+    <div class="alert alert-error" style="margin:12px 16px 0">{{ beneficio_error }}</div>
+    {% endif %}
+    <table>
+        <thead>
+            <tr><th>Operadora</th><th>Valor Unitário</th><th>Código</th><th></th></tr>
+        </thead>
+        <tbody>
+            {% for r in beneficio_rows %}
+            <tr>
+                <td onclick="navigator.clipboard.writeText('{{ r.codigo }}')" style="cursor:pointer">{{ r.operadora }}</td>
+                <td class="meta">{{ r.valor_unitario or "qualquer" }}</td>
+                <td class="key">{{ r.codigo }}</td>
+                <td style="text-align:right">
+                    {% if r.id %}
+                    <span class="meta" style="margin-right:8px">personalizado</span>
+                    <form hx-post="/app/codigos/beneficio/{{ r.id }}/excluir"
+                          hx-target="#sec-beneficio" hx-swap="outerHTML"
+                          hx-confirm="Excluir o código de {{ r.operadora }}?" style="display:inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
