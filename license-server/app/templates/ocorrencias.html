@@ -26,19 +26,6 @@
             {% endfor %}
         </div>
 
-        <label for="dias_mes">Dias no mês (opcional)</label>
-        <input type="number" id="dias_mes" name="dias_mes" min="1" max="31" placeholder="Ex: 30">
-
-        <label>Colunas Qt (opcional)</label>
-        <div style="display:flex;gap:16px">
-            {% for col in ['qt va','qt vr','qt vt'] %}
-            <label class="check">
-                <input type="checkbox" name="colunas_qt" value="{{ col }}">
-                {{ col }}
-            </label>
-            {% endfor %}
-        </div>
-
         <div class="form-actions">
             <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">
                 Processar

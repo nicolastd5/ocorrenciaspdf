@@ -29,7 +29,7 @@ def _make_xlsx(path):
 
 
 def _setup_job(db, data_dir, params=None):
-    p = {"codigos": ["FA", "AT"], "dias_mes": None, "colunas_qt_sel": None,
+    p = {"codigos": ["FA", "AT"],
          "pdf_name": "jornada.pdf", "xlsx_name": "pedido.xlsx",
          "orig_pdf": "jornada.pdf", "orig_xlsx": "pedido.xlsx"}
     p.update(params or {})
@@ -38,6 +38,14 @@ def _setup_job(db, data_dir, params=None):
     (d / "in" / "jornada.pdf").write_bytes(b"%PDF-fake")
     _make_xlsx(d / "in" / "pedido.xlsx")
     return jid
+
+
+def test_processar_sem_dias_mes():
+    import inspect
+    from core.processador import ProcessadorOcorrencias
+    sig = inspect.signature(ProcessadorOcorrencias.processar)
+    assert "dias_mes" not in sig.parameters
+    assert "colunas_qt_sel" not in sig.parameters
 
 
 def test_sem_conflito_gera_done(env, monkeypatch):

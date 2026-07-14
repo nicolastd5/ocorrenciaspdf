@@ -45,8 +45,6 @@ def ocorrencias_submit(request: Request,
                        pdf: UploadFile = File(...),
                        xlsx: UploadFile = File(...),
                        codigos: list[str] = Form(...),
-                       dias_mes: Optional[int] = Form(None),
-                       colunas_qt: Optional[list[str]] = Form(None),
                        csrf_token: str = Form(...),
                        _=Depends(require_user)):
     if not verify_csrf_token(request.session.get("csrf_token"), csrf_token):
@@ -61,8 +59,7 @@ def ocorrencias_submit(request: Request,
     settings = request.app.state.settings
     uid = current_user_id(request)
     params = {
-        "codigos": codigos, "dias_mes": dias_mes,
-        "colunas_qt_sel": colunas_qt,
+        "codigos": codigos,
         "pdf_name": "jornada.pdf", "xlsx_name": "pedido.xlsx",
         "orig_pdf": pdf.filename, "orig_xlsx": xlsx.filename,
     }

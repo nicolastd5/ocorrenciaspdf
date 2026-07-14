@@ -100,8 +100,6 @@ def _processar_final(db_path: str, data_dir: str, job_id: str, dados: dict) -> d
         output_path=str(out),
         codigos=params["codigos"],
         progress_cb=_progress_cb(db_path, job_id),
-        dias_mes=params.get("dias_mes"),
-        colunas_qt_sel=params.get("colunas_qt_sel"),
         dados_externos=dados,
     )
     result["output_name"] = "resultado.xlsx"

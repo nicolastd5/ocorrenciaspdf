@@ -20,9 +20,6 @@ class ProcessadorOcorrencias:
     TODOS_CODIGOS = ['FA', 'AT', 'A-', 'SD', 'LC', 'AA', 'AP', 'LM', 'FE', '14', '13']
     SEM_QUANTIDADE = ['AP', 'LM', 'FE']
     ORDEM = ['FA', 'AT', 'A-', 'SD', 'LC', 'AA', 'AP', 'LM', 'FE', '14', '13']
-    CODIGOS_DEDUZIR = ['FA', 'AT', 'SD', 'LC']
-    COLUNAS_QT = ['qt va', 'qt vr', 'qt vt']
-    VU_VT_HEADER = 'vu vt'
     DESCRICOES = {
         'FA': 'Faltas',
         'AT': 'Atestado',
@@ -226,8 +223,7 @@ class ProcessadorOcorrencias:
         return ', '.join(partes)
 
     def processar(self, pdf_path, xlsx_path, output_path, codigos,
-                  progress_cb=None, dias_mes=None, colunas_qt_sel=None,
-                  dados_externos=None):
+                  progress_cb=None, dados_externos=None):
         """
         Processa os arquivos e retorna um dicionário com os resultados.
 
@@ -265,11 +261,9 @@ class ProcessadorOcorrencias:
         ws = wb.active
         _prog(60, "Planilha aberta. Cruzando dados...")
 
-        # 3. Encontrar colunas RE, MOTIVO, Qt VA/VR/VT e Vu VT
+        # 3. Encontrar colunas RE e MOTIVO
         re_col = None
         motivo_col = None
-        qt_cols = {}  # {'qt va': col_num, ...}
-        vu_vt_col = None
         for col in range(1, ws.max_column + 1):
             val = ws.cell(row=1, column=col).value
             if val:
@@ -278,10 +272,6 @@ class ProcessadorOcorrencias:
                     motivo_col = col
                 if re_col is None and val_lower == 'folha re':
                     re_col = col
-                if val_lower in self.COLUNAS_QT:
-                    qt_cols[val_lower] = col
-                if val_lower == self.VU_VT_HEADER:
-                    vu_vt_col = col
 
         if not re_col or not motivo_col:
             raise ValueError(
@@ -302,19 +292,6 @@ class ProcessadorOcorrencias:
                 re_str = str(int(re_val)) if isinstance(re_val, (float, int)) else str(re_val).strip()
                 excel_res.add(re_str)
 
-                # Colunas Qt ativas = interseção entre detectadas na planilha e selecionadas pelo usuário
-                qt_cols_ativas = {
-                    k: v for k, v in qt_cols.items()
-                    if colunas_qt_sel is None or k in colunas_qt_sel
-                }
-
-                if dias_mes is not None and qt_cols_ativas:
-                    for col_nome, qt_col in qt_cols_ativas.items():
-                        if col_nome == 'qt vt' and vu_vt_col is not None:
-                            if not ws.cell(row=row, column=vu_vt_col).value:
-                                continue
-                        ws.cell(row=row, column=qt_col).value = dias_mes
-
                 if re_str in resultados_pdf:
                     ocorr = resultados_pdf[re_str]['ocorrencias']
                     motivo = self.montar_motivo(ocorr, codigos)
@@ -326,17 +303,6 @@ class ProcessadorOcorrencias:
                             'nome': resultados_pdf[re_str]['nome'],
                             'motivo': motivo
                         })
-
-                    if dias_mes is not None and qt_cols_ativas:
-                        dias_ded = sum(ocorr.get(c, 0) for c in self.CODIGOS_DEDUZIR)
-                        if dias_ded > 0:
-                            for col_nome, qt_col in qt_cols_ativas.items():
-                                # Qt VT: só deduz se a célula Vu VT do RE tiver valor
-                                if col_nome == 'qt vt' and vu_vt_col is not None:
-                                    vu_vt_val = ws.cell(row=row, column=vu_vt_col).value
-                                    if not vu_vt_val:
-                                        continue
-                                ws.cell(row=row, column=qt_col).value = max(0, dias_mes - dias_ded)
             if total_rows > 0:
                 pct = 60 + int((i / total_rows) * 30)
                 _prog(pct, f"Cruzando dados... ({i}/{total_rows})")
