@@ -866,17 +866,21 @@ class ProcessadorVTCaixa:
         'ELETRONUCLEAR RECEP 4500070400': 'ELETRONUCLEAR RECEP 97',
     }
 
-    def _resolver_codigo_beneficio(self, administradora, valor_unitario):
-        """Retorna o código de benefício quando a operadora+valor bate uma regra, ou None."""
+    def _resolver_codigo_beneficio(self, administradora, valor_unitario, extras=None):
+        """Retorna o código de benefício quando a operadora+valor bate uma regra, ou None.
+
+        `extras` (regras personalizadas, mesmo formato de _CODIGOS_BENEFICIO)
+        é consultado antes das regras embutidas.
+        """
         adm_up = administradora.upper()
-        for operadora, valor_regra, codigo in self._CODIGOS_BENEFICIO:
+        for operadora, valor_regra, codigo in list(extras or []) + self._CODIGOS_BENEFICIO:
             if operadora not in adm_up:
                 continue
             if valor_regra is None or valor_unitario == valor_regra:
                 return codigo
         return None
 
-    def _cruzar_dados(self, pdf_rows, excel_data):
+    def _cruzar_dados(self, pdf_rows, excel_data, codigos_extras=None, depart_extras=None):
         registros = []
         nao_encontrados = []
 
@@ -937,11 +941,12 @@ class ProcessadorVTCaixa:
             if adm_forn:
                 reg[chave_benef] = self._sanitizar(adm_forn)
 
-        # Substituições de departamento (mapa em self._DEPART_MAP, atributo de classe)
+        # Substituições de departamento (personalizadas sobrepõem o mapa embutido)
+        depart_map = {**self._DEPART_MAP, **(depart_extras or {})}
         for reg in registros:
             depart = reg.get('DEPARTAMENTO', '')
-            if depart in self._DEPART_MAP:
-                reg['DEPARTAMENTO'] = self._DEPART_MAP[depart]
+            if depart in depart_map:
+                reg['DEPARTAMENTO'] = depart_map[depart]
 
         # Substituir BENEFÍCIO DO FUNCIONÁRIO pelo código quando operadora+valor bater uma regra
         for reg in registros:
@@ -951,6 +956,7 @@ class ProcessadorVTCaixa:
             codigo = self._resolver_codigo_beneficio(
                 reg[chave_benef],
                 reg.get('VALOR UNITÁRIO', ''),
+                codigos_extras,
             )
             if codigo:
                 reg[chave_benef] = codigo
@@ -1004,7 +1010,7 @@ class ProcessadorVTCaixa:
     # ── Orquestrador ───────────────────────────────────────────────────
 
     def processar(self, fonte_path, xls_path, output_path,
-                  progress_cb=None):
+                  progress_cb=None, codigos_extras=None, depart_extras=None):
         def _prog(pct, msg):
             if progress_cb:
                 progress_cb(pct, msg)
@@ -1041,7 +1047,8 @@ class ProcessadorVTCaixa:
             )
 
         _prog(65, 'Cruzando dados...')
-        registros, nao_encontrados = self._cruzar_dados(pdf_rows, excel_data)
+        registros, nao_encontrados = self._cruzar_dados(
+            pdf_rows, excel_data, codigos_extras, depart_extras)
         _prog(80, f'{len(registros)} correspondência(s) | {len(nao_encontrados)} sem correspondência.')
 
         if pdf_rows and not registros:
