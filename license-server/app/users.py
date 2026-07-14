@@ -54,3 +54,8 @@ def set_password(db_path: str, user_id: int, password: str) -> None:
             "UPDATE users SET password_hash = ? WHERE id = ?",
             (hash_password(password), user_id),
         )
+
+
+def mark_tutorial_seen(db_path: str, user_id: int) -> None:
+    with get_connection(db_path) as conn:
+        conn.execute("UPDATE users SET tutorial_seen = 1 WHERE id = ?", (user_id,))

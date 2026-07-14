@@ -2,21 +2,31 @@ import csv
 import io
 import json
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app import history as history_module
-from app.security import current_user_id, get_or_create_csrf_token, require_user
+from app import users as users_module
+from app.security import (
+    current_user_id, get_or_create_csrf_token, require_user, verify_csrf_token,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _tutorial_seen(request: Request) -> bool:
+    settings = request.app.state.settings
+    user = users_module.get_user(settings.db_path, current_user_id(request))
+    return bool(user["tutorial_seen"])
 
 
 @router.get("/app/ocorrencias", response_class=HTMLResponse)
 def ocorrencias(request: Request, _=Depends(require_user)):
     return templates.TemplateResponse(request, "ocorrencias.html", {
         "csrf_token": get_or_create_csrf_token(request), "active": "ocorrencias",
+        "tutorial_seen": _tutorial_seen(request),
     })
 
 
@@ -24,6 +34,7 @@ def ocorrencias(request: Request, _=Depends(require_user)):
 def vt_caixa(request: Request, _=Depends(require_user)):
     return templates.TemplateResponse(request, "vt_caixa.html", {
         "csrf_token": get_or_create_csrf_token(request), "active": "vt_caixa",
+        "tutorial_seen": _tutorial_seen(request),
     })
 
 
@@ -33,7 +44,18 @@ def historico(request: Request, q: str = "", status: str = "", _=Depends(require
     entries = history_module.list_for_user(settings.db_path, current_user_id(request), q, status)
     return templates.TemplateResponse(request, "historico.html", {
         "entries": entries, "q": q, "status": status, "active": "historico",
+        "csrf_token": get_or_create_csrf_token(request),
+        "tutorial_seen": _tutorial_seen(request),
     })
+
+
+@router.post("/app/tutorial/seen")
+def tutorial_seen(request: Request, csrf_token: str = Form(""),
+                  _=Depends(require_user)):
+    if verify_csrf_token(request.session.get("csrf_token"), csrf_token):
+        settings = request.app.state.settings
+        users_module.mark_tutorial_seen(settings.db_path, current_user_id(request))
+    return Response(status_code=204)
 
 
 @router.get("/app/historico.csv")

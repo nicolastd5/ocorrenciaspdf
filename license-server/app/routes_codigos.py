@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app import ref_codes
+from app import users as users_module
 from app.security import (
     current_user_id, get_or_create_csrf_token, require_user, verify_csrf_token,
 )
@@ -35,8 +36,9 @@ def _ctx_depart(request: Request, db_path: str, error: str | None = None) -> dic
 @router.get("/app/codigos", response_class=HTMLResponse)
 def codigos_page(request: Request, _=Depends(require_user)):
     db = request.app.state.settings.db_path
+    user = users_module.get_user(db, current_user_id(request))
     ctx = {**_ctx_beneficio(request, db), **_ctx_depart(request, db),
-           "active": "codigos"}
+           "active": "codigos", "tutorial_seen": bool(user["tutorial_seen"])}
     return templates.TemplateResponse(request, "codigos.html", ctx)
 
 

@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    tutorial_seen INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -85,6 +86,14 @@ def init_db(db_path: str) -> None:
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
         conn.executescript(SCHEMA)
+        # Migração: coluna nova em bancos criados antes dela (SQLite não tem
+        # ADD COLUMN IF NOT EXISTS).
+        try:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN tutorial_seen INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            pass  # coluna já existe
         conn.commit()
 
 @contextmanager

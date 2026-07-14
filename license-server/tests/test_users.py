@@ -39,3 +39,12 @@ def test_set_password(db_path):
     users.set_password(db_path, uid, "nova")
     assert users.authenticate(db_path, "ana@ex.com", "antiga") is None
     assert users.authenticate(db_path, "ana@ex.com", "nova") is not None
+
+
+def test_tutorial_seen(db_path):
+    uid = users.create_user(db_path, "ana@ex.com", "Ana", "s3nh4forte")
+    assert users.get_user(db_path, uid)["tutorial_seen"] == 0
+    users.mark_tutorial_seen(db_path, uid)
+    assert users.get_user(db_path, uid)["tutorial_seen"] == 1
+    users.mark_tutorial_seen(db_path, uid)  # idempotente
+    assert users.get_user(db_path, uid)["tutorial_seen"] == 1

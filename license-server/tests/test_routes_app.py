@@ -27,3 +27,25 @@ def test_raiz_redireciona(logged_client):
     r = c.get("/", follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == "/app/ocorrencias"
+
+
+def _csrf_de(c, path="/app/ocorrencias"):
+    import re
+    r = c.get(path)
+    return re.search(r'name="csrf_token" value="([^"]+)"', r.text).group(1)
+
+
+def test_tutorial_seen_endpoint(logged_client):
+    c, db = logged_client
+    token = _csrf_de(c)
+    r = c.post("/app/tutorial/seen", data={"csrf_token": token})
+    assert r.status_code == 204
+    from app import users as users_module
+    lst = users_module.list_users(db)
+    assert lst[0]["tutorial_seen"] == 1
+
+
+def test_tutorial_seen_exige_login(client):
+    c = _c(client)
+    r = c.post("/app/tutorial/seen", follow_redirects=False)
+    assert r.status_code == 303
