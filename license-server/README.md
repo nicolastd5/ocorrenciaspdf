@@ -46,7 +46,7 @@ Use `--all` para enviar tudo e `--check` para simular.
 3. Copiar `deploy/ocorrencias-worker.service` para `/etc/systemd/system/` e
    `sudo systemctl daemon-reload` (o app web já roda como serviço
    `license-server`; `deploy/ocorrencias-web.service` fica como referência)
-4. Acrescentar ao env do serviço (`.env.systemd`):
+4. Acrescentar ao env do serviço (`.env`, o mesmo já usado por `license-server`):
    `DATA_DIR=/home/ubuntu/license-server/data` e
    `REDIS_URL=redis://localhost:6379/0`
 5. nginx: `client_max_body_size 50m;` no server block do domínio

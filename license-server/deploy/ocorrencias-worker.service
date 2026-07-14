@@ -5,7 +5,7 @@ After=network.target redis-server.service
 [Service]
 User=ubuntu
 WorkingDirectory=/home/ubuntu/license-server
-EnvironmentFile=/home/ubuntu/license-server/.env.systemd
+EnvironmentFile=/home/ubuntu/license-server/.env
 ExecStart=/home/ubuntu/license-server/.venv/bin/rq worker default
 Restart=on-failure
 
