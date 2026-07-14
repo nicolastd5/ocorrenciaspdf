@@ -62,6 +62,23 @@ CREATE TABLE IF NOT EXISTS history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_history_user_id ON history(user_id);
+
+CREATE TABLE IF NOT EXISTS custom_benefit_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    operadora TEXT NOT NULL,
+    valor_unitario TEXT,
+    codigo TEXT NOT NULL,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS custom_depart_subs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original TEXT NOT NULL,
+    substituto TEXT NOT NULL,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
 """
 
 def init_db(db_path: str) -> None:
