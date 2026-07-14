@@ -87,7 +87,8 @@ def test_download_do_resultado(logged_client, monkeypatch):
 
 
 def test_upload_vt_caixa(logged_client, monkeypatch):
-    def fake_processar(self, fonte_path, xls_path, output_path, progress_cb=None):
+    def fake_processar(self, fonte_path, xls_path, output_path, progress_cb=None,
+                       codigos_extras=None, depart_extras=None):
         from pathlib import Path
         Path(output_path).write_text("CNPJ\n", encoding="latin-1")
         return {"total_pdf": 1, "total_fonte": 1, "tipo_fonte": "PDF",

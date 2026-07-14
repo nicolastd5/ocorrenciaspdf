@@ -94,7 +94,8 @@ def test_vt_caixa_done(env, monkeypatch):
                  "total_ok": 4, "nao_encontrados": [{"codigo": "999"}],
                  "avisos_csv": []}
 
-    def fake_processar(self, fonte_path, xls_path, output_path, progress_cb=None):
+    def fake_processar(self, fonte_path, xls_path, output_path, progress_cb=None,
+                       codigos_extras=None, depart_extras=None):
         from pathlib import Path
         Path(output_path).write_text("CNPJ;CEP\n", encoding="latin-1")
         return resultado
@@ -113,3 +114,34 @@ def test_vt_caixa_done(env, monkeypatch):
     assert j["result"]["total_ok"] == 4
     assert j["result"]["output_name"] == "beneficios.csv"
     assert (d / "out" / "beneficios.csv").exists()
+
+
+def test_vt_caixa_injeta_personalizados(env, monkeypatch):
+    db, data_dir = env
+    from app import ref_codes
+    ref_codes.add_benefit_code(db, 1, "OP CUSTOM", "", "777")
+    ref_codes.add_depart_sub(db, 1, "DEP A", "DEP B")
+
+    capturado = {}
+
+    def fake_processar(self, fonte_path, xls_path, output_path, progress_cb=None,
+                       codigos_extras=None, depart_extras=None):
+        from pathlib import Path
+        capturado["codigos"] = codigos_extras
+        capturado["depart"] = depart_extras
+        Path(output_path).write_text("CNPJ\n", encoding="latin-1")
+        return {"total_pdf": 1, "total_fonte": 1, "tipo_fonte": "PDF",
+                "total_ok": 1, "nao_encontrados": [], "avisos_csv": []}
+
+    monkeypatch.setattr("core.vt_caixa_processador.ProcessadorVTCaixa.processar",
+                        fake_processar)
+    jid = jobs.create_job(db, 1, "vt_caixa", {
+        "fonte_name": "fonte.pdf", "cadastral_name": "cadastral.xlsx"})
+    d = jobs.job_dir(data_dir, jid)
+    (d / "in" / "fonte.pdf").write_bytes(b"%PDF")
+    (d / "in" / "cadastral.xlsx").write_bytes(b"xx")
+    worker_tasks.run_vt_caixa(db, data_dir, jid)
+
+    assert jobs.get_job(db, jid)["status"] == "done"
+    assert capturado["codigos"] == [("OP CUSTOM", None, "777")]
+    assert capturado["depart"] == {"DEP A": "DEP B"}

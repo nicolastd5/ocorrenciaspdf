@@ -1,7 +1,7 @@
 """Funções executadas pelo worker RQ. Recebem apenas tipos serializáveis."""
 import logging
 
-from app import history, jobs
+from app import history, jobs, ref_codes
 from core.processador import ProcessadorOcorrencias
 from core.vt_caixa_processador import ProcessadorVTCaixa
 
@@ -120,6 +120,8 @@ def run_vt_caixa(db_path: str, data_dir: str, job_id: str) -> None:
             xls_path=str(d / "in" / params["cadastral_name"]),
             output_path=str(d / "out" / "beneficios.csv"),
             progress_cb=_progress_cb(db_path, job_id),
+            codigos_extras=ref_codes.benefit_tuples(db_path),
+            depart_extras=ref_codes.depart_dict(db_path),
         )
         result["output_name"] = "beneficios.csv"
         jobs.set_status(db_path, job_id, "done", result=result)
