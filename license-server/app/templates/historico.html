@@ -5,7 +5,7 @@
     <h1>Histórico</h1>
     <p>Registro dos processamentos realizados.</p>
 </div>
-<div class="toolbar">
+<div class="toolbar" data-tour="hist-filtros">
     <form method="get" action="/app/historico">
         <input type="text" name="q" placeholder="Buscar por arquivo..." value="{{ q or '' }}">
         <select name="status">
@@ -15,7 +15,7 @@
         </select>
         <button type="submit" class="btn">Filtrar</button>
     </form>
-    <a href="/app/historico.csv" class="btn btn-ghost btn-sm">Exportar CSV</a>
+    <a href="/app/historico.csv" data-tour="hist-export" class="btn btn-ghost btn-sm">Exportar CSV</a>
 </div>
 <div class="card">
     <table>

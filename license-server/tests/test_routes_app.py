@@ -49,3 +49,22 @@ def test_tutorial_seen_exige_login(client):
     c = _c(client)
     r = c.post("/app/tutorial/seen", follow_redirects=False)
     assert r.status_code == 303
+
+
+def test_base_inclui_tour(logged_client):
+    c, _ = logged_client
+    r = c.get("/app/ocorrencias")
+    assert 'src="/static/tour.js"' in r.text
+    assert 'src="/static/driver.js.iife.js"' in r.text
+    assert "window.TOUR" in r.text
+    assert '"seen": false' in r.text.replace("'", '"') or "seen: false" in r.text
+    assert 'data-tour="nav-ocorrencias"' in r.text
+    assert 'data-tour="btn-tutorial"' in r.text
+
+
+def test_tour_seen_true_apos_marcar(logged_client):
+    c, _ = logged_client
+    token = _csrf_de(c)
+    c.post("/app/tutorial/seen", data={"csrf_token": token})
+    r = c.get("/app/ocorrencias")
+    assert "seen: true" in r.text

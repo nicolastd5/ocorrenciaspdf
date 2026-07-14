@@ -10,14 +10,14 @@
     <form method="post" action="/app/ocorrencias" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-        <label for="pdf">PDF de jornada</label>
+        <label for="pdf" data-tour="oc-pdf">PDF de jornada</label>
         <input type="file" id="pdf" name="pdf" accept=".pdf" required>
 
-        <label for="xlsx">Planilha de pedido (.xlsx/.xls)</label>
+        <label for="xlsx" data-tour="oc-xlsx">Planilha de pedido (.xlsx/.xls)</label>
         <input type="file" id="xlsx" name="xlsx" accept=".xlsx,.xls" required>
 
         <label>Códigos de ocorrência</label>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px">
+        <div data-tour="oc-codigos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px">
             {% for cod in ['FA','AT','A-','SD','LC','AA','AP','LM','FE','14','13'] %}
             <label class="check">
                 <input type="checkbox" name="codigos" value="{{ cod }}" checked>
@@ -27,7 +27,7 @@
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">
+            <button type="submit" data-tour="oc-processar" class="btn btn-primary" style="width:100%;justify-content:center">
                 Processar
             </button>
         </div>
