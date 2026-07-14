@@ -24,7 +24,7 @@
         <tbody>
             {% for r in beneficio_rows %}
             <tr>
-                <td onclick="navigator.clipboard.writeText('{{ r.codigo }}')" style="cursor:pointer">{{ r.operadora }}</td>
+                <td data-copy="{{ r.codigo }}" onclick="navigator.clipboard.writeText(this.dataset.copy)" style="cursor:pointer">{{ r.operadora }}</td>
                 <td class="meta">{{ r.valor_unitario or "qualquer" }}</td>
                 <td class="key">{{ r.codigo }}</td>
                 <td style="text-align:right">
