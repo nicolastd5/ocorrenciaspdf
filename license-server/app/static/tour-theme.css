@@ -1,0 +1,52 @@
+/* Tema do tutorial — sobrepõe o driver.css padrão (carregar DEPOIS dele). */
+.driver-popover{
+  background:#171a21;color:#c9d4e6;
+  border:1px solid #2b303a;border-radius:14px;
+  box-shadow:0 12px 40px rgba(0,0,0,.55),0 0 0 1px rgba(59,130,246,.15);
+  font-family:'Inter','Segoe UI',system-ui,sans-serif;
+  max-width:360px;padding:18px 20px 14px;
+}
+.driver-popover-title{
+  color:#f0f6fc;font-size:15px;font-weight:700;letter-spacing:-.01em;
+}
+.driver-popover-description{
+  color:#c9d4e6;font-size:13.5px;line-height:1.6;margin-top:6px;
+}
+.driver-popover-description code{
+  font-family:'JetBrains Mono',Consolas,monospace;font-size:11.5px;
+  background:#1f242d;border:1px solid #2b303a;border-radius:5px;
+  padding:1px 6px;color:#e3b341;
+}
+.driver-popover-description ul{margin:8px 0 0 18px;display:flex;flex-direction:column;gap:5px}
+.tour-warn{
+  margin-top:10px;padding:9px 12px;border-radius:8px;font-size:12.5px;
+  background:rgba(227,179,65,.1);border:1px solid rgba(227,179,65,.35);color:#e3b341;
+}
+.driver-popover-progress-text{color:#8b95a7;font-size:12px}
+.driver-popover-footer button{
+  font-family:'Inter','Segoe UI',system-ui,sans-serif;
+  border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:600;
+  border:1px solid #2b303a;background:#1f242d;color:#c9d4e6;text-shadow:none;
+}
+.driver-popover-footer button:hover{background:#2b303a;color:#f0f6fc}
+.driver-popover-footer .driver-popover-next-btn{
+  background:linear-gradient(135deg,#3b82f6,#22c55e);border:none;color:#fff;
+}
+.driver-popover-footer .driver-popover-next-btn:hover{opacity:.92}
+.driver-popover-close-btn{color:#8b95a7}
+.driver-popover-close-btn:hover{color:#f0f6fc}
+.driver-popover-arrow-side-left.driver-popover-arrow{border-left-color:#171a21}
+.driver-popover-arrow-side-right.driver-popover-arrow{border-right-color:#171a21}
+.driver-popover-arrow-side-top.driver-popover-arrow{border-top-color:#171a21}
+.driver-popover-arrow-side-bottom.driver-popover-arrow{border-bottom-color:#171a21}
+.driver-overlay{opacity:.78}
+
+/* welcome modal (primeiro passo, sem elemento) */
+.tour-welcome.driver-popover{max-width:440px;text-align:center;padding:28px 28px 20px}
+.tour-welcome .driver-popover-title{font-size:19px}
+.tour-welcome .driver-popover-description{font-size:14px}
+.tour-welcome .driver-popover-footer{justify-content:center;gap:10px}
+.tour-skip-btn{
+  border:1px solid #2b303a !important;background:transparent !important;color:#8b95a7 !important;
+}
+.tour-skip-btn:hover{color:#c9d4e6 !important}

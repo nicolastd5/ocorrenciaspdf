@@ -77,3 +77,50 @@ def test_form_ocorrencias_mostra_codigo_personalizado(logged_client):
     r = c.get("/app/ocorrencias")
     assert 'value="FR"' in r.text
     assert 'value="FA"' in r.text   # embutidos continuam
+
+
+def test_paginas_incluem_app_js(logged_client):
+    c, _ = logged_client
+    r = c.get("/app/ocorrencias")
+    assert 'src="/static/app.js"' in r.text
+    assert 'class="dropzone"' in r.text
+    assert 'data-tour="oc-pdf"' in r.text          # anchor preservado
+    assert 'data-tour="oc-processar"' in r.text
+
+
+def test_ocorrencias_mostra_requisitos_e_recentes(logged_client):
+    c, db = logged_client
+    from app import history
+    from app import users as users_module
+    uid = users_module.list_users(db)[0]["id"]
+    history.add(db, uid, "j1", "ocorrencias", "sucesso", ["jornada.pdf"], {"matched": 3})
+    history.add(db, uid, "j2", "vt_caixa", "sucesso", ["nautilus.pdf"], {"total_ok": 9})
+    r = c.get("/app/ocorrencias")
+    assert "Folha RE" in r.text and "MOTIVO" in r.text   # card de requisitos
+    assert "jornada.pdf" in r.text                        # recente do tipo certo
+    assert "nautilus.pdf" not in r.text                   # tipo errado não aparece
+
+
+def test_historico_usa_chips(logged_client):
+    c, db = logged_client
+    from app import history
+    from app import users as users_module
+    uid = users_module.list_users(db)[0]["id"]
+    history.add(db, uid, "j1", "ocorrencias", "erro", ["x.pdf"], {})
+    r = c.get("/app/historico")
+    assert 'class="chip chip-err"' in r.text
+
+
+def test_base_inclui_tour_theme(logged_client):
+    c, _ = logged_client
+    r = c.get("/app/ocorrencias")
+    assert 'href="/static/tour-theme.css"' in r.text
+
+
+def test_tour_js_tem_welcome_e_requisitos():
+    from pathlib import Path
+    js = Path("app/static/tour.js").read_text(encoding="utf-8")
+    assert "Fazer o tour" in js
+    assert "Agora não" in js
+    assert "Folha RE" in js          # conteúdo didático
+    assert "MOTIVO" in js
