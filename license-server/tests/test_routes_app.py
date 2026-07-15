@@ -68,3 +68,12 @@ def test_tour_seen_true_apos_marcar(logged_client):
     c.post("/app/tutorial/seen", data={"csrf_token": token})
     r = c.get("/app/ocorrencias")
     assert "seen: true" in r.text
+
+
+def test_form_ocorrencias_mostra_codigo_personalizado(logged_client):
+    c, db = logged_client
+    from app import ref_codes
+    ref_codes.add_occurrence_code(db, 1, "FR", "Férias Remuneradas", True)
+    r = c.get("/app/ocorrencias")
+    assert 'value="FR"' in r.text
+    assert 'value="FA"' in r.text   # embutidos continuam

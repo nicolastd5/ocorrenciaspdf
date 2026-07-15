@@ -7,10 +7,12 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.templating import Jinja2Templates
 
 from app import history as history_module
+from app import ref_codes
 from app import users as users_module
 from app.security import (
     current_user_id, get_or_create_csrf_token, require_user, verify_csrf_token,
 )
+from core.processador import ProcessadorOcorrencias
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -24,9 +26,17 @@ def _tutorial_seen(request: Request) -> bool:
 
 @router.get("/app/ocorrencias", response_class=HTMLResponse)
 def ocorrencias(request: Request, _=Depends(require_user)):
+    settings = request.app.state.settings
+    builtin = [{"codigo": c,
+                "descricao": ProcessadorOcorrencias.DESCRICOES.get(c, ""),
+                "custom": False}
+               for c in ProcessadorOcorrencias.TODOS_CODIGOS]
+    custom = [{"codigo": r["codigo"], "descricao": r["descricao"], "custom": True}
+              for r in ref_codes.list_occurrence_codes(settings.db_path)]
     return templates.TemplateResponse(request, "ocorrencias.html", {
         "csrf_token": get_or_create_csrf_token(request), "active": "ocorrencias",
         "tutorial_seen": _tutorial_seen(request),
+        "codigos_disponiveis": builtin + custom,
     })
 
 

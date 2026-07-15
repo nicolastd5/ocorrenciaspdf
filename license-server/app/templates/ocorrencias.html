@@ -16,12 +16,14 @@
         <label for="xlsx" data-tour="oc-xlsx">Planilha de pedido (.xlsx/.xls)</label>
         <input type="file" id="xlsx" name="xlsx" accept=".xlsx,.xls" required>
 
-        <label>Códigos de ocorrência</label>
+        <label>Códigos de ocorrência
+            <a href="/app/codigos" class="meta" style="font-weight:400;margin-left:8px">gerenciar códigos →</a>
+        </label>
         <div data-tour="oc-codigos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px">
-            {% for cod in ['FA','AT','A-','SD','LC','AA','AP','LM','FE','14','13'] %}
-            <label class="check">
-                <input type="checkbox" name="codigos" value="{{ cod }}" checked>
-                {{ cod }}
+            {% for c in codigos_disponiveis %}
+            <label class="check" title="{{ c.descricao }}">
+                <input type="checkbox" name="codigos" value="{{ c.codigo }}" checked>
+                {{ c.codigo }}
             </label>
             {% endfor %}
         </div>

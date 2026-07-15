@@ -108,3 +108,28 @@ def test_upload_vt_caixa(logged_client, monkeypatch):
     r = c.get(job_url + "/download")
     assert r.status_code == 200
     assert "vt-caixa" in r.headers["content-disposition"]
+
+
+def test_upload_aceita_codigo_personalizado(logged_client, monkeypatch):
+    dados = {"12345": {"nome": "ANA", "ocorrencias": {"FR": 1}}}
+    monkeypatch.setattr("core.processador.ProcessadorOcorrencias.extrair_ocorrencias",
+                        lambda self, p, c: dados)
+    monkeypatch.setattr("core.processador.ProcessadorOcorrencias.extrair_ocorrencias_texto",
+                        lambda self, p, c: dados)
+    c = _c(logged_client)
+    r = c.get("/app/ocorrencias")
+    assert r.status_code == 200
+    token = _re.search(r'name="csrf_token" value="([^"]+)"', r.text).group(1)
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Folha RE", "Nome", "MOTIVO"])
+    ws.append(["12345", "ANA", ""])
+    buf = io.BytesIO()
+    wb.save(buf)
+    r = c.post("/app/ocorrencias", data={
+        "codigos": ["FR"], "csrf_token": token,
+    }, files={
+        "pdf": ("jornada.pdf", b"%PDF-fake", "application/pdf"),
+        "xlsx": ("pedido.xlsx", buf.getvalue(), "application/octet-stream"),
+    }, follow_redirects=False)
+    assert r.status_code == 303
