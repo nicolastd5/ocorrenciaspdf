@@ -101,6 +101,7 @@ def _processar_final(db_path: str, data_dir: str, job_id: str, dados: dict) -> d
         codigos=params["codigos"],
         progress_cb=_progress_cb(db_path, job_id),
         dados_externos=dados,
+        config_extras=ref_codes.occurrence_config(db_path),
     )
     result["output_name"] = "resultado.xlsx"
     return result

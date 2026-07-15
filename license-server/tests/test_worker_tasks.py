@@ -153,3 +153,21 @@ def test_vt_caixa_injeta_personalizados(env, monkeypatch):
     assert jobs.get_job(db, jid)["status"] == "done"
     assert capturado["codigos"] == [("OP CUSTOM", None, "777")]
     assert capturado["depart"] == {"DEP A": "DEP B"}
+
+
+def test_ocorrencias_injeta_config_extras(env, monkeypatch):
+    db, data_dir = env
+    from app import ref_codes
+    ref_codes.add_occurrence_code(db, 1, "FR", "Férias Rem.", False)
+
+    dados = {"12345": {"nome": "ANA", "ocorrencias": {"FR": 2}}}
+    monkeypatch.setattr("core.processador.ProcessadorOcorrencias.extrair_ocorrencias",
+                        lambda self, p, c: dados)
+    monkeypatch.setattr("core.processador.ProcessadorOcorrencias.extrair_ocorrencias_texto",
+                        lambda self, p, c: dados)
+    jid = _setup_job(db, data_dir, params={"codigos": ["FA", "FR"]})
+    worker_tasks.run_ocorrencias(db, data_dir, jid)
+    j = jobs.get_job(db, jid)
+    assert j["status"] == "done"
+    # com_quantidade=False: motivo é "FR", não "2 FR"
+    assert j["result"]["atualizados"][0]["motivo"] == "FR"
