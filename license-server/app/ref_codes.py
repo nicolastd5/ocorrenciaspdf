@@ -86,3 +86,52 @@ def benefit_tuples(db_path: str) -> list[tuple]:
 def depart_dict(db_path: str) -> dict:
     """Formato de _DEPART_MAP: {original: substituto}."""
     return {r["original"]: r["substituto"] for r in list_depart_subs(db_path)}
+
+
+# ── Ocorrência ──
+
+def list_occurrence_codes(db_path: str) -> list[dict]:
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM custom_occurrence_codes ORDER BY codigo"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_occurrence_code(db_path: str, user_id: int, codigo: str,
+                        descricao: str, com_quantidade: bool) -> int:
+    from core.processador import ProcessadorOcorrencias
+
+    codigo = (codigo or "").strip().upper()
+    descricao = (descricao or "").strip()
+    if not codigo or not descricao:
+        raise ValueError("Código e descrição são obrigatórios.")
+    if len(codigo) > 4:
+        raise ValueError("O código deve ter no máximo 4 caracteres.")
+    if codigo in ProcessadorOcorrencias.TODOS_CODIGOS:
+        raise ValueError(f"{codigo} já é um código embutido do sistema.")
+    with get_connection(db_path) as conn:
+        dupe = conn.execute(
+            "SELECT 1 FROM custom_occurrence_codes WHERE codigo = ?", (codigo,)
+        ).fetchone()
+        if dupe:
+            raise ValueError(f"Já existe um código de ocorrência {codigo}.")
+        cur = conn.execute(
+            "INSERT INTO custom_occurrence_codes "
+            "(codigo, descricao, com_quantidade, created_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (codigo, descricao, 1 if com_quantidade else 0,
+             user_id, datetime.utcnow().isoformat()),
+        )
+        return cur.lastrowid
+
+
+def delete_occurrence_code(db_path: str, code_id: int) -> None:
+    with get_connection(db_path) as conn:
+        conn.execute("DELETE FROM custom_occurrence_codes WHERE id = ?", (code_id,))
+
+
+def occurrence_config(db_path: str) -> list[dict]:
+    """Formato consumido por ProcessadorOcorrencias (config_extras)."""
+    return [{"codigo": r["codigo"], "com_quantidade": bool(r["com_quantidade"])}
+            for r in list_occurrence_codes(db_path)]

@@ -64,3 +64,48 @@ def test_add_list_delete_depart(db):
         ref_codes.add_depart_sub(db, 1, "", "X")
     ref_codes.delete_depart_sub(db, rid)
     assert ref_codes.list_depart_subs(db) == []
+
+
+# ── Ocorrência ──
+
+def test_add_e_list_ocorrencia(db):
+    rid = ref_codes.add_occurrence_code(db, 1, "fr", "Férias Remuneradas", True)
+    lst = ref_codes.list_occurrence_codes(db)
+    assert len(lst) == 1
+    assert lst[0]["id"] == rid
+    assert lst[0]["codigo"] == "FR"          # normalizado p/ uppercase
+    assert lst[0]["descricao"] == "Férias Remuneradas"
+    assert lst[0]["com_quantidade"] == 1
+
+
+def test_ocorrencia_validacoes(db):
+    with pytest.raises(ValueError):
+        ref_codes.add_occurrence_code(db, 1, "", "desc", True)
+    with pytest.raises(ValueError):
+        ref_codes.add_occurrence_code(db, 1, "ABCDE", "desc", True)   # > 4 chars
+    with pytest.raises(ValueError):
+        ref_codes.add_occurrence_code(db, 1, "FR", "", True)          # sem descrição
+
+
+def test_ocorrencia_duplicata_personalizado(db):
+    ref_codes.add_occurrence_code(db, 1, "FR", "Férias", True)
+    with pytest.raises(ValueError):
+        ref_codes.add_occurrence_code(db, 2, "fr", "Outra", False)
+
+
+def test_ocorrencia_duplicata_embutido(db):
+    with pytest.raises(ValueError):
+        ref_codes.add_occurrence_code(db, 1, "FA", "Faltas de novo", True)
+    with pytest.raises(ValueError):
+        ref_codes.add_occurrence_code(db, 1, "at", "Atestado 2", True)
+
+
+def test_occurrence_config_e_delete(db):
+    ref_codes.add_occurrence_code(db, 1, "ZZ", "Zeta", True)
+    rid = ref_codes.add_occurrence_code(db, 1, "BB", "Beta", False)
+    assert ref_codes.occurrence_config(db) == [
+        {"codigo": "BB", "com_quantidade": False},
+        {"codigo": "ZZ", "com_quantidade": True},
+    ]
+    ref_codes.delete_occurrence_code(db, rid)
+    assert ref_codes.occurrence_config(db) == [{"codigo": "ZZ", "com_quantidade": True}]
