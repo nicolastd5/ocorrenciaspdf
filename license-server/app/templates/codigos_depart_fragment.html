@@ -1,9 +1,7 @@
 <div id="sec-depart" class="card" data-tour="cod-depart">
-    <div style="padding:16px 18px;border-bottom:1px solid var(--border);font-weight:600;color:var(--text-bright)">
-        Departamento → Substituição
-    </div>
+    <div class="card-title">Departamento → Substituição</div>
     <form hx-post="/app/codigos/departamento" hx-target="#sec-depart" hx-swap="outerHTML"
-          style="display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);align-items:flex-end">
+          class="card-add-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div style="flex:1"><label>Original</label>
             <input type="text" name="original" placeholder="Departamento original" required></div>
@@ -11,6 +9,7 @@
             <input type="text" name="substituto" placeholder="Substituto" required></div>
         <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Adicionar</button>
     </form>
+    <input type="text" class="table-filter" placeholder="Filtrar...">
     {% if depart_error %}
     <div class="alert alert-error" style="margin:12px 16px 0">{{ depart_error }}</div>
     {% endif %}

@@ -2,6 +2,7 @@
 {% block title %}Histórico — Processador de Ocorrências{% endblock %}
 {% block content %}
 <div class="page-header">
+    <div class="crumb">Início / <b>Histórico</b></div>
     <h1>Histórico</h1>
     <p>Registro dos processamentos realizados.</p>
 </div>
@@ -29,11 +30,11 @@
                 <td>{{ 'Ocorrências' if e.kind == 'ocorrencias' else 'VT-Caixa' }}</td>
                 <td>{{ e.input_names | join('; ') }}</td>
                 <td>
-                    {% if e.counts.matched is defined %}
-                    {{ e.counts.matched }} correspondências
-                    {% elif e.counts.total_ok is defined %}
-                    {{ e.counts.total_ok }} registros
-                    {% endif %}
+                    <span class="chip {{ 'chip-ok' if e.status == 'sucesso' else 'chip-err' }}">{{ e.status }}</span>
+                    <span class="meta" style="margin-left:8px">
+                        {% if e.counts.matched is defined %}{{ e.counts.matched }} correspondências
+                        {% elif e.counts.total_ok is defined %}{{ e.counts.total_ok }} registros{% endif %}
+                    </span>
                 </td>
                 <td>
                     {% if e.job_id %}

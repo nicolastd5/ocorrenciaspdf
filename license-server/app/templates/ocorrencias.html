@@ -2,37 +2,100 @@
 {% block title %}Ocorrências — Processador de Ocorrências{% endblock %}
 {% block content %}
 <div class="page-header">
+    <div class="crumb">Início / <b>Ocorrências</b></div>
     <h1>Ocorrências</h1>
-    <p>Processamento de ocorrências de faltas a partir de PDF de jornada e planilha de pedido.</p>
+    <p>Cruze o PDF de jornada com a planilha de pedido: o sistema conta as
+       ocorrências de cada RE e preenche a coluna MOTIVO automaticamente.</p>
 </div>
-<div class="form-card">
-    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
-    <form method="post" action="/app/ocorrencias" enctype="multipart/form-data">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="page-grid">
+    <div class="stack">
+        <div class="form-card">
+            {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+            <form method="post" action="/app/ocorrencias" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-        <label for="pdf" data-tour="oc-pdf">PDF de jornada</label>
-        <input type="file" id="pdf" name="pdf" accept=".pdf" required>
+                <label>PDF de jornada</label>
+                <div>
+                    <div class="dropzone" data-tour="oc-pdf">
+                        <input type="file" name="pdf" accept=".pdf" required>
+                        <div class="dz-icon">⇪</div>
+                        <div class="dz-text">Arraste o PDF aqui ou clique para escolher</div>
+                        <div class="dz-hint">Relatório de jornada de trabalho (.pdf, máx. 50 MB)</div>
+                    </div>
+                    <div class="dz-error"></div>
+                </div>
 
-        <label for="xlsx" data-tour="oc-xlsx">Planilha de pedido (.xlsx/.xls)</label>
-        <input type="file" id="xlsx" name="xlsx" accept=".xlsx,.xls" required>
+                <label>Planilha de pedido</label>
+                <div>
+                    <div class="dropzone" data-tour="oc-xlsx">
+                        <input type="file" name="xlsx" accept=".xlsx,.xls" required>
+                        <div class="dz-icon">⇪</div>
+                        <div class="dz-text">Arraste a planilha aqui ou clique para escolher</div>
+                        <div class="dz-hint">Excel com as colunas Folha RE e MOTIVO (.xlsx/.xls)</div>
+                    </div>
+                    <div class="dz-error"></div>
+                </div>
 
-        <label>Códigos de ocorrência
-            <a href="/app/codigos" class="meta" style="font-weight:400;margin-left:8px">gerenciar códigos →</a>
-        </label>
-        <div data-tour="oc-codigos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:4px">
-            {% for c in codigos_disponiveis %}
-            <label class="check" title="{{ c.descricao }}">
-                <input type="checkbox" name="codigos" value="{{ c.codigo }}" checked>
-                {{ c.codigo }}
-            </label>
-            {% endfor %}
+                <label>Códigos de ocorrência
+                    <a href="/app/codigos" class="meta" style="font-weight:400;margin-left:8px">gerenciar códigos →</a>
+                </label>
+                <div class="pill-grid" data-tour="oc-codigos">
+                    {% for c in codigos_disponiveis %}
+                    <label class="pill" title="{{ c.descricao }}">
+                        <input type="checkbox" name="codigos" value="{{ c.codigo }}" checked>
+                        <span>{{ c.codigo }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" data-tour="oc-processar" class="btn btn-primary" style="width:100%;justify-content:center">
+                        Processar
+                    </button>
+                </div>
+            </form>
         </div>
 
-        <div class="form-actions">
-            <button type="submit" data-tour="oc-processar" class="btn btn-primary" style="width:100%;justify-content:center">
-                Processar
-            </button>
+        {% if recentes %}
+        <div class="card">
+            <div class="card-title">Processamentos recentes</div>
+            <table>
+                <tbody>
+                    {% for e in recentes %}
+                    <tr>
+                        <td class="meta">{{ e.created_at[:16].replace('T', ' ') }}</td>
+                        <td>{{ e.input_names | join('; ') }}</td>
+                        <td><span class="chip {{ 'chip-ok' if e.status == 'sucesso' else 'chip-err' }}">{{ e.status }}</span></td>
+                        <td style="text-align:right">
+                            {% if e.job_id %}<a href="/app/jobs/{{ e.job_id }}" class="btn btn-sm btn-ghost">Abrir</a>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-    </form>
+        {% endif %}
+    </div>
+
+    <aside>
+        <div class="aside-card" data-tour="oc-como-funciona">
+            <h3>Como funciona</h3>
+            <ol class="steps">
+                <li>Envie o PDF de jornada e a planilha de pedido.</li>
+                <li>O sistema lê o PDF duas vezes e compara os resultados.</li>
+                <li>Se as leituras divergirem, você decide o valor certo numa tela de revisão.</li>
+                <li>Baixe a planilha com a coluna MOTIVO preenchida.</li>
+            </ol>
+        </div>
+        <div class="aside-card" data-tour="oc-requisitos">
+            <h3>Requisitos do arquivo</h3>
+            <ul class="req-list">
+                <li>A planilha precisa das colunas <code>Folha RE</code> e <code>MOTIVO</code> na primeira linha.</li>
+                <li>Formatos aceitos: <code>.xlsx</code> e <code>.xls</code>; PDF de jornada em <code>.pdf</code>.</li>
+                <li>Tamanho máximo por arquivo: 50 MB.</li>
+                <li>REs que estão no PDF mas não na planilha saem na aba <code>Não localizados</code> do resultado.</li>
+            </ul>
+        </div>
+    </aside>
 </div>
 {% endblock %}

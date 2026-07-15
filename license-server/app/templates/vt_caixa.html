@@ -2,25 +2,87 @@
 {% block title %}VT-Caixa — Processador de Ocorrências{% endblock %}
 {% block content %}
 <div class="page-header">
+    <div class="crumb">Início / <b>VT-Caixa</b></div>
     <h1>VT-Caixa</h1>
-    <p>Geração de arquivo CSV de Vale-Transporte a partir de fonte (PDF/Excel) e cadastro funcional.</p>
+    <p>Gere o arquivo CSV de benefícios de Vale-Transporte cruzando o relatório
+       Nautilus com o cadastro funcional.</p>
 </div>
-<div class="form-card">
-    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
-    <form method="post" action="/app/vt-caixa" enctype="multipart/form-data">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="page-grid">
+    <div class="stack">
+        <div class="form-card">
+            {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+            <form method="post" action="/app/vt-caixa" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-        <label for="fonte" data-tour="vt-fonte">Fonte (relatório Nautilus — PDF ou Excel)</label>
-        <input type="file" id="fonte" name="fonte" accept=".pdf,.xlsx,.xls" required>
+                <label>Fonte (relatório Nautilus)</label>
+                <div>
+                    <div class="dropzone" data-tour="vt-fonte">
+                        <input type="file" name="fonte" accept=".pdf,.xlsx,.xls" required>
+                        <div class="dz-icon">⇪</div>
+                        <div class="dz-text">Arraste o arquivo aqui ou clique para escolher</div>
+                        <div class="dz-hint">PDF ou Excel do Nautilus (máx. 50 MB)</div>
+                    </div>
+                    <div class="dz-error"></div>
+                </div>
 
-        <label for="cadastral" data-tour="vt-cadastral">Cadastro funcional (.xlsx/.xls)</label>
-        <input type="file" id="cadastral" name="cadastral" accept=".xlsx,.xls" required>
+                <label>Cadastro funcional</label>
+                <div>
+                    <div class="dropzone" data-tour="vt-cadastral">
+                        <input type="file" name="cadastral" accept=".xlsx,.xls" required>
+                        <div class="dz-icon">⇪</div>
+                        <div class="dz-text">Arraste a planilha aqui ou clique para escolher</div>
+                        <div class="dz-hint">Excel cadastral (.xlsx/.xls)</div>
+                    </div>
+                    <div class="dz-error"></div>
+                </div>
 
-        <div class="form-actions">
-            <button type="submit" data-tour="vt-processar" class="btn btn-primary" style="width:100%;justify-content:center">
-                Processar
-            </button>
+                <div class="form-actions">
+                    <button type="submit" data-tour="vt-processar" class="btn btn-primary" style="width:100%;justify-content:center">
+                        Processar
+                    </button>
+                </div>
+            </form>
         </div>
-    </form>
+
+        {% if recentes %}
+        <div class="card">
+            <div class="card-title">Processamentos recentes</div>
+            <table>
+                <tbody>
+                    {% for e in recentes %}
+                    <tr>
+                        <td class="meta">{{ e.created_at[:16].replace('T', ' ') }}</td>
+                        <td>{{ e.input_names | join('; ') }}</td>
+                        <td><span class="chip {{ 'chip-ok' if e.status == 'sucesso' else 'chip-err' }}">{{ e.status }}</span></td>
+                        <td style="text-align:right">
+                            {% if e.job_id %}<a href="/app/jobs/{{ e.job_id }}" class="btn btn-sm btn-ghost">Abrir</a>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    <aside>
+        <div class="aside-card" data-tour="vt-como-funciona">
+            <h3>Como funciona</h3>
+            <ol class="steps">
+                <li>Envie a fonte Nautilus (PDF ou Excel) e o cadastro funcional.</li>
+                <li>O sistema cruza matrículas, aplica códigos de benefício e substituições de departamento.</li>
+                <li>Baixe o CSV pronto (codificação latin-1) para importar no banco.</li>
+            </ol>
+        </div>
+        <div class="aside-card" data-tour="vt-requisitos">
+            <h3>Requisitos do arquivo</h3>
+            <ul class="req-list">
+                <li>O cadastro precisa da coluna de matrícula (<code>Cód Epr</code>) e dos dados pessoais (CPF, RG, endereço, nome da mãe).</li>
+                <li>Fonte: <code>.pdf</code>, <code>.xlsx</code> ou <code>.xls</code>; cadastro: <code>.xlsx</code>/<code>.xls</code>.</li>
+                <li>Tamanho máximo por arquivo: 50 MB.</li>
+                <li>Operadoras sem código cadastrado saem com o nome original — cadastre o código na página <a href="/app/codigos">Códigos</a>.</li>
+            </ul>
+        </div>
+    </aside>
 </div>
 {% endblock %}

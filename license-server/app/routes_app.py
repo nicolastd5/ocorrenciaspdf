@@ -24,6 +24,12 @@ def _tutorial_seen(request: Request) -> bool:
     return bool(user["tutorial_seen"])
 
 
+def _recentes(request: Request, kind: str) -> list[dict]:
+    settings = request.app.state.settings
+    entries = history_module.list_for_user(settings.db_path, current_user_id(request))
+    return [e for e in entries if e["kind"] == kind][:5]
+
+
 @router.get("/app/ocorrencias", response_class=HTMLResponse)
 def ocorrencias(request: Request, _=Depends(require_user)):
     settings = request.app.state.settings
@@ -37,6 +43,7 @@ def ocorrencias(request: Request, _=Depends(require_user)):
         "csrf_token": get_or_create_csrf_token(request), "active": "ocorrencias",
         "tutorial_seen": _tutorial_seen(request),
         "codigos_disponiveis": builtin + custom,
+        "recentes": _recentes(request, "ocorrencias"),
     })
 
 
@@ -45,6 +52,7 @@ def vt_caixa(request: Request, _=Depends(require_user)):
     return templates.TemplateResponse(request, "vt_caixa.html", {
         "csrf_token": get_or_create_csrf_token(request), "active": "vt_caixa",
         "tutorial_seen": _tutorial_seen(request),
+        "recentes": _recentes(request, "vt_caixa"),
     })
 
 

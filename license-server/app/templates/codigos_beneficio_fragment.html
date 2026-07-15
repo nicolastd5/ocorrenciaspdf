@@ -1,10 +1,7 @@
 <div id="sec-beneficio" class="card" data-tour="cod-beneficio">
-    <div style="padding:16px 18px;border-bottom:1px solid var(--border);font-weight:600;color:var(--text-bright)">
-        Operadora → Código de Benefício
-    </div>
+    <div class="card-title">Operadora → Código de Benefício</div>
     <form hx-post="/app/codigos/beneficio" hx-target="#sec-beneficio" hx-swap="outerHTML"
-          style="display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);align-items:flex-end"
-          data-tour="cod-add-beneficio">
+          class="card-add-form" data-tour="cod-add-beneficio">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div style="flex:2"><label>Operadora</label>
             <input type="text" name="operadora" placeholder="NOME DA OPERADORA" required></div>
@@ -14,6 +11,7 @@
             <input type="text" name="codigo" placeholder="12345" required></div>
         <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Adicionar</button>
     </form>
+    <input type="text" class="table-filter" placeholder="Filtrar...">
     {% if beneficio_error %}
     <div class="alert alert-error" style="margin:12px 16px 0">{{ beneficio_error }}</div>
     {% endif %}
