@@ -20,3 +20,25 @@ def test_reconciliar_concordantes_e_conflitos():
 
 def test_ia_removida():
     assert not hasattr(ProcessadorOcorrencias, 'verificar_com_ia')
+
+
+def test_montar_motivo_config_extras_ordem_e_quantidade():
+    p = ProcessadorOcorrencias()
+    extras = [{"codigo": "BB", "com_quantidade": False},
+              {"codigo": "FR", "com_quantidade": True}]
+    ocorr = {"FR": 2, "FA": 1, "BB": 3}
+    # embutido (FA) vem primeiro; extras depois na ordem recebida;
+    # BB sem quantidade mesmo com contagem 3; FR com quantidade.
+    assert p.montar_motivo(ocorr, ["FA", "FR", "BB"], extras) == "FA, BB, 2 FR"
+
+
+def test_montar_motivo_sem_extras_inalterado():
+    p = ProcessadorOcorrencias()
+    ocorr = {"AT": 2, "FA": 1, "AP": 3}
+    assert p.montar_motivo(ocorr, ["FA", "AT", "AP"]) == "FA, 2 AT, AP"
+
+
+def test_processar_aceita_config_extras():
+    import inspect
+    sig = inspect.signature(ProcessadorOcorrencias.processar)
+    assert "config_extras" in sig.parameters

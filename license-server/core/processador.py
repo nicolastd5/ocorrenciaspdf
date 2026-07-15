@@ -196,34 +196,40 @@ class ProcessadorOcorrencias:
 
         return {'concordantes': concordantes, 'conflitos': conflitos}
 
-    def montar_motivo(self, ocorrencias, codigos_selecionados):
+    def montar_motivo(self, ocorrencias, codigos_selecionados, config_extras=None):
         """
         Monta a string de motivo a partir das ocorrências.
 
         Regras:
-        - Ordem: FA, AT, SD, LC, AA, AP, LM
+        - Ordem: embutidos (self.ORDEM) primeiro, depois os códigos de
+          config_extras na ordem recebida
         - Quantidade na frente quando > 1 (ex: 2 AT, 3 FA)
-        - AP e LM nunca recebem quantidade
+        - AP/LM/FE — e extras com com_quantidade=False — nunca recebem quantidade
         - Múltiplos códigos separados por vírgula
         """
+        extras = config_extras or []
+        ordem = self.ORDEM + [c["codigo"] for c in extras
+                              if c["codigo"] not in self.ORDEM]
+        sem_quantidade = set(self.SEM_QUANTIDADE) | {
+            c["codigo"] for c in extras if not c["com_quantidade"]
+        }
         partes = []
         codigos_set = set(codigos_selecionados)
 
-        for codigo in self.ORDEM:
+        for codigo in ordem:
             if codigo in ocorrencias and codigo in codigos_set:
                 contagem = ocorrencias[codigo]
-                if codigo in self.SEM_QUANTIDADE:
+                if codigo in sem_quantidade:
                     partes.append(codigo)
+                elif contagem > 1:
+                    partes.append(f"{contagem} {codigo}")
                 else:
-                    if contagem > 1:
-                        partes.append(f"{contagem} {codigo}")
-                    else:
-                        partes.append(codigo)
+                    partes.append(codigo)
 
         return ', '.join(partes)
 
     def processar(self, pdf_path, xlsx_path, output_path, codigos,
-                  progress_cb=None, dados_externos=None):
+                  progress_cb=None, dados_externos=None, config_extras=None):
         """
         Processa os arquivos e retorna um dicionário com os resultados.
 
@@ -294,7 +300,7 @@ class ProcessadorOcorrencias:
 
                 if re_str in resultados_pdf:
                     ocorr = resultados_pdf[re_str]['ocorrencias']
-                    motivo = self.montar_motivo(ocorr, codigos)
+                    motivo = self.montar_motivo(ocorr, codigos, config_extras)
                     if motivo:
                         ws.cell(row=row, column=motivo_col).value = motivo
                         matched += 1
@@ -311,7 +317,7 @@ class ProcessadorOcorrencias:
         _prog(90, "Finalizando...")
         nao_encontrados = []
         for codigo, dados in resultados_pdf.items():
-            motivo = self.montar_motivo(dados['ocorrencias'], codigos)
+            motivo = self.montar_motivo(dados['ocorrencias'], codigos, config_extras)
             if motivo and codigo not in excel_res:
                 nao_encontrados.append({
                     're': codigo,
