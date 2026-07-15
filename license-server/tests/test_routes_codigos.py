@@ -89,3 +89,67 @@ def test_post_sem_login(client):
     r = c.post("/app/codigos/beneficio", data={"operadora": "X", "codigo": "1"},
                follow_redirects=False)
     assert r.status_code == 303
+
+
+# ── Ocorrência ──
+
+def test_pagina_mostra_ocorrencias_embutidas_e_personalizadas(logged_client):
+    c, db = logged_client
+    from app import ref_codes
+    ref_codes.add_occurrence_code(db, 1, "FR", "Férias Remuneradas", True)
+    r = c.get("/app/codigos")
+    assert r.status_code == 200
+    assert "Faltas" in r.text                 # descrição do embutido FA
+    assert "Férias Remuneradas" in r.text     # personalizado
+
+
+def test_adicionar_ocorrencia(logged_client):
+    c, db = logged_client
+    token = _csrf(c)
+    r = c.post("/app/codigos/ocorrencia", data={
+        "codigo": "fr", "descricao": "Férias Rem.", "com_quantidade": "1",
+        "csrf_token": token,
+    })
+    assert r.status_code == 200
+    assert "FR" in r.text
+    from app import ref_codes
+    assert ref_codes.occurrence_config(db) == [{"codigo": "FR", "com_quantidade": True}]
+
+
+def test_adicionar_ocorrencia_sem_quantidade(logged_client):
+    c, db = logged_client
+    token = _csrf(c)
+    c.post("/app/codigos/ocorrencia", data={
+        "codigo": "BB", "descricao": "Beta", "csrf_token": token,
+    })  # checkbox desmarcado: campo ausente
+    from app import ref_codes
+    assert ref_codes.occurrence_config(db) == [{"codigo": "BB", "com_quantidade": False}]
+
+
+def test_adicionar_ocorrencia_embutido_da_erro(logged_client):
+    c, db = logged_client
+    token = _csrf(c)
+    r = c.post("/app/codigos/ocorrencia", data={
+        "codigo": "FA", "descricao": "Faltas 2", "com_quantidade": "1",
+        "csrf_token": token,
+    })
+    assert r.status_code == 400
+    assert "embutido" in r.text
+
+
+def test_excluir_ocorrencia(logged_client):
+    c, db = logged_client
+    from app import ref_codes
+    rid = ref_codes.add_occurrence_code(db, 1, "FR", "Férias", True)
+    token = _csrf(c)
+    r = c.post(f"/app/codigos/ocorrencia/{rid}/excluir",
+               data={"csrf_token": token})
+    assert r.status_code == 200
+    assert ref_codes.list_occurrence_codes(db) == []
+
+
+def test_ocorrencia_post_sem_login(client):
+    c, _ = client
+    r = c.post("/app/codigos/ocorrencia", data={"codigo": "X", "descricao": "d"},
+               follow_redirects=False)
+    assert r.status_code == 303

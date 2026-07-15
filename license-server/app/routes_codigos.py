@@ -7,6 +7,7 @@ from app import users as users_module
 from app.security import (
     current_user_id, get_or_create_csrf_token, require_user, verify_csrf_token,
 )
+from core.processador import ProcessadorOcorrencias
 from core.vt_caixa_processador import ProcessadorVTCaixa
 
 router = APIRouter()
@@ -33,11 +34,25 @@ def _ctx_depart(request: Request, db_path: str, error: str | None = None) -> dic
     }
 
 
+def _ctx_ocorrencia(request: Request, db_path: str, error: str | None = None) -> dict:
+    builtin = [{"codigo": c,
+                "descricao": ProcessadorOcorrencias.DESCRICOES.get(c, ""),
+                "com_quantidade": 0 if c in ProcessadorOcorrencias.SEM_QUANTIDADE else 1,
+                "id": None}
+               for c in ProcessadorOcorrencias.TODOS_CODIGOS]
+    return {
+        "ocorrencia_rows": builtin + ref_codes.list_occurrence_codes(db_path),
+        "csrf_token": get_or_create_csrf_token(request),
+        "ocorrencia_error": error,
+    }
+
+
 @router.get("/app/codigos", response_class=HTMLResponse)
 def codigos_page(request: Request, _=Depends(require_user)):
     db = request.app.state.settings.db_path
     user = users_module.get_user(db, current_user_id(request))
     ctx = {**_ctx_beneficio(request, db), **_ctx_depart(request, db),
+           **_ctx_ocorrencia(request, db),
            "active": "codigos", "tutorial_seen": bool(user["tutorial_seen"])}
     return templates.TemplateResponse(request, "codigos.html", ctx)
 
@@ -98,3 +113,33 @@ def depart_delete(request: Request, sub_id: int,
         ref_codes.delete_depart_sub(db, sub_id)
     return templates.TemplateResponse(
         request, "codigos_depart_fragment.html", _ctx_depart(request, db))
+
+
+@router.post("/app/codigos/ocorrencia", response_class=HTMLResponse)
+def ocorrencia_add(request: Request, codigo: str = Form(""),
+                   descricao: str = Form(""), com_quantidade: str = Form(""),
+                   csrf_token: str = Form(""), _=Depends(require_user)):
+    db = request.app.state.settings.db_path
+    error, status_code = None, 200
+    if not verify_csrf_token(request.session.get("csrf_token"), csrf_token):
+        error, status_code = "Sessão expirada — recarregue a página.", 400
+    else:
+        try:
+            ref_codes.add_occurrence_code(db, current_user_id(request),
+                                          codigo, descricao,
+                                          com_quantidade == "1")
+        except ValueError as e:
+            error, status_code = str(e), 400
+    return templates.TemplateResponse(
+        request, "codigos_ocorrencia_fragment.html",
+        _ctx_ocorrencia(request, db, error), status_code=status_code)
+
+
+@router.post("/app/codigos/ocorrencia/{code_id}/excluir", response_class=HTMLResponse)
+def ocorrencia_delete(request: Request, code_id: int,
+                      csrf_token: str = Form(""), _=Depends(require_user)):
+    db = request.app.state.settings.db_path
+    if verify_csrf_token(request.session.get("csrf_token"), csrf_token):
+        ref_codes.delete_occurrence_code(db, code_id)
+    return templates.TemplateResponse(
+        request, "codigos_ocorrencia_fragment.html", _ctx_ocorrencia(request, db))

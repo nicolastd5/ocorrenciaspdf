@@ -1,0 +1,43 @@
+<div id="sec-ocorrencia" class="card" data-tour="cod-ocorrencia">
+    <div class="card-title">Códigos de Ocorrência</div>
+    <form hx-post="/app/codigos/ocorrencia" hx-target="#sec-ocorrencia" hx-swap="outerHTML"
+          class="card-add-form" data-tour="cod-add-ocorrencia">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div style="flex:0 0 90px"><label>Código</label>
+            <input type="text" name="codigo" placeholder="FR" maxlength="4" required></div>
+        <div style="flex:1"><label>Descrição</label>
+            <input type="text" name="descricao" placeholder="Férias Remuneradas" required></div>
+        <label class="check" style="margin:0 0 8px" title="Se marcado, o MOTIVO mostra a contagem (ex.: 2 FR)">
+            <input type="checkbox" name="com_quantidade" value="1" checked> quantidade
+        </label>
+        <button type="submit" class="btn btn-primary btn-sm" style="height:36px">Adicionar</button>
+    </form>
+    {% if ocorrencia_error %}
+    <div class="alert alert-error" style="margin:12px 16px 0">{{ ocorrencia_error }}</div>
+    {% endif %}
+    <table>
+        <thead>
+            <tr><th>Código</th><th>Descrição</th><th>Quantidade</th><th></th></tr>
+        </thead>
+        <tbody>
+            {% for r in ocorrencia_rows %}
+            <tr>
+                <td class="key">{{ r.codigo }}</td>
+                <td>{{ r.descricao }}</td>
+                <td class="meta">{{ "com quantidade" if r.com_quantidade else "sem quantidade" }}</td>
+                <td style="text-align:right">
+                    {% if r.id %}
+                    <span class="meta" style="margin-right:8px">personalizado</span>
+                    <form hx-post="/app/codigos/ocorrencia/{{ r.id }}/excluir"
+                          hx-target="#sec-ocorrencia" hx-swap="outerHTML"
+                          hx-confirm="Excluir o código {{ r.codigo }}?" style="display:inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

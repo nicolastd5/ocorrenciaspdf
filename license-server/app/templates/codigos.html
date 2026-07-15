@@ -3,10 +3,12 @@
 {% block content %}
 <div class="page-header">
     <h1>Códigos de referência</h1>
-    <p>Clique em uma linha para copiar o código. Entradas personalizadas valem
-       também no processamento do VT-Caixa e têm precedência sobre as embutidas.</p>
+    <p>Consulte e copie códigos, e cadastre novos — códigos de ocorrência valem
+       no processamento de Ocorrências; benefícios e departamentos, no VT-Caixa.
+       Personalizados têm precedência sobre os embutidos.</p>
 </div>
 <div class="code-grid">
+    {% include "codigos_ocorrencia_fragment.html" %}
     {% include "codigos_beneficio_fragment.html" %}
     {% include "codigos_depart_fragment.html" %}
 </div>
